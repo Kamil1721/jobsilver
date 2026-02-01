@@ -242,6 +242,9 @@ function isEasyApplyJob(job: UnifiedJob): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  console.log('=== JOB SEARCH API CALLED ===')
+  console.log('RAPIDAPI_KEY configured:', !!process.env.RAPIDAPI_KEY)
+
   try {
     // Check for internal API key for automated calls (cron jobs, etc.)
     const apiKey = request.headers.get('x-api-key')
