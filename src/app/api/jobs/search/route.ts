@@ -503,22 +503,35 @@ export async function POST(request: NextRequest) {
         specialLocationValues.some(s => loc.toLowerCase().includes(s))
       )
 
-      console.log(`Primary location filter: ${primaryLocation || 'None (global search)'}`)
+      // Determine if we should skip location filter
+      // Skip when: searching remote-worldwide, or work arrangement includes remote types
+      const isRemoteSearch = workArrangement?.includes('Remote Solely') ||
+                             workArrangement?.includes('Remote OK') ||
+                             hasWorldwideRemote
+
+      // Only use location filter for non-remote searches with a real location
+      const effectiveLocationFilter = isRemoteSearch ? undefined : (primaryLocation || undefined)
+
+      console.log(`Primary location filter: ${effectiveLocationFilter || 'None (remote/global search)'}`)
       console.log(`Worldwide remote enabled: ${hasWorldwideRemote}`)
+      console.log(`Is remote search (skipping location filter): ${isRemoteSearch}`)
 
       // Search with each AI-generated query SEQUENTIALLY to avoid rate limits
       for (const query of fantasticJobsQueries.slice(0, 3)) { // Limit to 3 queries to conserve quota
         try {
           const searchTitle = includeKeywords ? `${query} ${includeKeywords}` : query
-          console.log(`Calling fantastic.jobs API with title: "${searchTitle}"${primaryLocation ? `, location: "${primaryLocation}"` : ''}`)
+          console.log(`Calling fantastic.jobs API with title: "${searchTitle}"${effectiveLocationFilter ? `, location: "${effectiveLocationFilter}"` : ''}`)
 
+          // NOTE: We only pass work_arrangement and taxonomy filters to the API.
+          // Experience level and employment type are handled as SOFT FILTERS in post-processing
+          // to avoid overly restrictive API queries that return too few results.
           const jobs = await searchFantasticJobs({
             title_filter: searchTitle,
-            location_filter: primaryLocation || undefined, // Filter by location at API level
+            location_filter: effectiveLocationFilter,
             limit: Math.min(50, quotaStatus.remaining), // Respect quota
             ai_work_arrangement_filter: workArrangement,
-            ai_employment_type_filter: employmentType,
-            ai_experience_level_filter: experienceLevel,
+            // ai_employment_type_filter removed - handled by soft scoring
+            // ai_experience_level_filter removed - handled by soft scoring
             ai_taxonomies_a_filter: taxonomyFilter,
           })
 
@@ -544,15 +557,20 @@ export async function POST(request: NextRequest) {
       }
 
       // If user wants location-specific jobs, add location searches (also sequential)
+      // Filter out special values like "Remote - Worldwide" that aren't real locations
       if (filters.remote_countries && filters.remote_countries.length > 0) {
-        for (const location of filters.remote_countries.slice(0, 2)) {
+        const realCountries = filters.remote_countries
+          .filter(loc => !specialLocationValues.some(s => loc.toLowerCase().includes(s)))
+          .slice(0, 2)
+
+        for (const location of realCountries) {
           try {
             const jobs = await searchFantasticJobs({
               title_filter: baseQuery,
               location_filter: location,
               limit: 30,
               ai_work_arrangement_filter: workArrangement,
-              ai_employment_type_filter: employmentType,
+              // ai_employment_type_filter removed - handled by soft scoring
               ai_taxonomies_a_filter: taxonomyFilter,
             })
 
