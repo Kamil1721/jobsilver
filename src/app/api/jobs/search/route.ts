@@ -471,14 +471,40 @@ export async function POST(request: NextRequest) {
       const API_CALL_DELAY_MS = 1200 // 1.2 seconds between calls to stay under rate limit
 
       // Determine primary location for API filtering
-      // Use onsite_locations first (for on-site/hybrid), then remote_countries
-      const primaryLocations = [
+      // Special values like "Remote - Worldwide" should not be passed to API
+      const specialLocationValues = ['remote - worldwide', 'worldwide', 'global', 'anywhere']
+
+      // Extract country from city-specific locations (e.g., "Krakow, Poland" -> "Poland")
+      const extractCountry = (location: string): string | null => {
+        if (!location) return null
+        const lower = location.toLowerCase()
+        // Skip special values
+        if (specialLocationValues.some(s => lower.includes(s))) return null
+        // If it contains a comma, take the last part (country)
+        if (location.includes(',')) {
+          const parts = location.split(',').map(p => p.trim())
+          return parts[parts.length - 1] || null
+        }
+        return location
+      }
+
+      const allLocations = [
         ...(filters.onsite_locations || []),
         ...(filters.remote_countries || []),
       ].filter(Boolean)
-      const primaryLocation = primaryLocations[0] || null
+
+      // Get real locations (not special values), extract countries
+      const realLocations = allLocations
+        .map(extractCountry)
+        .filter((loc): loc is string => loc !== null && !specialLocationValues.some(s => loc.toLowerCase().includes(s)))
+
+      const primaryLocation = realLocations[0] || null
+      const hasWorldwideRemote = allLocations.some(loc =>
+        specialLocationValues.some(s => loc.toLowerCase().includes(s))
+      )
 
       console.log(`Primary location filter: ${primaryLocation || 'None (global search)'}`)
+      console.log(`Worldwide remote enabled: ${hasWorldwideRemote}`)
 
       // Search with each AI-generated query SEQUENTIALLY to avoid rate limits
       for (const query of fantasticJobsQueries.slice(0, 3)) { // Limit to 3 queries to conserve quota
@@ -695,11 +721,29 @@ export async function POST(request: NextRequest) {
     // 3.6. JOB TYPES FILTER (100% blocking)
     if (filters?.job_types && filters.job_types.length > 0) {
       const preJobTypeCount = filteredJobs.length
+
+      // Normalize job type values for comparison
+      const normalizeJobType = (type: string | null | undefined): string => {
+        if (!type) return 'fulltime'
+        const lower = type.toLowerCase().replace(/[_-]/g, '').replace(/\s+/g, '')
+        if (lower.includes('full') || lower === 'ft') return 'fulltime'
+        if (lower.includes('part') || lower === 'pt') return 'part-time'
+        if (lower.includes('contract') || lower.includes('freelance')) return 'contractor'
+        if (lower.includes('intern')) return 'internship'
+        return 'fulltime' // Default to fulltime if unknown
+      }
+
+      const normalizedUserTypes = filters.job_types.map(normalizeJobType)
+
       filteredJobs = filteredJobs.filter(job => {
-        const jobType = job.mapped.job_type || 'fulltime'
-        return filters.job_types.includes(jobType as typeof filters.job_types[number])
+        const normalizedJobType = normalizeJobType(job.mapped.job_type)
+        const passes = normalizedUserTypes.includes(normalizedJobType)
+        if (!passes && preJobTypeCount <= 10) {
+          console.log(`Job type mismatch: "${job.mapped.title}" has "${job.mapped.job_type}" (normalized: ${normalizedJobType}), user wants: ${filters.job_types.join(', ')}`)
+        }
+        return passes
       })
-      console.log(`Job types filter: ${preJobTypeCount} -> ${filteredJobs.length} jobs`)
+      console.log(`Job types filter: ${preJobTypeCount} -> ${filteredJobs.length} jobs (user types: ${filters.job_types.join(', ')})`)
     }
 
     // 4. LOCATION VALIDATION - Strict filtering for both remote AND on-site jobs
