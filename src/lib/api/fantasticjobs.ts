@@ -233,11 +233,17 @@ export async function searchJobs(
   params: FantasticJobsSearchParams,
   userId?: string
 ): Promise<FantasticJobsJob[]> {
+  console.log('=== fantastic.jobs searchJobs called ===')
+
   const apiKey = process.env.RAPIDAPI_KEY
 
   if (!apiKey) {
-    throw new Error('RAPIDAPI_KEY is not configured')
+    console.error('CRITICAL: RAPIDAPI_KEY environment variable is not set!')
+    console.error('Please add RAPIDAPI_KEY to your Vercel environment variables.')
+    throw new Error('RAPIDAPI_KEY is not configured - add it to Vercel environment variables')
   }
+
+  console.log('RAPIDAPI_KEY is configured, proceeding with search...')
 
   // Build query parameters
   const queryParams = new URLSearchParams()
