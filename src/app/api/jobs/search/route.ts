@@ -694,59 +694,58 @@ export async function POST(request: NextRequest) {
       console.log(`Remote type filter: ${preRemoteCount} -> ${filteredJobs.length} jobs`)
     }
 
-    // 3.5. WORK ARRANGEMENTS FILTER (100% blocking)
+    // 3.5. WORK ARRANGEMENTS - Now SOFT scoring (contributes to match score, doesn't block)
+    // The actual scoring is applied in the AI scoring section below
+    // This section just logs for debugging - jobs are NOT filtered here anymore
     if (filters?.work_arrangements && filters.work_arrangements.length > 0) {
-      const preWorkArrCount = filteredJobs.length
-      const workArrangements = filters.work_arrangements // capture for closure
-      filteredJobs = filteredJobs.filter(job => {
+      const workArrangements = filters.work_arrangements
+      let matchCount = 0
+      let mismatchCount = 0
+      for (const job of filteredJobs) {
         const remoteType = job.mapped.remote_type
-
-        // Map remote_type to work_arrangement
-        // 'fully_remote' -> 'remote_only' or 'remote_ok'
-        // 'hybrid' -> 'hybrid'
-        // 'onsite' -> 'on_site'
+        let matches = false
         if (remoteType === 'fully_remote') {
-          return workArrangements.includes('remote_only') ||
-                 workArrangements.includes('remote_ok')
+          matches = workArrangements.includes('remote_only') || workArrangements.includes('remote_ok')
+        } else if (remoteType === 'hybrid') {
+          matches = workArrangements.includes('hybrid')
+        } else {
+          matches = workArrangements.includes('on_site')
         }
-        if (remoteType === 'hybrid') {
-          return workArrangements.includes('hybrid')
-        }
-        // onsite
-        return workArrangements.includes('on_site')
-      })
-      console.log(`Work arrangements filter: ${preWorkArrCount} -> ${filteredJobs.length} jobs`)
-    }
-
-    // 3.6. JOB TYPES FILTER (100% blocking)
-    if (filters?.job_types && filters.job_types.length > 0) {
-      const preJobTypeCount = filteredJobs.length
-
-      // Normalize job type values for comparison
-      const normalizeJobType = (type: string | null | undefined): string => {
-        if (!type) return 'fulltime'
-        const lower = type.toLowerCase().replace(/[_-]/g, '').replace(/\s+/g, '')
-        if (lower.includes('full') || lower === 'ft') return 'fulltime'
-        if (lower.includes('part') || lower === 'pt') return 'part-time'
-        if (lower.includes('contract') || lower.includes('freelance')) return 'contractor'
-        if (lower.includes('intern')) return 'internship'
-        return 'fulltime' // Default to fulltime if unknown
+        if (matches) matchCount++
+        else mismatchCount++
       }
-
-      const normalizedUserTypes = filters.job_types.map(normalizeJobType)
-
-      filteredJobs = filteredJobs.filter(job => {
-        const normalizedJobType = normalizeJobType(job.mapped.job_type)
-        const passes = normalizedUserTypes.includes(normalizedJobType)
-        if (!passes && preJobTypeCount <= 10) {
-          console.log(`Job type mismatch: "${job.mapped.title}" has "${job.mapped.job_type}" (normalized: ${normalizedJobType}), user wants: ${filters.job_types.join(', ')}`)
-        }
-        return passes
-      })
-      console.log(`Job types filter: ${preJobTypeCount} -> ${filteredJobs.length} jobs (user types: ${filters.job_types.join(', ')})`)
+      console.log(`Work arrangements (SOFT): ${matchCount} match, ${mismatchCount} mismatch (all ${filteredJobs.length} jobs pass through)`)
     }
 
-    // 4. LOCATION VALIDATION - Strict filtering for both remote AND on-site jobs
+    // 3.6. JOB TYPES - Now SOFT scoring (contributes to match score, doesn't block)
+    // The actual scoring is applied in the AI scoring section below
+    // This section just logs for debugging - jobs are NOT filtered here anymore
+    // Normalize job type values for comparison (used in scoring later)
+    const normalizeJobType = (type: string | null | undefined): string => {
+      if (!type) return 'fulltime'
+      const lower = type.toLowerCase().replace(/[_-]/g, '').replace(/\s+/g, '')
+      if (lower.includes('full') || lower === 'ft') return 'fulltime'
+      if (lower.includes('part') || lower === 'pt') return 'part-time'
+      if (lower.includes('contract') || lower.includes('freelance')) return 'contractor'
+      if (lower.includes('intern')) return 'internship'
+      return 'fulltime' // Default to fulltime if unknown
+    }
+
+    if (filters?.job_types && filters.job_types.length > 0) {
+      const normalizedUserTypes = filters.job_types.map(normalizeJobType)
+      let matchCount = 0
+      let mismatchCount = 0
+      for (const job of filteredJobs) {
+        const normalizedJobType = normalizeJobType(job.mapped.job_type)
+        if (normalizedUserTypes.includes(normalizedJobType)) matchCount++
+        else mismatchCount++
+      }
+      console.log(`Job types (SOFT): ${matchCount} match, ${mismatchCount} mismatch (all ${filteredJobs.length} jobs pass through, user wants: ${filters.job_types.join(', ')})`)
+    }
+
+    // 4. LOCATION VALIDATION - HARD filter ONLY for on-site/hybrid jobs
+    // For FULLY REMOTE jobs: only reject if explicitly requires a country user is NOT in
+    // This is now a PERMISSIVE filter - most remote jobs pass through, scoring handles quality
     if (filters) {
       const preLocationCount = filteredJobs.length
       const userCountriesList = [
@@ -759,12 +758,17 @@ export async function POST(request: NextRequest) {
                               filters.work_arrangements?.includes('hybrid') ||
                               filters.onsite_hybrid === true
 
+      // Check if user wants remote work
+      const wantsRemoteWork = filters.work_arrangements?.includes('remote_only') ||
+                               filters.work_arrangements?.includes('remote_ok') ||
+                               filters.remote_jobs === true
+
       if (userCountriesList.length > 0) {
-        let worldwideBypassCount = 0
-        let locationMatchCount = 0
-        let descriptionMatchCount = 0
-        let rejectedCount = 0
-        let rejectedWrongCountry = 0
+        let passedRemoteCount = 0
+        let passedLocationMatchCount = 0
+        let passedDescriptionMatchCount = 0
+        let rejectedOnsiteWrongCountry = 0
+        let rejectedRemoteWrongCountry = 0
 
         const countryPatterns = userCountriesList.map(country => {
           const lower = country.toLowerCase()
@@ -775,14 +779,8 @@ export async function POST(request: NextRequest) {
           return [lower]
         }).flat()
 
-        const europeanCountries = ['poland', 'germany', 'france', 'uk', 'united kingdom', 'netherlands',
-          'belgium', 'austria', 'switzerland', 'italy', 'spain', 'portugal', 'ireland', 'sweden',
-          'denmark', 'norway', 'finland', 'czech', 'hungary', 'romania', 'croatia', 'slovakia']
-        const hasEuropeanCountry = userCountriesList.some(c =>
-          europeanCountries.some(ec => c.toLowerCase().includes(ec))
-        )
-
         // Build patterns for countries to reject (countries user did NOT select)
+        // These are HARD rejections - if job REQUIRES being in one of these countries, reject it
         const allCountryPatterns: Array<{ pattern: RegExp; countries: string[] }> = [
           { pattern: /\b(united states|usa|u\.s\.a\.|america|american|florida|california|texas|new york|chicago|los angeles|seattle|boston|denver|austin|orlando|miami)\b/i, countries: ['united states', 'usa', 'us', 'america'] },
           { pattern: /\b(ukraine|ukrainian|kyiv|kiev)\b/i, countries: ['ukraine'] },
@@ -809,118 +807,105 @@ export async function POST(request: NextRequest) {
           const location = (job.mapped.location || '').toLowerCase()
           const title = (job.mapped.title || '').toLowerCase()
 
-          // Check if job explicitly mentions a country the user did NOT select
-          const hasExcludedCountry = excludedCountryPatterns.some(pattern =>
+          // Check if job LOCATION explicitly mentions a country the user did NOT select
+          // Only check location/title, NOT description (description might mention countries as "we work with clients in...")
+          const locationHasExcludedCountry = excludedCountryPatterns.some(pattern =>
             pattern.test(location) || pattern.test(title)
           )
 
-          // For ON-SITE or HYBRID jobs: always reject excluded countries
-          // (an on-site job in Florida is useless for someone in Poland)
-          if (hasExcludedCountry && (remoteType === 'onsite' || remoteType === 'hybrid')) {
-            rejectedWrongCountry++
-            return false
-          }
-
-          // For ON-SITE or HYBRID jobs, require explicit location match
-          if (wantsOnsiteWork && (remoteType === 'onsite' || remoteType === 'hybrid' || !remoteType)) {
-            const locationMatches = countryPatterns.some(pattern => {
-              const regex = new RegExp(`\\b${pattern}\\b`, 'i')
-              return regex.test(location) || regex.test(description.slice(0, 2000))
-            })
-
-            if (locationMatches) {
-              locationMatchCount++
-              return true
+          // === HARD FILTER: ON-SITE / HYBRID JOBS ===
+          // Physical presence required, so location MUST match
+          if (remoteType === 'onsite' || remoteType === 'hybrid') {
+            // Reject if job is in a country user didn't select
+            if (locationHasExcludedCountry) {
+              rejectedOnsiteWrongCountry++
+              return false
             }
 
-            // If user wants on-site and job is on-site but doesn't match location, reject
-            if (remoteType === 'onsite' || remoteType === 'hybrid') {
-              rejectedCount++
+            // If user wants on-site work, require explicit location match
+            if (wantsOnsiteWork) {
+              const locationMatches = countryPatterns.some(pattern => {
+                const regex = new RegExp(`\\b${pattern}\\b`, 'i')
+                return regex.test(location) || regex.test(description.slice(0, 2000))
+              })
+
+              if (locationMatches) {
+                passedLocationMatchCount++
+                return true
+              }
+
+              // On-site/hybrid job doesn't match user's location - reject
+              rejectedOnsiteWrongCountry++
               return false
             }
           }
 
-          // Include worldwide remote jobs if user explicitly enabled it
-          const includeWorldwide = filters.include_worldwide_remote === true
-
-          // For fully remote jobs, be more lenient
+          // === PERMISSIVE FILTER: FULLY REMOTE JOBS ===
+          // Physical presence NOT required, so be much more lenient
           if (remoteType === 'fully_remote') {
-            // If user has European country selected, ALWAYS include EU-wide remote jobs
-            // (regardless of include_worldwide_remote setting)
-            if (hasEuropeanCountry) {
-              const euIndicators = [
-                'europe', 'european', 'eu remote', 'emea', 'remote europe', 'remote eu',
-                'eu-based', 'european union', 'eu timezone', 'cet', 'cest', 'remote - europe',
-                'remote', // Many EU jobs just say "Remote" without specifying region
-              ]
-              if (euIndicators.some(ind => description.includes(ind) || location.includes(ind))) {
-                worldwideBypassCount++
-                return true
-              }
+            // Only reject if job EXPLICITLY requires a specific excluded country
+            // (e.g., "Remote - USA Only" when user is in Poland)
+            const strictLocationRestrictions = [
+              'only', 'must be', 'required to be', 'based in', 'residents of',
+              'must reside', 'living in', 'located in'
+            ]
+
+            const hasStrictRestriction = strictLocationRestrictions.some(restriction =>
+              location.includes(restriction) || description.slice(0, 500).includes(restriction)
+            )
+
+            // If location has strict restriction AND mentions excluded country, reject
+            if (hasStrictRestriction && locationHasExcludedCountry) {
+              rejectedRemoteWrongCountry++
+              return false
             }
 
-            // Check worldwide indicators
-            if (includeWorldwide) {
-              const worldwideIndicators = [
-                'worldwide', 'work from anywhere', 'global remote', 'anywhere in the world',
-                'remote - worldwide', 'remote worldwide', 'fully remote worldwide',
-                'location: anywhere', 'location: worldwide', 'remote (anywhere)',
-              ]
-
-              if (job.raw && isWorldwideRemote(job.raw)) {
-                worldwideBypassCount++
-                return true
-              }
-
-              if (worldwideIndicators.some(ind =>
-                description.includes(ind) || location.includes(ind) || title.includes(ind)
-              )) {
-                worldwideBypassCount++
-                return true
-              }
-            }
-
-            // Trust jobs from fantastic.jobs API that were returned for the user's location
-            // The API already filtered by location, so these are relevant
-            if (job.source === 'fantasticjobs') {
-              worldwideBypassCount++
-              return true
-            }
+            // Otherwise, ALL fully remote jobs pass through!
+            // The Match Threshold slider will filter by quality
+            passedRemoteCount++
+            return true
           }
 
-          // Check direct location match
+          // === UNKNOWN/NO REMOTE TYPE ===
+          // Check if location matches user's countries
           const locationMatches = countryPatterns.some(pattern => {
             const regex = new RegExp(`\\b${pattern}\\b`, 'i')
             return regex.test(location)
           })
 
           if (locationMatches) {
-            locationMatchCount++
+            passedLocationMatchCount++
             return true
           }
 
-          // For fully remote jobs with remote enabled, check description
-          if (remoteType === 'fully_remote' && filters.remote_jobs) {
-            const descriptionMentionsCountry = countryPatterns.some(pattern => {
-              const regex = new RegExp(`\\b${pattern}\\b`, 'i')
-              return regex.test(description)
-            })
+          // Check description for country mentions (weaker signal, but still valid)
+          const descriptionMentionsCountry = countryPatterns.some(pattern => {
+            const regex = new RegExp(`\\b${pattern}\\b`, 'i')
+            return regex.test(description.slice(0, 2000))
+          })
 
-            if (descriptionMentionsCountry) {
-              descriptionMatchCount++
-              return true
-            }
+          if (descriptionMentionsCountry) {
+            passedDescriptionMatchCount++
+            return true
           }
 
-          rejectedCount++
-          return false
+          // If user wants remote work and job has no remote type specified,
+          // let it through - it might be remote, scoring will handle quality
+          if (wantsRemoteWork) {
+            passedRemoteCount++
+            return true
+          }
+
+          // Default: let job through (Match Threshold handles quality)
+          passedRemoteCount++
+          return true
         })
-        console.log(`Location filter (STRICT): ${preLocationCount} -> ${filteredJobs.length} jobs`)
-        console.log(`  - Worldwide remote: ${worldwideBypassCount}`)
-        console.log(`  - Location matched: ${locationMatchCount}`)
-        console.log(`  - Description mentioned country: ${descriptionMatchCount}`)
-        console.log(`  - Rejected (wrong country): ${rejectedWrongCountry}`)
-        console.log(`  - Rejected (no match): ${rejectedCount}`)
+        console.log(`Location filter (PERMISSIVE): ${preLocationCount} -> ${filteredJobs.length} jobs`)
+        console.log(`  - Passed (remote jobs): ${passedRemoteCount}`)
+        console.log(`  - Passed (location match): ${passedLocationMatchCount}`)
+        console.log(`  - Passed (description match): ${passedDescriptionMatchCount}`)
+        console.log(`  - Rejected (on-site wrong country): ${rejectedOnsiteWrongCountry}`)
+        console.log(`  - Rejected (remote strict restriction): ${rejectedRemoteWrongCountry}`)
       }
     }
 
@@ -972,98 +957,128 @@ export async function POST(request: NextRequest) {
       console.log(`Industry preference (SOFT): ${filters.industries.join(', ')} - will boost matching jobs in scoring`)
     }
 
-    // 9. COMPANY SIZE FILTER (optional - only if user selected sizes)
+    // 9. COMPANY SIZE - Now SOFT scoring (contributes to match score, doesn't block)
+    // The actual scoring is applied in the AI scoring section below
     if (filters?.company_size && filters.company_size.length > 0) {
-      const preSizeCount = filteredJobs.length
-      filteredJobs = filteredJobs.filter(job => {
+      let matchCount = 0
+      let noDataCount = 0
+      let mismatchCount = 0
+      for (const job of filteredJobs) {
         const employees = job.raw?.linkedin_org_employees
-        // Don't filter out jobs without size data (be permissive)
-        if (!employees) return true
-
-        const category = getCompanySizeCategory(employees)
-        return category ? filters.company_size.includes(category as typeof filters.company_size[number]) : true
-      })
-      console.log(`Company size filter: ${preSizeCount} -> ${filteredJobs.length} jobs (selected: ${filters.company_size.join(', ')})`)
+        if (!employees) {
+          noDataCount++
+        } else {
+          const category = getCompanySizeCategory(employees)
+          if (category && filters.company_size.includes(category as typeof filters.company_size[number])) {
+            matchCount++
+          } else {
+            mismatchCount++
+          }
+        }
+      }
+      console.log(`Company size (SOFT): ${matchCount} match, ${mismatchCount} mismatch, ${noDataCount} no data (all ${filteredJobs.length} jobs pass through)`)
     }
 
-    // 10. TIME ZONE FILTER (optional - only if user selected timezones)
+    // 10. TIME ZONE - Now SOFT scoring (contributes to match score, doesn't block)
+    // The actual scoring is applied in the AI scoring section below
     if (filters?.time_zones && filters.time_zones.length > 0) {
-      const preTimezoneCount = filteredJobs.length
-      filteredJobs = filteredJobs.filter(job => {
-        // Check for flexible timezone jobs if user opted in
+      let matchCount = 0
+      let flexibleCount = 0
+      let noDataCount = 0
+      let mismatchCount = 0
+      for (const job of filteredJobs) {
+        // Check for flexible timezone jobs
         if (filters.include_flexible_timezone) {
           const desc = job.mapped?.description || ''
-          if (hasFlexibleTimezone(desc)) return true
+          if (hasFlexibleTimezone(desc)) {
+            flexibleCount++
+            continue
+          }
         }
 
-        // Map job's countries to timezones and check overlap
         const jobCountries = job.raw?.countries_derived || []
         const jobTimezones = getJobTimezones(jobCountries)
 
-        // If no country data, don't filter out (be permissive)
-        if (jobTimezones.length === 0) return true
-
-        // Check if any job timezone matches user's selected timezones
-        return jobTimezones.some(jtz =>
-          filters.time_zones.some(utz =>
-            jtz.includes(utz.split(' (')[0]) || utz.includes(jtz.split(' (')[0])
+        if (jobTimezones.length === 0) {
+          noDataCount++
+        } else {
+          const matches = jobTimezones.some(jtz =>
+            filters.time_zones.some(utz =>
+              jtz.includes(utz.split(' (')[0]) || utz.includes(jtz.split(' (')[0])
+            )
           )
-        )
-      })
-      console.log(`Timezone filter: ${preTimezoneCount} -> ${filteredJobs.length} jobs (selected: ${filters.time_zones.length} zones)`)
+          if (matches) matchCount++
+          else mismatchCount++
+        }
+      }
+      console.log(`Timezone (SOFT): ${matchCount} match, ${flexibleCount} flexible, ${mismatchCount} mismatch, ${noDataCount} no data (all ${filteredJobs.length} jobs pass through)`)
     }
 
-    // 11. SALARY FILTER
+    // 11. SALARY - Now SOFT scoring (contributes to match score, doesn't block)
+    // Jobs without salary data pass through (neutral), mismatches get score penalty
     if (filters?.salary_min || filters?.salary_max) {
-      const preSalaryCount = filteredJobs.length
       const userCurrency = (filters.salary_currency || 'USD').toUpperCase()
+      let matchCount = 0
+      let noDataCount = 0
+      let tooLowCount = 0
+      let tooHighCount = 0
 
-      filteredJobs = filteredJobs.filter(job => {
+      for (const job of filteredJobs) {
         if (!job.mapped.salary_min && !job.mapped.salary_max) {
-          return true
+          noDataCount++
+          continue
         }
 
-        if (filters.salary_min && job.mapped.salary_max) {
-          if (job.mapped.salary_max < filters.salary_min) {
-            return false
-          }
+        let salaryOk = true
+        if (filters.salary_min && job.mapped.salary_max && job.mapped.salary_max < filters.salary_min) {
+          tooLowCount++
+          salaryOk = false
         }
-
-        if (filters.salary_max && job.mapped.salary_min) {
-          if (job.mapped.salary_min > filters.salary_max) {
-            return false
-          }
+        if (filters.salary_max && job.mapped.salary_min && job.mapped.salary_min > filters.salary_max) {
+          tooHighCount++
+          salaryOk = false
         }
-
-        return true
-      })
-      console.log(`Salary filter: ${preSalaryCount} -> ${filteredJobs.length} jobs (user: ${filters.salary_min || 0}-${filters.salary_max || '∞'} ${userCurrency})`)
+        if (salaryOk) matchCount++
+      }
+      console.log(`Salary (SOFT): ${matchCount} match, ${tooLowCount} too low, ${tooHighCount} too high, ${noDataCount} no data (all ${filteredJobs.length} jobs pass through, user: ${filters.salary_min || 0}-${filters.salary_max || '∞'} ${userCurrency})`)
     }
 
-    // 12. SENIORITY FILTER (post-processing)
+    // 12. SENIORITY - Now SOFT scoring (contributes to match score, doesn't block)
+    // The actual scoring is applied in the AI scoring section
+    // This section just logs for debugging - jobs are NOT filtered here anymore
     if (filters?.seniority_levels && filters.seniority_levels.length > 0) {
-      const preSeniorityCount = filteredJobs.length
+      let matchCount = 0
+      let mismatchCount = 0
+      let neutralCount = 0
 
-      filteredJobs = filteredJobs.filter(job => {
+      for (const job of filteredJobs) {
         const title = (job.mapped.title || '').toLowerCase()
         const description = (job.mapped.description || '').toLowerCase().slice(0, 5000)
         const text = `${title} ${description}`
 
+        let hasMatch = false
         for (const level of filters.seniority_levels) {
           const keywords = SENIORITY_KEYWORDS[level] || []
-          const hasMatch = keywords.some(kw => text.includes(kw.toLowerCase()))
-          if (hasMatch) {
-            return true
+          if (keywords.some(kw => text.includes(kw.toLowerCase()))) {
+            hasMatch = true
+            break
           }
         }
 
-        const hasAnySeniorityKeyword = Object.values(SENIORITY_KEYWORDS)
-          .flat()
-          .some(kw => text.includes(kw.toLowerCase()))
-
-        return !hasAnySeniorityKeyword
-      })
-      console.log(`Seniority filter: ${preSeniorityCount} -> ${filteredJobs.length} jobs (levels: ${filters.seniority_levels.join(', ')})`)
+        if (hasMatch) {
+          matchCount++
+        } else {
+          const hasAnySeniorityKeyword = Object.values(SENIORITY_KEYWORDS)
+            .flat()
+            .some(kw => text.includes(kw.toLowerCase()))
+          if (hasAnySeniorityKeyword) {
+            mismatchCount++ // Has seniority indicators but doesn't match user preference
+          } else {
+            neutralCount++ // No seniority indicators found
+          }
+        }
+      }
+      console.log(`Seniority (SOFT): ${matchCount} match, ${mismatchCount} mismatch, ${neutralCount} neutral (all ${filteredJobs.length} jobs pass through)`)
     }
 
     // 13. EASY APPLY FILTER - Only keep jobs from supported ATS platforms
@@ -1128,17 +1143,191 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // Apply soft scoring boosts for industry and job title preferences
+          // Apply soft scoring boosts for preferences (these no longer block, just affect score)
           let scoreBoost = 0
+          let scorePenalty = 0
           const jobTitle = (mappedJob.title || '').toLowerCase()
+
+          // WORK ARRANGEMENT scoring (+20 match, -15 mismatch)
+          if (filters?.work_arrangements && filters.work_arrangements.length > 0) {
+            const remoteType = mappedJob.remote_type
+            let workArrangementMatches = false
+            if (remoteType === 'fully_remote') {
+              workArrangementMatches = filters.work_arrangements.includes('remote_only') ||
+                                       filters.work_arrangements.includes('remote_ok')
+            } else if (remoteType === 'hybrid') {
+              workArrangementMatches = filters.work_arrangements.includes('hybrid')
+            } else {
+              workArrangementMatches = filters.work_arrangements.includes('on_site')
+            }
+            if (workArrangementMatches) {
+              scoreBoost += 20
+            } else {
+              scorePenalty += 15 // Penalty for mismatch, but job still shows
+            }
+          }
+
+          // JOB TYPE scoring (+25 match, -20 mismatch)
+          if (filters?.job_types && filters.job_types.length > 0) {
+            const normalizedJobType = normalizeJobType(mappedJob.job_type)
+            const normalizedUserTypes = filters.job_types.map(normalizeJobType)
+            if (normalizedUserTypes.includes(normalizedJobType)) {
+              scoreBoost += 25
+            } else {
+              scorePenalty += 20 // Penalty for mismatch, but job still shows
+            }
+          }
+
+          // SENIORITY scoring (+15 match, -10 mismatch, 0 neutral)
+          if (filters?.seniority_levels && filters.seniority_levels.length > 0) {
+            const description = (mappedJob.description || '').toLowerCase().slice(0, 5000)
+            const text = `${jobTitle} ${description}`
+
+            let seniorityMatch = false
+            for (const level of filters.seniority_levels) {
+              const keywords = SENIORITY_KEYWORDS[level] || []
+              if (keywords.some(kw => text.includes(kw.toLowerCase()))) {
+                seniorityMatch = true
+                break
+              }
+            }
+
+            if (seniorityMatch) {
+              scoreBoost += 15
+            } else {
+              const hasAnySeniorityKeyword = Object.values(SENIORITY_KEYWORDS)
+                .flat()
+                .some(kw => text.includes(kw.toLowerCase()))
+              if (hasAnySeniorityKeyword) {
+                scorePenalty += 10 // Has wrong seniority indicators
+              }
+              // No penalty if job has no seniority indicators (neutral)
+            }
+          }
+
+          // LOCATION scoring (+15 match, -5 unknown, 0 for remote jobs matching remote preference)
+          const userCountriesList = [
+            ...(filters?.remote_countries || []),
+            ...(filters?.onsite_locations || []),
+          ]
+          if (userCountriesList.length > 0) {
+            const location = (mappedJob.location || '').toLowerCase()
+            const remoteType = mappedJob.remote_type
+
+            // Build country patterns for matching
+            const countryPatterns = userCountriesList.map(country => {
+              const lower = country.toLowerCase()
+              if (lower === 'poland' || lower.includes('poland')) return ['poland', 'polish', 'pl', 'polska', 'krakow', 'kraków', 'warsaw', 'warszawa', 'wroclaw', 'gdansk', 'poznan', 'katowice']
+              if (lower === 'germany' || lower.includes('germany')) return ['germany', 'german', 'de', 'deutschland', 'berlin', 'munich', 'münchen', 'frankfurt', 'hamburg']
+              if (lower === 'uk' || lower === 'united kingdom' || lower.includes('kingdom')) return ['uk', 'united kingdom', 'britain', 'england', 'gb', 'london', 'manchester', 'birmingham']
+              if (lower === 'us' || lower === 'usa' || lower === 'united states' || lower.includes('states')) return ['us', 'usa', 'united states', 'america', 'american']
+              return [lower]
+            }).flat()
+
+            const locationMatches = countryPatterns.some(pattern => {
+              const regex = new RegExp(`\\b${pattern}\\b`, 'i')
+              return regex.test(location)
+            })
+
+            if (locationMatches) {
+              // Exact location match - boost score
+              scoreBoost += 15
+            } else if (remoteType === 'fully_remote') {
+              // Remote job without location match - small boost if user wants remote
+              const wantsRemote = filters?.work_arrangements?.includes('remote_only') ||
+                                   filters?.work_arrangements?.includes('remote_ok')
+              if (wantsRemote) {
+                scoreBoost += 5 // Small boost for remote jobs when user wants remote
+              }
+            } else {
+              // On-site/hybrid job without location match - small penalty
+              scorePenalty += 5
+            }
+          }
 
           // Industry match boost (+10 points)
           if (filters?.industries && filters.industries.length > 0 && unifiedJob.raw) {
             const industryMatches = matchesIndustry(unifiedJob.raw, filters.industries)
             if (industryMatches) {
               scoreBoost += 10
-              console.log(`  +10 industry boost for "${mappedJob.title}"`)
             }
+          }
+
+          // COMPANY SIZE scoring (+10 match, -5 mismatch, 0 no data)
+          if (filters?.company_size && filters.company_size.length > 0) {
+            const employees = unifiedJob.raw?.linkedin_org_employees
+            if (employees) {
+              const category = getCompanySizeCategory(employees)
+              if (category && filters.company_size.includes(category as typeof filters.company_size[number])) {
+                scoreBoost += 10
+              } else {
+                scorePenalty += 5
+              }
+            }
+            // No penalty if no data (neutral)
+          }
+
+          // TIMEZONE scoring (+10 match, +5 flexible, -5 mismatch, 0 no data)
+          if (filters?.time_zones && filters.time_zones.length > 0) {
+            // Check for flexible timezone
+            if (filters.include_flexible_timezone) {
+              const desc = mappedJob.description || ''
+              if (hasFlexibleTimezone(desc)) {
+                scoreBoost += 5
+              } else {
+                const jobCountries = unifiedJob.raw?.countries_derived || []
+                const jobTimezones = getJobTimezones(jobCountries)
+
+                if (jobTimezones.length > 0) {
+                  const timezoneMatches = jobTimezones.some(jtz =>
+                    filters.time_zones.some(utz =>
+                      jtz.includes(utz.split(' (')[0]) || utz.includes(jtz.split(' (')[0])
+                    )
+                  )
+                  if (timezoneMatches) {
+                    scoreBoost += 10
+                  } else {
+                    scorePenalty += 5
+                  }
+                }
+              }
+            } else {
+              const jobCountries = unifiedJob.raw?.countries_derived || []
+              const jobTimezones = getJobTimezones(jobCountries)
+
+              if (jobTimezones.length > 0) {
+                const timezoneMatches = jobTimezones.some(jtz =>
+                  filters.time_zones.some(utz =>
+                    jtz.includes(utz.split(' (')[0]) || utz.includes(jtz.split(' (')[0])
+                  )
+                )
+                if (timezoneMatches) {
+                  scoreBoost += 10
+                } else {
+                  scorePenalty += 5
+                }
+              }
+            }
+            // No penalty if no data (neutral)
+          }
+
+          // SALARY scoring (+15 match, -10 too low, -5 too high, 0 no data)
+          if (filters?.salary_min || filters?.salary_max) {
+            if (mappedJob.salary_min || mappedJob.salary_max) {
+              let salaryOk = true
+              if (filters.salary_min && mappedJob.salary_max && mappedJob.salary_max < filters.salary_min) {
+                scorePenalty += 10 // Job pays less than user's minimum
+                salaryOk = false
+              }
+              if (filters.salary_max && mappedJob.salary_min && mappedJob.salary_min > filters.salary_max) {
+                scorePenalty += 5 // Job pays more than user's max (less bad, they might still consider)
+                salaryOk = false
+              }
+              if (salaryOk) {
+                scoreBoost += 15 // Salary in range
+              }
+            }
+            // No penalty if no data (neutral)
           }
 
           // Job title match boost (+15 points for exact match, +8 for partial)
@@ -1151,15 +1340,14 @@ export async function POST(request: NextRequest) {
             )
             if (exactMatch) {
               scoreBoost += 15
-              console.log(`  +15 exact title boost for "${mappedJob.title}"`)
             } else if (partialMatch) {
               scoreBoost += 8
-              console.log(`  +8 partial title boost for "${mappedJob.title}"`)
             }
           }
 
-          // Apply boost (cap at 100)
-          matchScore = Math.min(100, matchScore + scoreBoost)
+          // Apply boosts and penalties (ensure score stays between 5 and 100)
+          // Minimum score of 5 ensures mismatched jobs still appear at bottom
+          matchScore = Math.max(5, Math.min(100, matchScore + scoreBoost - scorePenalty))
 
           return {
             ...mappedJob,

@@ -37,11 +37,13 @@ function isValidJobStatus(status: unknown): status is JobStatus {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: jobId } = await params
+
     // Validate UUID format
-    if (!isValidUUID(params.id)) {
+    if (!isValidUUID(jobId)) {
       return NextResponse.json({ error: 'Invalid job ID format' }, { status: 400 })
     }
 
@@ -65,7 +67,7 @@ export async function GET(
     const { data: job, error } = await supabase
       .from('jobs')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', jobId)
       .eq('user_id', user.id)
       .single()
 
@@ -81,7 +83,7 @@ export async function GET(
       await supabase
         .from('jobs')
         .update({ application_questions: questions })
-        .eq('id', params.id)
+        .eq('id', jobId)
 
       job.application_questions = questions
     }
@@ -98,11 +100,13 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: jobId } = await params
+
     // Validate UUID format
-    if (!isValidUUID(params.id)) {
+    if (!isValidUUID(jobId)) {
       return NextResponse.json({ error: 'Invalid job ID format' }, { status: 400 })
     }
 
@@ -151,7 +155,7 @@ export async function PATCH(
     const { data: job, error } = await supabase
       .from('jobs')
       .update(updateData)
-      .eq('id', params.id)
+      .eq('id', jobId)
       .eq('user_id', user.id)
       .select()
       .single()
@@ -185,11 +189,13 @@ export async function PATCH(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: jobId } = await params
+
     // Validate UUID format
-    if (!isValidUUID(params.id)) {
+    if (!isValidUUID(jobId)) {
       return NextResponse.json({ error: 'Invalid job ID format' }, { status: 400 })
     }
 
@@ -208,7 +214,7 @@ export async function POST(
       const { data: job, error } = await supabase
         .from('jobs')
         .select('*')
-        .eq('id', params.id)
+        .eq('id', jobId)
         .eq('user_id', user.id)
         .single()
 
@@ -223,7 +229,7 @@ export async function POST(
       await supabase
         .from('jobs')
         .update({ application_questions: questions })
-        .eq('id', params.id)
+        .eq('id', jobId)
 
       return NextResponse.json({ questions })
     }
@@ -240,11 +246,13 @@ export async function POST(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: jobId } = await params
+
     // Validate UUID format
-    if (!isValidUUID(params.id)) {
+    if (!isValidUUID(jobId)) {
       return NextResponse.json({ error: 'Invalid job ID format' }, { status: 400 })
     }
 
@@ -258,7 +266,7 @@ export async function DELETE(
     const { error } = await supabase
       .from('jobs')
       .delete()
-      .eq('id', params.id)
+      .eq('id', jobId)
       .eq('user_id', user.id)
 
     if (error) {

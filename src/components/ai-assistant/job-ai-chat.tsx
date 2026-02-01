@@ -66,10 +66,15 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
   // Load chat history from database
   React.useEffect(() => {
     const loadChatHistory = async () => {
+      console.log(`[JobAIChat] Loading chat history for job: ${job.id}`)
       try {
         const response = await fetch(`/api/jobs/${job.id}/chat`)
+        console.log(`[JobAIChat] Response status: ${response.status}`)
+
         if (response.ok) {
           const data = await response.json()
+          console.log(`[JobAIChat] Loaded ${data.messages?.length || 0} messages`)
+
           if (data.messages && data.messages.length > 0) {
             // Convert database messages to component format
             const loadedMessages: Message[] = data.messages.map((msg: { id: string; role: 'user' | 'assistant'; content: string; image_url?: string; created_at: string }) => ({
@@ -89,9 +94,19 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
               timestamp: new Date(),
             }])
           }
+        } else {
+          const errorData = await response.json().catch(() => ({}))
+          console.error(`[JobAIChat] Failed to load: ${response.status}`, errorData)
+          // Show welcome message on error
+          setMessages([{
+            id: "welcome",
+            role: "assistant",
+            content: `Hi! I'm here to help you apply for the **${job.title}** position at **${job.company || "this company"}**.\n\nI can help you with:\n- Generate a cover letter tailored to this role\n- Answer application questions - paste them here or upload a screenshot\n- Highlight your strengths for this specific position\n\nJust ask me anything or paste the application questions you need help with!`,
+            timestamp: new Date(),
+          }])
         }
       } catch (error) {
-        console.error('Failed to load chat history:', error)
+        console.error('[JobAIChat] Failed to load chat history:', error)
         // Show welcome message on error
         setMessages([{
           id: "welcome",
@@ -109,14 +124,21 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
 
   // Save message to database
   const saveMessage = async (role: 'user' | 'assistant', content: string, imageUrl?: string) => {
+    console.log(`[JobAIChat] Saving ${role} message for job: ${job.id}`)
     try {
-      await fetch(`/api/jobs/${job.id}/chat`, {
+      const response = await fetch(`/api/jobs/${job.id}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role, content, imageUrl }),
       })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error(`[JobAIChat] Failed to save message: ${response.status}`, errorData)
+      } else {
+        console.log(`[JobAIChat] Message saved successfully`)
+      }
     } catch (error) {
-      console.error('Failed to save message:', error)
+      console.error('[JobAIChat] Failed to save message:', error)
     }
   }
 

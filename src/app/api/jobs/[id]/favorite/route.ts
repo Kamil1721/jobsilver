@@ -23,9 +23,11 @@ const favoriteSchema = z.object({
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: jobId } = await params
+
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -74,7 +76,7 @@ export async function GET(
       .from('user_favorite_jobs')
       .select('id, favorited_at, favorite_reason')
       .eq('user_id', user.id)
-      .eq('job_id', params.id)
+      .eq('job_id', jobId)
       .maybeSingle()
 
     if (error) {
@@ -109,9 +111,11 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: jobId } = await params
+
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -173,7 +177,7 @@ export async function POST(
     const { data: job, error: jobError } = await supabase
       .from('jobs')
       .select('id')
-      .eq('id', params.id)
+      .eq('id', jobId)
       .eq('user_id', user.id)
       .single()
 
@@ -198,7 +202,7 @@ export async function POST(
       .from('user_favorite_jobs')
       .upsert({
         user_id: user.id,
-        job_id: params.id,
+        job_id: jobId,
         favorite_reason: body.favorite_reason || null,
         favorited_at: new Date().toISOString(),
       }, {
@@ -221,7 +225,7 @@ export async function POST(
         .from('user_interactions')
         .insert({
           user_id: user.id,
-          job_id: params.id,
+          job_id: jobId,
           interaction_type: 'favorite',
           metadata: body.favorite_reason ? { reason: body.favorite_reason } : {},
         })
@@ -246,9 +250,11 @@ export async function POST(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: jobId } = await params
+
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -306,7 +312,7 @@ export async function DELETE(
       .from('user_favorite_jobs')
       .delete()
       .eq('user_id', user.id)
-      .eq('job_id', params.id)
+      .eq('job_id', jobId)
 
     if (deleteError) {
       console.error('Error removing favorite:', deleteError)
@@ -322,7 +328,7 @@ export async function DELETE(
         .from('user_interactions')
         .insert({
           user_id: user.id,
-          job_id: params.id,
+          job_id: jobId,
           interaction_type: 'unfavorite',
           metadata: {},
         })

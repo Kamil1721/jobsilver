@@ -12,27 +12,36 @@ interface ChatMessage {
 // GET - Load chat history for a job
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Await params in Next.js 14.2+
+    const { id: jobId } = await params
+
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    console.log(`[Chat GET] Job: ${jobId}, User: ${user?.id || 'none'}, Auth error: ${authError?.message || 'none'}`)
 
     if (!user) {
+      console.log('[Chat GET] Unauthorized - no user')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const jobId = params.id
-
     // Verify user owns the job
-    const { data: job } = await supabase
+    const { data: job, error: jobError } = await supabase
       .from('jobs')
       .select('id')
       .eq('id', jobId)
       .eq('user_id', user.id)
       .single()
 
+    if (jobError) {
+      console.log(`[Chat GET] Job lookup error: ${jobError.message}`)
+    }
+
     if (!job) {
+      console.log(`[Chat GET] Job not found: ${jobId} for user ${user.id}`)
       return NextResponse.json({ error: 'Job not found' }, { status: 404 })
     }
 
@@ -45,13 +54,14 @@ export async function GET(
       .order('created_at', { ascending: true })
 
     if (error) {
-      console.error('Error fetching chat messages:', error)
+      console.error('[Chat GET] Error fetching chat messages:', error)
       return NextResponse.json({ error: 'Failed to load chat history' }, { status: 500 })
     }
 
+    console.log(`[Chat GET] Loaded ${messages?.length || 0} messages for job ${jobId}`)
     return NextResponse.json({ messages: messages || [] })
   } catch (error) {
-    console.error('Chat history GET error:', error)
+    console.error('[Chat GET] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -59,32 +69,43 @@ export async function GET(
 // POST - Save a new chat message
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Await params in Next.js 14.2+
+    const { id: jobId } = await params
+
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    console.log(`[Chat POST] Job: ${jobId}, User: ${user?.id || 'none'}, Auth error: ${authError?.message || 'none'}`)
 
     if (!user) {
+      console.log('[Chat POST] Unauthorized - no user')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const jobId = params.id
     const { role, content, imageUrl } = await request.json()
 
     if (!role || !content) {
+      console.log('[Chat POST] Missing role or content')
       return NextResponse.json({ error: 'Role and content are required' }, { status: 400 })
     }
 
     // Verify user owns the job
-    const { data: job } = await supabase
+    const { data: job, error: jobError } = await supabase
       .from('jobs')
       .select('id')
       .eq('id', jobId)
       .eq('user_id', user.id)
       .single()
 
+    if (jobError) {
+      console.log(`[Chat POST] Job lookup error: ${jobError.message}`)
+    }
+
     if (!job) {
+      console.log(`[Chat POST] Job not found: ${jobId} for user ${user.id}`)
       return NextResponse.json({ error: 'Job not found' }, { status: 404 })
     }
 
@@ -102,13 +123,18 @@ export async function POST(
       .single()
 
     if (error) {
-      console.error('Error saving chat message:', error)
+      console.error('[Chat POST] Error saving chat message:', error)
+      // Check if it's a table doesn't exist error
+      if (error.code === '42P01') {
+        console.error('[Chat POST] Table job_chat_messages does not exist! Run migrations.')
+      }
       return NextResponse.json({ error: 'Failed to save message' }, { status: 500 })
     }
 
+    console.log(`[Chat POST] Saved message ${message?.id} (${role}) for job ${jobId}`)
     return NextResponse.json({ message })
   } catch (error) {
-    console.error('Chat history POST error:', error)
+    console.error('[Chat POST] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -116,17 +142,18 @@ export async function POST(
 // DELETE - Clear chat history for a job
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Await params in Next.js 14.2+
+    const { id: jobId } = await params
+
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const jobId = params.id
 
     // Verify user owns the job
     const { data: job } = await supabase
