@@ -242,16 +242,17 @@ Use \`---\` dividers between pairs. Answers should be complete, professional, co
 
 **Process:**
 1. Use \`generate_cover_letter\` tool (required)
-2. Output ONLY the letter body in chat
-3. Attach as downloadable file
-4. Chat text and file must be identical, clean content
+2. Output ONLY the letter body in chat — nothing else
 
 **NEVER include:**
 - \`---\` dividers anywhere in or around the cover letter
 - "Here's your cover letter..." or any intro text
+- Download links, file references, or sandbox URLs
+- "[Download Cover Letter]" or any markdown links
 - "I'll now attach..." or any outro text
 - Commentary, labels, or explanations
 - Any text requiring user to edit before sending
+- ABSOLUTELY NO fake file paths like "sandbox:/app/files/..."
 
 **Correct output structure:**
 
