@@ -178,14 +178,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Grant tester status with Ultra plan and skip plan selection
+    // Grant tester status with Pro plan and skip plan selection
     const { error: updateError } = await supabaseService
       .from('profiles')
       .update({
         is_tester: true,
         tester_invite_code: inviteCode,
         has_selected_plan: true,
-        subscription_plan: 'ultra',
+        subscription_plan: 'pro',
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id)

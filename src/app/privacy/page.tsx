@@ -267,10 +267,10 @@ export default function PrivacyPolicyPage() {
               <h3>4.2 Job Listing Providers</h3>
               <p>We aggregate job listings from the following sources:</p>
               <ul>
-                <li>Adzuna</li>
-                <li>Remotive</li>
-                <li>TheMuse</li>
-                <li>Arbeitnow</li>
+                <li>fantastic.jobs (via RapidAPI)</li>
+                <li>Greenhouse (direct ATS integration)</li>
+                <li>Lever (direct ATS integration)</li>
+                <li>Ashby (direct ATS integration)</li>
               </ul>
               <p>
                 <strong>We do not share your personal information with these job listing providers.</strong> We

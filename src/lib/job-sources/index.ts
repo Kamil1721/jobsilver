@@ -148,10 +148,12 @@ export const JOB_SOURCES: JobSourceConfig[] = [
     supportsRemote: true,
     priority: 1
   },
+  // Legacy sources - disabled as of January 2026
+  // Kept for potential future use but not actively searched
   {
     id: ADZUNA_SOURCE,
     name: 'Adzuna',
-    enabled: true,
+    enabled: false,
     regions: [...ADZUNA_COUNTRIES],
     supportsRemote: true,
     priority: 2
@@ -159,7 +161,7 @@ export const JOB_SOURCES: JobSourceConfig[] = [
   {
     id: THEMUSE_SOURCE,
     name: 'The Muse',
-    enabled: true,
+    enabled: false,
     regions: ['us'],
     supportsRemote: true,
     priority: 3
@@ -167,7 +169,7 @@ export const JOB_SOURCES: JobSourceConfig[] = [
   {
     id: REMOTIVE_SOURCE,
     name: 'Remotive',
-    enabled: true,
+    enabled: false,
     regions: ['global'],
     supportsRemote: true,
     priority: 4
@@ -175,7 +177,7 @@ export const JOB_SOURCES: JobSourceConfig[] = [
   {
     id: ARBEITNOW_SOURCE,
     name: 'Arbeitnow',
-    enabled: true,
+    enabled: false,
     regions: ['eu', 'de', 'at', 'ch'],
     supportsRemote: true,
     priority: 5

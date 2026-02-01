@@ -124,7 +124,7 @@ export function getEffectivePlan(
  * Get all features available to a plan
  *
  * @param plan - The user's subscription plan
- * @param isTester - Optional: if true, user is a tester with ultra-equivalent access
+ * @param isTester - Optional: if true, user is a tester with pro-equivalent access
  */
 export function getFeaturesForPlan(plan: AllSubscriptionPlans, isTester?: boolean): Feature[] {
   return (Object.keys(FEATURE_REQUIREMENTS) as Feature[]).filter(feature =>

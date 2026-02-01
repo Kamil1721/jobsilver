@@ -120,7 +120,9 @@ export async function middleware(request: NextRequest) {
 
     // Step 3: If user already completed setup but is on /setup page, redirect to dashboard
     // This handles returning users who already have job_filters set
-    if (hasCompletedSetup && isOnSetup) {
+    // Allow access if ?edit=true is present (user explicitly wants to edit preferences)
+    const isEditMode = request.nextUrl.searchParams.get('edit') === 'true'
+    if (hasCompletedSetup && isOnSetup && !isEditMode) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
   }

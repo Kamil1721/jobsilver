@@ -118,7 +118,7 @@ export default function TermsOfServicePage() {
               <h2>4. Service Description</h2>
               <p>Job Silver is a job search management platform that provides:</p>
               <ul>
-                <li><strong>Job Discovery:</strong> Aggregated job listings from multiple sources including Adzuna, Remotive, TheMuse, and Arbeitnow</li>
+                <li><strong>Job Discovery:</strong> Aggregated job listings from fantastic.jobs API and direct ATS integrations (Greenhouse, Lever, Ashby)</li>
                 <li><strong>Job Tracking:</strong> A visual kanban board to organize and track job applications</li>
                 <li><strong>AI Assistant:</strong> AI-powered features to help craft application answers, generate cover letters, and analyze job fit</li>
                 <li><strong>CV Management:</strong> Upload, parse, and generate optimized CVs/resumes</li>

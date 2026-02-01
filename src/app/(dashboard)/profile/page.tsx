@@ -1,7 +1,9 @@
 "use client"
 
 import * as React from "react"
+import { Suspense } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
@@ -43,7 +45,29 @@ import { PhoneInput } from "@/components/ui/phone-input"
 import type { Profile, JobFilters, ScreeningAnswers, NotificationPreferences } from "@/lib/supabase/types"
 import { SubscriptionManagement } from "@/components/profile/SubscriptionManagement"
 
+// Loading fallback for Suspense
+function ProfileLoading() {
+  return (
+    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
+      <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+    </div>
+  )
+}
+
 export default function ProfilePage() {
+  return (
+    <Suspense fallback={<ProfileLoading />}>
+      <ProfilePageContent />
+    </Suspense>
+  )
+}
+
+function ProfilePageContent() {
+  const searchParams = useSearchParams()
+  const tabFromUrl = searchParams.get("tab")
+  const validTabs = ["profile", "cv", "preferences", "subscription"]
+  const defaultTab = validTabs.includes(tabFromUrl || "") ? tabFromUrl! : "profile"
+
   const [profile, setProfile] = React.useState<Profile | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
   const [isSaving, setIsSaving] = React.useState(false)
@@ -372,7 +396,7 @@ export default function ProfilePage() {
           </p>
         </div>
 
-        <Tabs defaultValue="profile" className="space-y-6">
+        <Tabs defaultValue={defaultTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="profile" className="gap-2">
               <User className="w-4 h-4" />
@@ -735,7 +759,7 @@ export default function ProfilePage() {
                   )}
 
                   {/* Configure button */}
-                  <Link href="/setup">
+                  <Link href={profile?.job_filters ? "/setup?edit=true" : "/setup"}>
                     <Button
                       className="w-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white/10 dark:text-white dark:hover:bg-white/20 dark:border dark:border-white/10"
                       size="lg"

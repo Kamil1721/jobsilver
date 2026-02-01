@@ -108,14 +108,14 @@ async function applyTesterInvite(inviteCode: string, userId: string): Promise<bo
   }
 
   // Update user profile to be a tester with has_selected_plan=true
-  // Testers get Ultra plan and bypass plan selection
+  // Testers get Pro plan and bypass plan selection
   const { error: updateProfileError } = await supabaseService
     .from("profiles")
     .update({
       is_tester: true,
       tester_invite_code: invite.invite_code,
       has_selected_plan: true,
-      subscription_plan: "ultra",
+      subscription_plan: "pro",
       updated_at: new Date().toISOString(),
     })
     .eq("id", userId)

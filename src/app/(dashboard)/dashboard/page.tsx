@@ -127,9 +127,9 @@ function DashboardPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
-  const { plan } = useSubscription()
-  // Check for premium plans (current 'pro' + legacy plans for backwards compatibility)
-  const isPremium = plan === "pro" || (plan as string) === "ultra" || (plan as string) === "mega" || (plan as string) === "starter"
+  const { plan, isTester: subscriptionIsTester } = useSubscription()
+  // Check for premium plans (current 'pro' + legacy plans for backwards compatibility) or tester status
+  const isPremium = plan === "pro" || (plan as string) === "mega" || subscriptionIsTester || isTester
 
   // Check for tester activation from OAuth callback
   React.useEffect(() => {
@@ -250,9 +250,10 @@ function DashboardPageContent() {
       // All jobs are shown - auto-apply status filtering removed since we pivoted to AI assistance model
       setJobs(mappedJobs)
 
-      // Fetch favorite IDs for premium users
+      // Fetch favorite IDs for premium users and testers
       const userPlan = (profile as any)?.subscription_plan
-      if (userPlan === 'pro' || userPlan === 'ultra' || userPlan === 'mega') {
+      const userIsTester = (profile as any)?.is_tester
+      if (userPlan === 'pro' || userPlan === 'mega' || userIsTester) {
         try {
           const favResponse = await fetch('/api/jobs/favorites')
           if (favResponse.ok) {

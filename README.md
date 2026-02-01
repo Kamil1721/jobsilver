@@ -4,11 +4,11 @@ A modern job search management application that helps users discover, track, and
 
 ## Features
 
-- **Job Search & Discovery** - Aggregates jobs from multiple sources (Adzuna, Remotive, Arbeitnow, and more)
+- **Job Search & Discovery** - Aggregates jobs from fantastic.jobs API and direct ATS integrations (Greenhouse, Lever, Ashby)
 - **Kanban Board** - Visual job tracking with customizable columns (Discovered, Saved, Applied, Interviewing, Offer, Discarded)
 - **AI Assistant** - Get help crafting application answers, writing cover letters, and analyzing job fit
 - **CV Management** - Upload, parse, and generate optimized CVs
-- **Subscription Plans** - Free, Starter, Pro, and Ultra tiers with different AI usage quotas
+- **Subscription Plans** - Free, Starter, Pro, and Mega tiers with different AI usage quotas
 
 ## Tech Stack
 

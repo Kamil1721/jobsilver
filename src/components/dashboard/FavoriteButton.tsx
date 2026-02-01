@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Heart, Lock, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useSubscription } from "@/contexts/SubscriptionContext"
+import { useToast } from "@/hooks/use-toast"
 import {
   Tooltip,
   TooltipContent,
@@ -47,13 +48,14 @@ export function FavoriteButton({
   showTooltip = true,
   className,
 }: FavoriteButtonProps) {
-  const { plan } = useSubscription()
+  const { plan, isTester } = useSubscription()
+  const { toast } = useToast()
   const [isFavorited, setIsFavorited] = React.useState(initialFavorited)
   const [isAnimating, setIsAnimating] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
   const [showParticles, setShowParticles] = React.useState(false)
 
-  const isPremium = plan === "pro" || plan === "ultra" || plan === "mega"
+  const isPremium = plan === "pro" || plan === "mega" || isTester
   const config = sizeConfig[size]
   const lastClickRef = React.useRef<number>(0)
   const DEBOUNCE_MS = 500
@@ -97,6 +99,11 @@ export function FavoriteButton({
         // Revert on error
         setIsFavorited(!newState)
         console.error("Failed to update favorite status")
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to update favorite. Please try again.",
+        })
       } else {
         onToggle?.(newState)
       }
@@ -104,6 +111,11 @@ export function FavoriteButton({
       // Revert on error
       setIsFavorited(!newState)
       console.error("Error toggling favorite:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Network error. Please check your connection.",
+      })
     } finally {
       setIsLoading(false)
       setTimeout(() => setIsAnimating(false), 300)
