@@ -1,0 +1,42 @@
+"use client"
+
+import * as React from "react"
+import * as SwitchPrimitives from "@radix-ui/react-switch"
+
+import { cn } from "@/lib/utils"
+
+const Switch = React.forwardRef<
+  React.ElementRef<typeof SwitchPrimitives.Root>,
+  React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>
+>(({ className, ...props }, ref) => (
+  <SwitchPrimitives.Root
+    className={cn(
+      "peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 transition-all duration-200",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+      "disabled:cursor-not-allowed disabled:opacity-50",
+      // Light mode
+      "border-transparent bg-zinc-200 data-[state=checked]:bg-zinc-900",
+      "focus-visible:ring-zinc-200 focus-visible:ring-offset-white",
+      // Dark mode - inverted style (white when checked)
+      "dark:bg-white/[0.08] dark:data-[state=checked]:bg-white",
+      "dark:focus-visible:ring-white/[0.08] dark:focus-visible:ring-offset-[#0a0a0b]",
+      className
+    )}
+    {...props}
+    ref={ref}
+  >
+    <SwitchPrimitives.Thumb
+      className={cn(
+        "pointer-events-none block h-5 w-5 rounded-full shadow-lg ring-0 transition-transform duration-200",
+        "data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0",
+        // Light mode
+        "bg-white",
+        // Dark mode - inverted (dark thumb when checked)
+        "dark:bg-zinc-400 dark:data-[state=checked]:bg-zinc-900"
+      )}
+    />
+  </SwitchPrimitives.Root>
+))
+Switch.displayName = SwitchPrimitives.Root.displayName
+
+export { Switch }

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 50" width="280" height="50">
+  <defs>
+    <linearGradient id="lightMetalLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F0F0F0"/>
+      <stop offset="50%" stop-color="#C8C8C8"/>
+      <stop offset="100%" stop-color="#E0E0E0"/>
+    </linearGradient>
+    
+    <linearGradient id="darkMetalLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4A4A4A"/>
+      <stop offset="50%" stop-color="#2A2A2A"/>
+      <stop offset="100%" stop-color="#3A3A3A"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Framed JS mark - scaled down -->
+  <g transform="translate(0, 1) scale(0.48)">
+    <rect x="4" y="4" width="92" height="92" fill="url(#darkMetalLight)"/>
+    <rect x="10" y="10" width="80" height="80" fill="url(#lightMetalLight)"/>
+    <path d="M22 20 L42 20 L42 58 Q42 68 32 68 L22 68 L22 58 L30 58 Q32 58 32 56 L32 30 L22 30 Z" fill="url(#darkMetalLight)"/>
+    <path d="M48 32 L78 32 L78 42 L58 42 L58 48 L78 48 L78 80 L48 80 L48 70 L68 70 L68 58 L48 58 Z" fill="url(#darkMetalLight)"/>
+  </g>
+  
+  <!-- JobSilver text - darker colors for light backgrounds -->
+  <text x="60" y="35" 
+        font-family="'Helvetica Neue', 'Arial', sans-serif" 
+        font-size="28" 
+        font-weight="500" 
+        letter-spacing="0.5"
+        fill="#1A1A1A">Job<tspan fill="#606060">Silver</tspan></text>
+</svg>

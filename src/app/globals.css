@@ -1,0 +1,485 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Light mode - Metallic silver theme adapted for light backgrounds */
+  :root {
+    --background: 0 0% 98%;              /* Near-white: #fafafa */
+    --foreground: 240 6% 10%;            /* Near-black text: #18181b */
+    --card: 0 0% 100%;                   /* White cards: #ffffff */
+    --card-foreground: 240 6% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 6% 10%;
+    --primary: 240 6% 20%;               /* Dark zinc for primary: #333338 */
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 5% 96%;             /* Light zinc: #f4f4f5 */
+    --secondary-foreground: 240 6% 20%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;      /* zinc-500 */
+    --accent: 240 5% 96%;
+    --accent-foreground: 240 6% 10%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 6% 90%;                /* zinc-200 */
+    --input: 240 6% 90%;
+    --ring: 240 6% 20%;
+    --radius: 0.5rem;
+
+    /* JobSilver specific tokens - Light mode */
+    --silver-bg-base: 0 0% 98%;          /* #fafafa */
+    --silver-bg-elevated: 0 0% 100%;     /* #ffffff */
+    --silver-border-faint: 240 6% 92%;   /* Very subtle */
+    --silver-border-subtle: 240 6% 88%;
+    --silver-border-medium: 240 6% 82%;
+    --silver-shine: 0 0% 100%;
+
+    /* Status Colors - Light mode (darker for readability) */
+    --status-new: 240 5% 34%;            /* zinc-600 */
+    --status-applied: 265 75% 40%;       /* Purple */
+    --status-offer: 152 75% 30%;         /* Green */
+  }
+
+  /* Dark mode - Primary JobSilver metallic theme */
+  .dark {
+    --background: 0 0% 4%;               /* #0a0a0b equivalent */
+    --foreground: 0 0% 98%;              /* Off-white text */
+    --card: 240 6% 6%;                   /* #111113 equivalent */
+    --card-foreground: 0 0% 98%;
+    --popover: 240 6% 7%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;                 /* White as primary for dark mode */
+    --primary-foreground: 240 6% 10%;
+    --secondary: 240 4% 12%;             /* zinc-900 */
+    --secondary-foreground: 0 0% 85%;
+    --muted: 240 4% 12%;
+    --muted-foreground: 240 5% 55%;      /* zinc-500 */
+    --accent: 240 4% 12%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 12%;                  /* Subtle dark borders */
+    --input: 0 0% 12%;
+    --ring: 0 0% 35%;
+
+    /* JobSilver specific tokens - Dark mode */
+    --silver-bg-base: 0 0% 4%;           /* #0a0a0b */
+    --silver-bg-elevated: 240 6% 7%;     /* #111113 */
+    --silver-border-faint: 0 0% 100% / 0.04;
+    --silver-border-subtle: 0 0% 100% / 0.06;
+    --silver-border-medium: 0 0% 100% / 0.10;
+    --silver-shine: 0 0% 100% / 0.20;
+
+    /* Status Colors - Dark mode */
+    --status-new: 240 5% 64%;            /* zinc-400 */
+    --status-applied: 260 60% 60%;       /* Purple */
+    --status-offer: 152 60% 45%;         /* Green/emerald */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply antialiased;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  html.light {
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+    letter-spacing: -0.01em;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+    line-height: 1.2;
+  }
+
+  h1 {
+    @apply text-2xl;
+  }
+
+  h2 {
+    @apply text-xl;
+  }
+
+  h3 {
+    @apply text-lg;
+  }
+
+  p {
+    line-height: 1.5;
+  }
+}
+
+@layer components {
+  /* Custom scrollbar - Metallic style */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.2);
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.3);
+  }
+
+  /* Metallic gradients */
+  .gradient-metallic {
+    @apply bg-gradient-to-r from-zinc-700 via-zinc-600 to-zinc-700;
+  }
+
+  .gradient-metallic-subtle {
+    @apply bg-gradient-to-r from-zinc-800/50 via-zinc-700/50 to-zinc-800/50;
+  }
+
+  /* Glass effect - adapts to theme */
+  .glass {
+    @apply backdrop-blur-xl bg-background/80 border border-border/50;
+  }
+
+  .glass-header {
+    @apply backdrop-blur-xl border-b;
+  }
+
+  .dark .glass-header {
+    @apply bg-[#0a0a0b]/80 border-white/[0.04];
+  }
+
+  .light .glass-header,
+  :root:not(.dark) .glass-header {
+    @apply bg-white/90 border-zinc-200/80;
+  }
+
+  /* Metallic card pattern */
+  .metallic-card {
+    @apply relative rounded-2xl overflow-hidden;
+  }
+
+  .metallic-card::before {
+    @apply absolute inset-0 pointer-events-none;
+    content: '';
+  }
+
+  .dark .metallic-card::before {
+    background: linear-gradient(to bottom, rgba(255,255,255,0.08) 0%, transparent 100%);
+  }
+
+  /* Card hover effect */
+  .card-hover {
+    @apply transition-all duration-200;
+  }
+
+  .card-hover:hover {
+    background-color: hsl(var(--card) / 0.8);
+    border-color: hsl(var(--border) / 0.8);
+  }
+
+  /* Focus ring - zinc accent */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  /* Kanban column - Metallic style */
+  .kanban-column {
+    @apply rounded-xl border;
+  }
+
+  .dark .kanban-column {
+    @apply bg-white/[0.02] border-white/[0.04];
+  }
+
+  /* Status indicators */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .status-dot-new {
+    background-color: hsl(var(--status-new));
+  }
+
+  .status-dot-applied {
+    background-color: hsl(var(--status-applied));
+  }
+
+  .status-dot-offer {
+    background-color: hsl(var(--status-offer));
+  }
+
+  /* Job item - compact single-line style */
+  .job-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-200;
+  }
+
+  .dark .job-item:hover {
+    @apply bg-white/[0.03];
+  }
+
+  .job-item-active {
+    @apply bg-muted/50;
+  }
+
+  /* Company avatar */
+  .company-avatar {
+    @apply w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium;
+  }
+
+  .dark .company-avatar {
+    @apply bg-white/[0.05] text-zinc-300;
+  }
+
+  /* Column header */
+  .column-header {
+    @apply flex items-center justify-between px-3 py-3;
+  }
+
+  .dark .column-header {
+    @apply border-b border-white/[0.04];
+  }
+
+  .column-header-title {
+    @apply text-xs font-medium uppercase tracking-wider text-muted-foreground;
+  }
+
+  .column-header-count {
+    @apply text-xs font-medium px-2 py-0.5 rounded-full;
+  }
+
+  .dark .column-header-count {
+    @apply text-zinc-400 bg-white/[0.05];
+  }
+
+  /* Match score badge colors */
+  .match-score-high {
+    @apply bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20;
+  }
+
+  .match-score-medium {
+    @apply bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20;
+  }
+
+  .match-score-low {
+    @apply bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-500/10 dark:text-zinc-400 dark:border-zinc-500/20;
+  }
+
+  /* Navigation link */
+  .nav-link {
+    @apply flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200;
+  }
+
+  .dark .nav-link {
+    @apply text-zinc-500 hover:text-white hover:bg-white/[0.05];
+  }
+
+  .nav-link-active {
+    @apply text-foreground;
+  }
+
+  .dark .nav-link-active {
+    @apply text-white bg-white/[0.05];
+  }
+
+  /* Metallic button pattern */
+  .btn-metallic {
+    @apply relative overflow-hidden rounded-xl;
+  }
+
+  .btn-metallic::before {
+    @apply absolute inset-0;
+    content: '';
+    background: linear-gradient(to right, rgb(63 63 70), rgb(82 82 91), rgb(63 63 70));
+  }
+
+  .btn-metallic::after {
+    @apply absolute rounded-[10px];
+    content: '';
+    inset: 1px;
+    background: linear-gradient(to bottom, rgb(39 39 42), rgb(24 24 27));
+  }
+
+  /* Shine line effect */
+  .shine-line {
+    @apply absolute top-0 left-1/4 w-1/2 h-px;
+    background: linear-gradient(to right, transparent, rgba(255,255,255,0.3), transparent);
+  }
+
+  /* Ambient background */
+  .ambient-bg {
+    @apply fixed inset-0 pointer-events-none overflow-hidden -z-10;
+  }
+
+  .ambient-orb {
+    @apply absolute rounded-full blur-[120px];
+  }
+
+  .dark .ambient-orb {
+    @apply bg-gradient-to-br from-zinc-800/30 via-zinc-900/20 to-transparent;
+  }
+
+  /* Metallic grid */
+  .metallic-grid {
+    @apply absolute inset-0;
+    background-image:
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+}
+
+@layer utilities {
+  /* Hover border effect */
+  .hover-border {
+    @apply transition-colors duration-200;
+  }
+
+  .dark .hover-border:hover {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  /* Text gradient - Metallic */
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+  }
+
+  .dark .text-gradient {
+    @apply bg-gradient-to-r from-zinc-400 via-zinc-300 to-zinc-500;
+  }
+
+  .text-gradient {
+    @apply bg-gradient-to-r from-zinc-600 via-zinc-500 to-zinc-600;
+  }
+
+  /* Subtle shadow for light mode */
+  .shadow-subtle {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+
+  .dark .shadow-subtle {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Elevated shadow */
+  .shadow-elevated {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  }
+
+  .dark .shadow-elevated {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Glow effect for primary actions */
+  .glow-white {
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.1), 0 0 40px rgba(255, 255, 255, 0.05);
+  }
+
+  /* Animation delays */
+  .animation-delay-100 { animation-delay: 100ms; }
+  .animation-delay-200 { animation-delay: 200ms; }
+  .animation-delay-300 { animation-delay: 300ms; }
+  .animation-delay-400 { animation-delay: 400ms; }
+  .animation-delay-500 { animation-delay: 500ms; }
+
+  /* Fade in animation */
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slide-in-right {
+    from {
+      opacity: 0;
+      transform: translateX(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out forwards;
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.3s ease-out forwards;
+  }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 0.2s ease-out forwards;
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s infinite linear;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+    background-size: 200% 100%;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Dragging styles for dnd-kit */
+.dragging {
+  @apply opacity-60 scale-[1.02] z-50;
+}
+
+.drag-overlay {
+  @apply shadow-elevated scale-[1.02];
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

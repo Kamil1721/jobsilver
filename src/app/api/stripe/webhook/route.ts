@@ -1,0 +1,443 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { headers } from 'next/headers'
+import Stripe from 'stripe'
+import { stripe, getPlanFromPriceId } from '@/lib/stripe/client'
+import { createServiceClient } from '@/lib/supabase/server'
+import type { SubscriptionPlan, AllSubscriptionPlans } from '@/lib/supabase/types'
+import { mapLegacyPlan } from '@/lib/stripe/plans'
+
+export const dynamic = 'force-dynamic'
+
+// Disable body parsing for webhook signature verification
+export const runtime = 'nodejs'
+
+// In-memory cache for processed event IDs (prevents duplicate processing within same instance)
+// Note: For multi-instance deployments, use Redis or a database table instead
+const processedEvents = new Map<string, number>()
+const EVENT_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+function isEventProcessed(eventId: string): boolean {
+  const timestamp = processedEvents.get(eventId)
+  if (!timestamp) return false
+
+  // Check if cache entry has expired
+  if (Date.now() - timestamp > EVENT_CACHE_TTL) {
+    processedEvents.delete(eventId)
+    return false
+  }
+  return true
+}
+
+function markEventProcessed(eventId: string): void {
+  processedEvents.set(eventId, Date.now())
+
+  // Cleanup old entries periodically (every 100 events)
+  if (processedEvents.size > 100) {
+    const now = Date.now()
+    const keysToDelete: string[] = []
+    processedEvents.forEach((timestamp, id) => {
+      if (now - timestamp > EVENT_CACHE_TTL) {
+        keysToDelete.push(id)
+      }
+    })
+    keysToDelete.forEach(id => processedEvents.delete(id))
+  }
+}
+
+/**
+ * POST /api/stripe/webhook
+ * Handles Stripe webhook events for subscription management
+ */
+export async function POST(request: NextRequest) {
+  const body = await request.text()
+  const headersList = await headers()
+  const signature = headersList.get('stripe-signature')
+
+  if (!signature) {
+    console.error('Webhook: Missing stripe-signature header')
+    return NextResponse.json(
+      { error: { code: 'MISSING_SIGNATURE', message: 'Missing stripe-signature header' } },
+      { status: 400 }
+    )
+  }
+
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+  if (!webhookSecret) {
+    console.error('Webhook: STRIPE_WEBHOOK_SECRET not configured')
+    return NextResponse.json(
+      { error: { code: 'CONFIG_ERROR', message: 'Webhook secret not configured' } },
+      { status: 500 }
+    )
+  }
+
+  let event: Stripe.Event
+
+  try {
+    event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    console.error('Webhook signature verification failed:', message)
+    return NextResponse.json(
+      { error: { code: 'INVALID_SIGNATURE', message: `Webhook signature verification failed: ${message}` } },
+      { status: 400 }
+    )
+  }
+
+  console.log(`Webhook received: ${event.type} (${event.id})`)
+
+  // Idempotency check - prevent duplicate processing of the same event
+  if (isEventProcessed(event.id)) {
+    console.log(`Webhook event already processed: ${event.id}`)
+    return NextResponse.json({ received: true, deduplicated: true })
+  }
+
+  const supabase = createServiceClient()
+
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session
+        await handleCheckoutCompleted(supabase, session)
+        break
+      }
+
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object as Stripe.Subscription
+        await handleSubscriptionUpdated(supabase, subscription)
+        break
+      }
+
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object as Stripe.Subscription
+        await handleSubscriptionDeleted(supabase, subscription)
+        break
+      }
+
+      case 'invoice.payment_succeeded': {
+        const invoice = event.data.object as Stripe.Invoice
+        await handleInvoicePaymentSucceeded(supabase, invoice)
+        break
+      }
+
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice
+        await handleInvoicePaymentFailed(supabase, invoice)
+        break
+      }
+
+      default:
+        console.log(`Unhandled webhook event: ${event.type}`)
+    }
+
+    // Mark event as processed after successful handling
+    markEventProcessed(event.id)
+
+    return NextResponse.json({ received: true })
+  } catch (error) {
+    console.error('Webhook handler error:', error)
+    return NextResponse.json(
+      { error: { code: 'HANDLER_ERROR', message: 'Webhook handler failed' } },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * Handle checkout.session.completed event
+ * Creates/updates customer and subscription records
+ */
+async function handleCheckoutCompleted(
+  supabase: ReturnType<typeof createServiceClient>,
+  session: Stripe.Checkout.Session
+) {
+  console.log('Processing checkout.session.completed:', session.id)
+
+  const userId = session.metadata?.supabase_user_id
+  const customerId = session.customer as string
+  const subscriptionId = session.subscription as string
+
+  if (!userId) {
+    console.error('Checkout session missing supabase_user_id metadata')
+    return
+  }
+
+  // Ensure customer record exists
+  await supabase.from('customers').upsert({
+    user_id: userId,
+    stripe_customer_id: customerId,
+  })
+
+  // Fetch full subscription details
+  if (subscriptionId) {
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+    await handleSubscriptionUpdated(supabase, subscription, userId)
+  }
+
+  console.log(`Checkout completed for user ${userId}`)
+}
+
+/**
+ * Handle customer.subscription.created/updated events
+ * Updates subscription record and user's plan
+ */
+async function handleSubscriptionUpdated(
+  supabase: ReturnType<typeof createServiceClient>,
+  subscription: Stripe.Subscription,
+  knownUserId?: string
+) {
+  console.log('Processing subscription update:', subscription.id, 'Status:', subscription.status)
+
+  // Get user ID from metadata or lookup by customer
+  let userId = knownUserId || subscription.metadata?.supabase_user_id
+
+  if (!userId) {
+    // Lookup by customer ID
+    const { data: customer } = await supabase
+      .from('customers')
+      .select('user_id')
+      .eq('stripe_customer_id', subscription.customer as string)
+      .single()
+
+    userId = customer?.user_id
+  }
+
+  if (!userId) {
+    console.error('Cannot find user for subscription:', subscription.id)
+    return
+  }
+
+  // Get plan from price ID and migrate legacy plans to 2-tier model
+  const priceId = subscription.items.data[0]?.price.id
+  const rawPlan = subscription.metadata?.plan || getPlanFromPriceId(priceId) || 'free'
+  // Migrate legacy plans: starter/basic -> free, ultra/mega -> pro
+  const plan = mapLegacyPlan(rawPlan as AllSubscriptionPlans)
+
+  // Log legacy plan migrations
+  if (rawPlan !== plan) {
+    console.log(`Legacy plan migration: ${rawPlan} -> ${plan} for subscription ${subscription.id}`)
+  }
+
+  // Extract period timestamps - handle different Stripe SDK versions
+  const periodStart = (subscription as unknown as Record<string, unknown>).current_period_start as number | undefined
+  const periodEnd = (subscription as unknown as Record<string, unknown>).current_period_end as number | undefined
+
+  // Upsert subscription record
+  const { error: subError } = await supabase.from('subscriptions').upsert({
+    user_id: userId,
+    stripe_subscription_id: subscription.id,
+    stripe_customer_id: subscription.customer as string,
+    status: subscription.status,
+    plan: plan,
+    price_id: priceId,
+    current_period_start: periodStart ? new Date(periodStart * 1000).toISOString() : null,
+    current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+    cancel_at_period_end: subscription.cancel_at_period_end,
+    canceled_at: subscription.canceled_at
+      ? new Date(subscription.canceled_at * 1000).toISOString()
+      : null,
+    trial_start: subscription.trial_start
+      ? new Date(subscription.trial_start * 1000).toISOString()
+      : null,
+    trial_end: subscription.trial_end
+      ? new Date(subscription.trial_end * 1000).toISOString()
+      : null,
+  }, {
+    onConflict: 'user_id',
+  })
+
+  if (subError) {
+    console.error('Error upserting subscription:', subError)
+    return
+  }
+
+  // Get current plan to detect upgrades
+  const { data: currentProfile } = await supabase
+    .from('profiles')
+    .select('subscription_plan, production_mode, subscription_started_at')
+    .eq('id', userId)
+    .single()
+
+  const previousPlan = currentProfile?.subscription_plan || 'free'
+  const activePlan = getActivePlan(subscription.status, plan as SubscriptionPlan)
+
+  // Update user's profile with active plan and mark plan as selected
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({
+      subscription_plan: activePlan,
+      subscription_started_at: subscription.status === 'active' && periodStart
+        ? new Date(periodStart * 1000).toISOString()
+        : null,
+      // Mark that user has selected a plan (via Stripe checkout)
+      has_selected_plan: true,
+    })
+    .eq('id', userId)
+
+  if (profileError) {
+    console.error('Error updating profile subscription:', profileError)
+  }
+
+  // Trigger instant job curation on plan UPGRADE (free -> paid)
+  // Additional safeguard: don't trigger if subscription was started in the last 5 minutes
+  // (prevents duplicate curation from webhook retries/race conditions)
+  const isUpgrade = previousPlan === 'free' && activePlan !== 'free'
+  const recentlyUpgraded = currentProfile?.subscription_started_at &&
+    (Date.now() - new Date(currentProfile.subscription_started_at).getTime()) < 5 * 60 * 1000
+
+  if (isUpgrade && currentProfile?.production_mode && !recentlyUpgraded) {
+    console.log(`Plan upgrade detected for user ${userId}: ${previousPlan} -> ${activePlan}. Triggering instant curation.`)
+
+    // Trigger job curation in background using internal service call
+    // Pass user_id and internal secret to bypass auth (webhook has no session)
+    // Support both INTERNAL_API_KEY (preferred) and INTERNAL_API_SECRET (legacy)
+    const internalSecret = process.env.INTERNAL_API_KEY || process.env.INTERNAL_API_SECRET
+    if (internalSecret) {
+      fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/jobs/curate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Secret': internalSecret,
+          'X-User-Id': userId,
+        },
+      }).catch(err => console.error('Failed to trigger upgrade curation:', err))
+    } else {
+      console.warn('INTERNAL_API_KEY not configured, skipping curation trigger')
+    }
+  } else if (isUpgrade && recentlyUpgraded) {
+    console.log(`Plan upgrade for user ${userId} skipped curation (recently upgraded)`)
+  }
+
+  console.log(`Subscription updated for user ${userId}: ${plan} (${subscription.status})`)
+}
+
+/**
+ * Handle customer.subscription.deleted event
+ * Resets user to free plan
+ */
+async function handleSubscriptionDeleted(
+  supabase: ReturnType<typeof createServiceClient>,
+  subscription: Stripe.Subscription
+) {
+  console.log('Processing subscription deletion:', subscription.id)
+
+  // Find user by subscription
+  const { data: subRecord } = await supabase
+    .from('subscriptions')
+    .select('user_id')
+    .eq('stripe_subscription_id', subscription.id)
+    .single()
+
+  if (!subRecord?.user_id) {
+    console.error('Cannot find user for deleted subscription:', subscription.id)
+    return
+  }
+
+  // Update subscription status
+  await supabase
+    .from('subscriptions')
+    .update({
+      status: 'canceled',
+      canceled_at: new Date().toISOString(),
+    })
+    .eq('stripe_subscription_id', subscription.id)
+
+  // Reset user to free plan
+  await supabase
+    .from('profiles')
+    .update({
+      subscription_plan: 'free',
+      subscription_started_at: null,
+    })
+    .eq('id', subRecord.user_id)
+
+  console.log(`Subscription canceled for user ${subRecord.user_id}`)
+}
+
+/**
+ * Handle invoice.payment_succeeded event
+ * Updates subscription period dates
+ */
+async function handleInvoicePaymentSucceeded(
+  supabase: ReturnType<typeof createServiceClient>,
+  invoice: Stripe.Invoice
+) {
+  // Get subscription from invoice - handle different SDK versions
+  const subscriptionId = (invoice as unknown as Record<string, unknown>).subscription as string | null
+  if (!subscriptionId) return
+
+  console.log('Processing payment succeeded for subscription:', subscriptionId)
+
+  // Refresh subscription data from Stripe
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  await handleSubscriptionUpdated(supabase, subscription)
+}
+
+/**
+ * Handle invoice.payment_failed event
+ * Updates subscription status
+ */
+async function handleInvoicePaymentFailed(
+  supabase: ReturnType<typeof createServiceClient>,
+  invoice: Stripe.Invoice
+) {
+  // Get subscription from invoice - handle different SDK versions
+  const subscriptionId = (invoice as unknown as Record<string, unknown>).subscription as string | null
+  if (!subscriptionId) return
+
+  console.log('Processing payment failed for subscription:', subscriptionId)
+
+  // Update subscription status
+  await supabase
+    .from('subscriptions')
+    .update({ status: 'past_due' })
+    .eq('stripe_subscription_id', subscriptionId)
+
+  // Optionally downgrade user immediately or give grace period
+  // For now, we keep their plan but mark subscription as past_due
+}
+
+/**
+ * Determine active plan based on subscription status
+ *
+ * Handles all Stripe subscription statuses:
+ * - active: Full plan access
+ * - trialing: Full plan access during trial
+ * - past_due: Grace period - keep plan but payment retry in progress
+ * - incomplete: Checkout not finished (initial payment failed) - no access
+ * - incomplete_expired: Checkout abandoned after 23 hours - no access
+ * - paused: Subscription paused (configurable) - keep plan
+ * - unpaid: Payment failed after all retry attempts - no access
+ * - canceled: Subscription ended - no access
+ */
+function getActivePlan(status: string, plan: SubscriptionPlan): SubscriptionPlan {
+  // States that grant full plan access
+  const activeStatuses = ['active', 'trialing']
+  if (activeStatuses.includes(status)) {
+    return plan
+  }
+
+  // Grace period states - keep plan but may need notification
+  if (status === 'past_due') {
+    return plan
+  }
+
+  // Incomplete states - checkout not finished, no access
+  if (status === 'incomplete' || status === 'incomplete_expired') {
+    return 'free'
+  }
+
+  // Paused - configurable, for now treat as active (keeps plan)
+  // This allows subscription pausing without losing access
+  if (status === 'paused') {
+    return plan
+  }
+
+  // Unpaid - payment failed after grace period, no access
+  if (status === 'unpaid') {
+    return 'free'
+  }
+
+  // All other statuses revert to free (including 'canceled')
+  return 'free'
+}
