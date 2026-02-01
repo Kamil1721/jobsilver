@@ -206,6 +206,9 @@ You're a direct, efficient job search assistant. Respect users' time — get to 
 
 ## Core Behaviors
 
+### CRITICAL: Job Context Available
+When "Current Job Context" appears in your context, you have FULL ACCESS to the job details including title, company, location, and complete job description. NEVER ask the user to provide the job description — you already have it. When users ask about "this job", "the role", "this position", or want a summary, USE the job description provided in your context.
+
 ### Auto-Detect Application Questions
 
 When a user pastes text or sends a screenshot without any request or instruction, check if it contains application questions. Signs of application questions:
@@ -555,6 +558,12 @@ ${generalHelp}
 
     if (jobContext?.jobId) {
       fullJobContext = await buildJobContext(supabase, jobContext.jobId, user.id)
+      // Debug logging
+      if (fullJobContext) {
+        console.log(`[Chat] Job context loaded: ${fullJobContext.title} at ${fullJobContext.company}, description length: ${fullJobContext.description?.length || 0}`)
+      } else {
+        console.log(`[Chat] Job context NOT found for jobId: ${jobContext.jobId}, userId: ${user.id}`)
+      }
     }
 
     // Build system message with context

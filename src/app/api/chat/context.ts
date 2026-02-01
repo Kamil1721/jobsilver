@@ -267,35 +267,57 @@ export function formatUserContextForPrompt(context: UserContext): string {
 }
 
 /**
+ * Strip HTML tags from text
+ */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, ' ')  // Replace HTML tags with spaces
+    .replace(/&nbsp;/g, ' ')   // Replace &nbsp; with spaces
+    .replace(/&amp;/g, '&')    // Replace &amp; with &
+    .replace(/&lt;/g, '<')     // Replace &lt; with <
+    .replace(/&gt;/g, '>')     // Replace &gt; with >
+    .replace(/&quot;/g, '"')   // Replace &quot; with "
+    .replace(/&#39;/g, "'")    // Replace &#39; with '
+    .replace(/\s+/g, ' ')      // Collapse multiple spaces
+    .trim()
+}
+
+/**
  * Format job context for prompt
  */
 export function formatJobContextForPrompt(job: Job): string {
   const parts: string[] = [
     `## Current Job Context`,
-    `Title: ${job.title}`,
-    `Company: ${job.company || 'Unknown'}`,
-    `Location: ${job.location || 'Not specified'}`,
+    `IMPORTANT: You have full access to this job's details. Use this information to answer questions.`,
+    ``,
+    `**Title:** ${job.title}`,
+    `**Company:** ${job.company || 'Unknown'}`,
+    `**Location:** ${job.location || 'Not specified'}`,
   ]
 
   if (job.salary_min || job.salary_max) {
     const salary = job.salary_min && job.salary_max
       ? `${job.salary_currency || ''} ${job.salary_min} - ${job.salary_max}`
       : `${job.salary_currency || ''} ${job.salary_min || job.salary_max}`
-    parts.push(`Salary: ${salary}`)
+    parts.push(`**Salary:** ${salary}`)
   }
 
   if (job.remote) {
-    parts.push(`Remote: ${job.remote_type || 'Yes'}`)
+    parts.push(`**Remote:** ${job.remote_type || 'Yes'}`)
   }
 
   if (job.description) {
-    // Truncate long descriptions
-    const desc = job.description.slice(0, 2000)
-    parts.push(`\nJob Description:\n${desc}${job.description.length > 2000 ? '...' : ''}`)
+    // Strip HTML and truncate long descriptions
+    const cleanDesc = stripHtml(job.description)
+    const desc = cleanDesc.slice(0, 3000)
+    parts.push(``)
+    parts.push(`**Full Job Description:**`)
+    parts.push(desc + (cleanDesc.length > 3000 ? '...' : ''))
   }
 
   if (job.match_score) {
-    parts.push(`\nMatch Score: ${job.match_score}%`)
+    parts.push(``)
+    parts.push(`**Match Score:** ${job.match_score}%`)
   }
 
   return parts.join('\n')

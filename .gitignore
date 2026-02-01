@@ -56,3 +56,5 @@ supabase/.temp
 *.log
 *.pid
 *.seed
+
+.vercel
