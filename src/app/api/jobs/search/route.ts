@@ -796,37 +796,51 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // Only include worldwide remote jobs if user explicitly enabled it (default: false)
+          // Include worldwide remote jobs if user explicitly enabled it
           const includeWorldwide = filters.include_worldwide_remote === true
 
-          if (includeWorldwide && remoteType === 'fully_remote') {
-            const worldwideIndicators = [
-              'worldwide', 'work from anywhere', 'global remote', 'anywhere in the world',
-              'remote - worldwide', 'remote worldwide', 'fully remote worldwide',
-              'location: anywhere', 'location: worldwide', 'remote (anywhere)',
-            ]
-
-            if (job.raw && isWorldwideRemote(job.raw)) {
-              worldwideBypassCount++
-              return true
-            }
-
-            if (worldwideIndicators.some(ind =>
-              description.includes(ind) || location.includes(ind) || title.includes(ind)
-            )) {
-              worldwideBypassCount++
-              return true
-            }
-
+          // For fully remote jobs, be more lenient
+          if (remoteType === 'fully_remote') {
+            // If user has European country selected, ALWAYS include EU-wide remote jobs
+            // (regardless of include_worldwide_remote setting)
             if (hasEuropeanCountry) {
               const euIndicators = [
                 'europe', 'european', 'eu remote', 'emea', 'remote europe', 'remote eu',
                 'eu-based', 'european union', 'eu timezone', 'cet', 'cest', 'remote - europe',
+                'remote', // Many EU jobs just say "Remote" without specifying region
               ]
               if (euIndicators.some(ind => description.includes(ind) || location.includes(ind))) {
                 worldwideBypassCount++
                 return true
               }
+            }
+
+            // Check worldwide indicators
+            if (includeWorldwide) {
+              const worldwideIndicators = [
+                'worldwide', 'work from anywhere', 'global remote', 'anywhere in the world',
+                'remote - worldwide', 'remote worldwide', 'fully remote worldwide',
+                'location: anywhere', 'location: worldwide', 'remote (anywhere)',
+              ]
+
+              if (job.raw && isWorldwideRemote(job.raw)) {
+                worldwideBypassCount++
+                return true
+              }
+
+              if (worldwideIndicators.some(ind =>
+                description.includes(ind) || location.includes(ind) || title.includes(ind)
+              )) {
+                worldwideBypassCount++
+                return true
+              }
+            }
+
+            // Trust jobs from fantastic.jobs API that were returned for the user's location
+            // The API already filtered by location, so these are relevant
+            if (job.source === 'fantasticjobs') {
+              worldwideBypassCount++
+              return true
             }
           }
 
