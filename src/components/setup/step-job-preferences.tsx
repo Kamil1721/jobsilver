@@ -528,7 +528,7 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
 
         {/* Location - show for on-site/hybrid, or for any remote option */}
         {workArrangements.length > 0 && (
-          <div className="space-y-3 animate-fade-in-up">
+          <div className={cn("space-y-3 animate-fade-in-up", showCountryDropdown && "relative z-50")}>
             <Label className="text-sm text-muted-foreground">
               {requiresLocation
                 ? "Where would you like to work? (Required for on-site/hybrid)"
