@@ -323,6 +323,39 @@ export function StepCV({ data, onUpdate, jobFilters }: StepCVProps) {
                     <Upload className="w-4 h-4 mr-2" />
                     Replace
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      onUpdate({
+                        cv_generation_mode: "generate",
+                        work_history: data.work_history || [
+                          {
+                            company: "",
+                            position: "",
+                            start_date: "",
+                            end_date: null,
+                            location: "",
+                            highlights: [""],
+                          },
+                        ],
+                        education: data.education || [
+                          {
+                            institution: "",
+                            degree: "",
+                            area: "",
+                            graduation_year: "",
+                            location: "",
+                            highlights: [],
+                          },
+                        ],
+                        skills: data.skills || [],
+                      })
+                    }}
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Generate New
+                  </Button>
                 </div>
               </div>
 

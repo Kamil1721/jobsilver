@@ -9,7 +9,11 @@ import {
   Wrench,
   X,
   Plus,
+  Sparkles,
+  Loader2,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { useToast } from "@/hooks/use-toast"
 import type { ScreeningAnswers, JobFilters } from "@/lib/supabase/types"
 
 interface SkillsSectionProps {
@@ -76,8 +80,11 @@ const SKILL_PRESETS: Record<string, string[]> = {
 
 export function SkillsSection({ data, onUpdate, jobTitles = [] }: SkillsSectionProps) {
   const [inputValue, setInputValue] = React.useState("")
+  const [isLoadingAI, setIsLoadingAI] = React.useState(false)
+  const [aiSuggestions, setAiSuggestions] = React.useState<string[]>([])
   const skills = data.skills || []
   const inputRef = React.useRef<HTMLInputElement>(null)
+  const { toast } = useToast()
 
   // Helper function to match skills from a title/position string
   const matchSkillsFromText = (text: string, matchedSkills: Set<string>) => {
@@ -181,6 +188,44 @@ export function SkillsSection({ data, onUpdate, jobTitles = [] }: SkillsSectionP
 
   const suggestedSkills = getRelevantPresets()
 
+  // AI-powered skill suggestions
+  const handleAISuggest = async () => {
+    setIsLoadingAI(true)
+    setAiSuggestions([])
+    try {
+      const response = await fetch('/api/ai/suggest-skills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workHistory: data.work_history,
+          education: data.education,
+          jobTitles,
+          existingSkills: skills,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to get suggestions')
+      }
+
+      setAiSuggestions(result.skills || [])
+      toast({
+        title: "AI suggestions ready!",
+        description: `Found ${result.skills?.length || 0} skills based on your profile`,
+      })
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Couldn't get AI suggestions",
+        description: error instanceof Error ? error.message : "Please try again",
+      })
+    } finally {
+      setIsLoadingAI(false)
+    }
+  }
+
   const addSkill = (skill: string) => {
     const trimmedSkill = skill.trim()
     if (trimmedSkill && !skills.includes(trimmedSkill) && skills.length < 15) {
@@ -226,7 +271,29 @@ export function SkillsSection({ data, onUpdate, jobTitles = [] }: SkillsSectionP
           <Wrench className="w-4 h-4 text-zinc-500" />
           <h3 className="font-medium">Skills</h3>
         </div>
-        <span className="text-xs text-muted-foreground">{skills.length}/15 skills</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">{skills.length}/15 skills</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleAISuggest}
+            disabled={isLoadingAI || skills.length >= 15}
+            className="gap-1.5 h-7 text-xs"
+          >
+            {isLoadingAI ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Thinking...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3 h-3" />
+                AI Suggest
+              </>
+            )}
+          </Button>
+        </div>
       </div>
       <p className="text-sm text-muted-foreground">
         Add your key skills and competencies (max 15)
@@ -274,8 +341,42 @@ export function SkillsSection({ data, onUpdate, jobTitles = [] }: SkillsSectionP
       </div>
 
 
+      {/* AI-suggested skills - shown when AI generates suggestions */}
+      {aiSuggestions.length > 0 && skills.length < 15 && (
+        <div className="space-y-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
+              AI-suggested skills (click to add):
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {aiSuggestions.map((skill) => (
+              <button
+                key={skill}
+                onClick={() => {
+                  addSkill(skill)
+                  setAiSuggestions(prev => prev.filter(s => s !== skill))
+                }}
+                disabled={skills.length >= 15 || skills.includes(skill)}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-sm border transition-colors",
+                  "border-blue-300 dark:border-blue-700 bg-white dark:bg-blue-900/50",
+                  "hover:border-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/50",
+                  "text-blue-700 dark:text-blue-300",
+                  (skills.length >= 15 || skills.includes(skill)) && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                <Plus className="w-3 h-3 inline mr-1" />
+                {skill}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Suggested skills based on job titles - shown as clickable chips */}
-      {suggestedSkills.length > 0 && skills.length < 15 && (
+      {suggestedSkills.length > 0 && skills.length < 15 && aiSuggestions.length === 0 && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
             Suggested skills (click to add):

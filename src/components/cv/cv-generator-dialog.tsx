@@ -62,6 +62,8 @@ export function CVGeneratorDialog({
   const [isLoading, setIsLoading] = React.useState(true)
   const [isGenerating, setIsGenerating] = React.useState(false)
   const [generatedUrl, setGeneratedUrl] = React.useState<string | null>(null)
+  const [isLoadingAISkills, setIsLoadingAISkills] = React.useState(false)
+  const [aiSkillSuggestions, setAiSkillSuggestions] = React.useState<string[]>([])
 
   // Form state
   const [screeningAnswers, setScreeningAnswers] = React.useState<Partial<ScreeningAnswers>>({
@@ -205,6 +207,43 @@ export function CVGeneratorDialog({
       ...prev,
       skills: (prev.skills || []).filter(s => s !== skill),
     }))
+  }
+
+  const handleAISuggestSkills = async () => {
+    setIsLoadingAISkills(true)
+    setAiSkillSuggestions([])
+    try {
+      const response = await fetch('/api/ai/suggest-skills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workHistory: screeningAnswers.work_history,
+          education: screeningAnswers.education,
+          jobTitles: job ? [job.title] : [],
+          existingSkills: screeningAnswers.skills,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to get suggestions')
+      }
+
+      setAiSkillSuggestions(result.skills || [])
+      toast({
+        title: "AI suggestions ready!",
+        description: `Found ${result.skills?.length || 0} skills for your CV`,
+      })
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Couldn't get AI suggestions",
+        description: error instanceof Error ? error.message : "Please try again",
+      })
+    } finally {
+      setIsLoadingAISkills(false)
+    }
   }
 
   const handleGenerate = async () => {
@@ -519,7 +558,29 @@ export function CVGeneratorDialog({
 
             {/* Skills */}
             <div className="space-y-4">
-              <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Skills</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Skills</h3>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAISuggestSkills}
+                  disabled={isLoadingAISkills}
+                  className="gap-1.5 h-7 text-xs"
+                >
+                  {isLoadingAISkills ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Thinking...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3 h-3" />
+                      AI Suggest
+                    </>
+                  )}
+                </Button>
+              </div>
               <div className="flex gap-2">
                 <Input
                   value={skillInput}
@@ -536,6 +597,33 @@ export function CVGeneratorDialog({
                   Add
                 </Button>
               </div>
+              {/* AI Suggestions */}
+              {aiSkillSuggestions.length > 0 && (
+                <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 space-y-2">
+                  <p className="text-xs font-medium text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3 h-3" />
+                    AI-suggested skills (click to add):
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {aiSkillSuggestions.map((skill) => (
+                      <button
+                        key={skill}
+                        type="button"
+                        onClick={() => {
+                          setScreeningAnswers(prev => ({
+                            ...prev,
+                            skills: [...(prev.skills || []), skill],
+                          }))
+                          setAiSkillSuggestions(prev => prev.filter(s => s !== skill))
+                        }}
+                        className="px-2.5 py-1 rounded-full text-xs border border-blue-300 dark:border-blue-700 bg-white dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-800/50 transition-colors"
+                      >
+                        + {skill}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {(screeningAnswers.skills || []).length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {(screeningAnswers.skills || []).map((skill) => (
