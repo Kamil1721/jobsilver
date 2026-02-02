@@ -298,15 +298,10 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
     setIsLoading(true)
 
     // Save user message to database (save first image URL for history)
-    // Don't await - let it save in background, but track failures
+    // Don't await - let it save in background. Failures are logged but don't interrupt user.
     saveMessage("user", userMessage.content, userMessage.imageUrl).then((saved) => {
       if (!saved) {
         console.warn('[JobAIChat] User message may not be saved to history')
-        toast({
-          variant: "destructive",
-          title: "Chat history issue",
-          description: "Your message may not appear when you return to this page.",
-        })
       }
     })
 
