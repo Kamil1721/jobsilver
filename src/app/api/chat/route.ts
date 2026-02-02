@@ -547,8 +547,17 @@ ${generalHelp}
             controller.close()
           } catch (error) {
             console.error('Free user chat error:', error)
+            let errorMessage = 'I encountered an error. Please try again.'
+
+            if (error instanceof Error) {
+              const errorStr = error.message.toLowerCase()
+              if (errorStr.includes('rate_limit') || errorStr.includes('rate limit')) {
+                errorMessage = 'I\'m receiving too many requests right now. Please wait a moment and try again.'
+              }
+            }
+
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: 'text', content: 'I encountered an error. Please try again.' })}\n\n`)
+              encoder.encode(`data: ${JSON.stringify({ type: 'text', content: errorMessage })}\n\n`)
             )
             controller.enqueue(encoder.encode('data: [DONE]\n\n'))
             controller.close()
@@ -871,11 +880,32 @@ ${generalHelp}
           controller.close()
         } catch (error) {
           console.error('Chat stream error:', error)
+
+          // Determine a more specific error message based on error type
+          let errorMessage = 'I encountered an error. Please try again.'
+
+          if (error instanceof Error) {
+            const errorStr = error.message.toLowerCase()
+
+            // Image-related errors
+            if (errorStr.includes('image') || errorStr.includes('vision') || errorStr.includes('content_policy')) {
+              errorMessage = 'I couldn\'t identify the questions from your screenshot. Try copying and pasting the questions as text instead.'
+            } else if (errorStr.includes('invalid_image') || errorStr.includes('could not process image')) {
+              errorMessage = 'I couldn\'t read that image. Please try copying and pasting the questions as text instead.'
+            } else if (errorStr.includes('rate_limit') || errorStr.includes('rate limit')) {
+              errorMessage = 'I\'m receiving too many requests right now. Please wait a moment and try again.'
+            } else if (errorStr.includes('context_length') || errorStr.includes('maximum context')) {
+              errorMessage = 'The conversation is too long. Please start a new chat or ask a shorter question.'
+            } else if (errorStr.includes('timeout')) {
+              errorMessage = 'The request took too long. Please try again with a simpler question.'
+            }
+          }
+
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
                 type: 'text',
-                content: 'I encountered an error. Please try again.',
+                content: errorMessage,
               })}\n\n`
             )
           )

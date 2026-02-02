@@ -87,9 +87,16 @@ export async function POST(
 
     const { role, content, imageUrl } = await request.json()
 
-    if (!role || !content) {
-      console.log('[Chat POST] Missing role or content')
-      return NextResponse.json({ error: 'Role and content are required' }, { status: 400 })
+    // Role is required, but content can be empty for image-only messages (if there's an image)
+    if (!role) {
+      console.log('[Chat POST] Missing role')
+      return NextResponse.json({ error: 'Role is required' }, { status: 400 })
+    }
+
+    // Content is required unless there's an image
+    if (!content && !imageUrl) {
+      console.log('[Chat POST] Missing content (and no image)')
+      return NextResponse.json({ error: 'Content or image is required' }, { status: 400 })
     }
 
     // Verify user owns the job
@@ -116,7 +123,7 @@ export async function POST(
         job_id: jobId,
         user_id: user.id,
         role,
-        content,
+        content: content || '', // Allow empty content for image-only messages
         image_url: imageUrl || null,
       })
       .select('id, role, content, image_url, created_at')

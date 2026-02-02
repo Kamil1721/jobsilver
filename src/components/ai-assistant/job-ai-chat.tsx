@@ -122,8 +122,8 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
     loadChatHistory()
   }, [job.id, job.title, job.company])
 
-  // Save message to database
-  const saveMessage = async (role: 'user' | 'assistant', content: string, imageUrl?: string) => {
+  // Save message to database - returns true if saved successfully
+  const saveMessage = async (role: 'user' | 'assistant', content: string, imageUrl?: string): Promise<boolean> => {
     console.log(`[JobAIChat] Saving ${role} message for job: ${job.id}`)
     try {
       const response = await fetch(`/api/jobs/${job.id}/chat`, {
@@ -134,11 +134,14 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         console.error(`[JobAIChat] Failed to save message: ${response.status}`, errorData)
+        return false
       } else {
         console.log(`[JobAIChat] Message saved successfully`)
+        return true
       }
     } catch (error) {
       console.error('[JobAIChat] Failed to save message:', error)
+      return false
     }
   }
 
@@ -277,10 +280,13 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
     const currentImagePreviews = [...imagePreviews]
 
     // Create user message with images if present (store first image for display, all sent to API)
+    // For image-only messages, use a descriptive placeholder so it can be saved
+    const imageOnlyText = "Answer the questions in this screenshot using my profile data."
+    const messageContent = messageToSend || (currentImagePreviews.length > 0 ? imageOnlyText : "")
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: "user",
-      content: messageToSend || "",
+      content: messageContent,
       timestamp: new Date(),
       imageUrl: currentImagePreviews[0] || undefined,
       imageUrls: currentImagePreviews.length > 0 ? currentImagePreviews : undefined,
@@ -292,7 +298,17 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
     setIsLoading(true)
 
     // Save user message to database (save first image URL for history)
-    saveMessage("user", userMessage.content, userMessage.imageUrl)
+    // Don't await - let it save in background, but track failures
+    saveMessage("user", userMessage.content, userMessage.imageUrl).then((saved) => {
+      if (!saved) {
+        console.warn('[JobAIChat] User message may not be saved to history')
+        toast({
+          variant: "destructive",
+          title: "Chat history issue",
+          description: "Your message may not appear when you return to this page.",
+        })
+      }
+    })
 
     // Create a placeholder for assistant response
     const assistantId = `assistant-${Date.now()}`
@@ -309,7 +325,7 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
     try {
       // Build the request body
       const requestBody: Record<string, unknown> = {
-        message: messageToSend || "Answer the questions in this screenshot using my profile data.",
+        message: messageContent,
         jobContext: {
           jobId: job.id,
           title: job.title,
@@ -416,10 +432,18 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
               : m
           )
         )
-        saveMessage("assistant", fallbackContent)
+        saveMessage("assistant", fallbackContent).then((saved) => {
+          if (!saved) {
+            console.warn('[JobAIChat] Assistant message may not be saved to history')
+          }
+        })
       } else {
         // Save the assistant's response to database
-        saveMessage("assistant", fullContent)
+        saveMessage("assistant", fullContent).then((saved) => {
+          if (!saved) {
+            console.warn('[JobAIChat] Assistant message may not be saved to history')
+          }
+        })
       }
     } catch (error) {
       // Don't show error for intentional abort (navigation away or new request)
