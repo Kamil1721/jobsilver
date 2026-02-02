@@ -239,6 +239,7 @@ export default function AdminPage() {
       fetchReports()
       fetchTesters()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only fetch once when isAdmin becomes true
   }, [isAdmin])
 
   const fetchUsers = async (overridePlan?: string) => {

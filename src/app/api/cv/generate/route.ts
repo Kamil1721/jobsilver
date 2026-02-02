@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generateCV, generateTailoredCV, type CVData } from '@/lib/cv/pdf-generator'
+import { checkRateLimit } from '@/lib/security/rate-limit'
 import type { ScreeningAnswers } from '@/lib/supabase/types'
+
+export const dynamic = 'force-dynamic'
 
 interface GenerateRequest {
   screeningAnswers: ScreeningAnswers
@@ -20,6 +23,16 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Rate limiting for CV generation (max 5 per hour to prevent storage abuse)
+    const rateLimit = checkRateLimit(user.id, { maxRequests: 5, windowSeconds: 3600, prefix: 'cv-gen' }, 'cv-generate')
+    if (!rateLimit.allowed) {
+      const retryAfter = Math.max(1, rateLimit.resetAt - Math.floor(Date.now() / 1000))
+      return NextResponse.json(
+        { error: 'Too many CV generations. Please try again later.' },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+      )
     }
 
     const body = await request.json() as GenerateRequest

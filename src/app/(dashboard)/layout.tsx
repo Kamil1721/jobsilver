@@ -70,10 +70,14 @@ export default function DashboardLayout({
     setMounted(true)
   }, [])
 
+  // Track current user ID to detect account switches
+  const [currentUserId, setCurrentUserId] = React.useState<string | null>(null)
+
   React.useEffect(() => {
     const fetchProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
+        setCurrentUserId(user.id)
         setUserEmail(user.email || "")
         const { data } = await supabase
           .from("profiles")
@@ -92,7 +96,29 @@ export default function DashboardLayout({
       }
     }
     fetchProfile()
-  }, [supabase])
+
+    // Listen for auth state changes to detect account switches
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        // If user ID changed, force a full page refresh to clear all cached state
+        if (currentUserId && currentUserId !== session.user.id) {
+          console.log('[Auth] User changed, refreshing page to clear state')
+          window.location.reload()
+        }
+      } else if (event === 'SIGNED_OUT') {
+        // On sign out, redirect and refresh to clear state
+        setCurrentUserId(null)
+        setProfile(null)
+        setUserEmail("")
+        setIsAdmin(false)
+        setIsTester(false)
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [supabase, currentUserId])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()

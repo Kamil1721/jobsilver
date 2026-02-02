@@ -65,6 +65,7 @@ function LoginPageContent() {
       // Default to signup tab when invite code is present
       setActiveTab("signup")
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only validate once per URL change, not when inviteStatus changes
   }, [searchParams])
 
   const validateInviteCode = async (code: string) => {

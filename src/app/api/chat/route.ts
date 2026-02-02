@@ -15,6 +15,8 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/security/rate-limit'
 import { getHelpForPage, getGeneralHelp } from '@/lib/ai/website-documentation'
 import type { SubscriptionPlan, AllSubscriptionPlans } from '@/lib/supabase/types'
 
+export const dynamic = 'force-dynamic'
+
 // Validate API key at startup
 if (!process.env.OPENAI_API_KEY) {
   console.error('OPENAI_API_KEY environment variable is required')

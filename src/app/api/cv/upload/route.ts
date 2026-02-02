@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { parseCV, extractTextFromFile } from '@/lib/ai/cv-parser'
 import { checkRateLimit } from '@/lib/security/rate-limit'
 
+export const dynamic = 'force-dynamic'
+
 // Sanitize filename to remove special characters that cause storage errors
 function sanitizeFileName(fileName: string): string {
   // Get the extension

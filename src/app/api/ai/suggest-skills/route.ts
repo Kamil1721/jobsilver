@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { checkRateLimit } from '@/lib/security/rate-limit'
 import OpenAI from 'openai'
+
+export const dynamic = 'force-dynamic'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -28,6 +31,16 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Rate limiting for AI skills suggestions (max 10 per hour to prevent OpenAI API abuse)
+    const rateLimit = checkRateLimit(user.id, { maxRequests: 10, windowSeconds: 3600, prefix: 'ai-skills' }, 'ai-skills')
+    if (!rateLimit.allowed) {
+      const retryAfter = Math.max(1, rateLimit.resetAt - Math.floor(Date.now() / 1000))
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+      )
     }
 
     const body = await request.json() as SuggestSkillsRequest

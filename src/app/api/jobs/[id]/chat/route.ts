@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+export const dynamic = 'force-dynamic'
+
 interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -88,10 +90,10 @@ export async function POST(
 
     const { role, content, imageUrl } = await request.json()
 
-    // Role is required, but content can be empty for image-only messages (if there's an image)
-    if (!role) {
-      console.log('[Chat POST] Missing role')
-      return NextResponse.json({ error: 'Role is required' }, { status: 400 })
+    // Role is required and must be valid
+    if (!role || !['user', 'assistant'].includes(role)) {
+      console.log('[Chat POST] Invalid or missing role')
+      return NextResponse.json({ error: 'Valid role (user or assistant) is required' }, { status: 400 })
     }
 
     // Content is required unless there's an image

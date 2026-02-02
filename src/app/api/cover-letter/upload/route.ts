@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { checkRateLimit } from '@/lib/security/rate-limit'
+
+export const dynamic = 'force-dynamic'
 
 // Sanitize filename to remove special characters that cause storage errors
 function sanitizeFileName(fileName: string): string {
@@ -25,6 +28,16 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Rate limiting for cover letter uploads (max 10 per hour to prevent storage abuse)
+    const rateLimit = checkRateLimit(user.id, { maxRequests: 10, windowSeconds: 3600, prefix: 'cover-letter-upload' }, 'cover-letter-upload')
+    if (!rateLimit.allowed) {
+      const retryAfter = Math.max(1, rateLimit.resetAt - Math.floor(Date.now() / 1000))
+      return NextResponse.json(
+        { error: 'Too many uploads. Please try again later.' },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+      )
     }
 
     const formData = await request.formData()

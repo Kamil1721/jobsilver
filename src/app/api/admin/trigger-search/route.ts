@@ -8,6 +8,8 @@ import {
   RATE_LIMITS,
 } from '@/lib/security/rate-limit'
 
+export const dynamic = 'force-dynamic'
+
 // Admin endpoint to trigger job search for a specific user
 // Requires either: (1) valid admin session OR (2) valid internal API key
 export async function POST(request: NextRequest) {

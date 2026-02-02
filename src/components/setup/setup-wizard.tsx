@@ -107,6 +107,7 @@ export function SetupWizard() {
   const [isSaving, setIsSaving] = React.useState(false)
   const [isFirstTimeSetup, setIsFirstTimeSetup] = React.useState(true)
   const [subscriptionPlan, setSubscriptionPlan] = React.useState<SubscriptionPlan>('free')
+  const [loggedInEmail, setLoggedInEmail] = React.useState<string | null>(null)
   const { toast } = useToast()
   const supabase = createClient()
 
@@ -126,6 +127,9 @@ export function SetupWizard() {
           if (isMounted) setIsLoading(false)
           return
         }
+
+        // Store logged-in email for display (helps prevent saving to wrong account)
+        if (isMounted) setLoggedInEmail(user.email || null)
 
         const { data, error } = await supabase
           .from("profiles")
@@ -416,6 +420,21 @@ export function SetupWizard() {
         }
       }
 
+      // Security: Validate that cv_url belongs to this user (prevents cross-account contamination)
+      if (screeningAnswers.cv_url && !screeningAnswers.cv_url.startsWith(user.id + '/')) {
+        console.error('[Setup] CV URL does not belong to current user, clearing it', {
+          cvUrl: screeningAnswers.cv_url,
+          userId: user.id,
+        })
+        // Clear the invalid cv_url to prevent saving another user's CV reference
+        screeningAnswers.cv_url = null
+        toast({
+          variant: "destructive",
+          title: "CV reference cleared",
+          description: "Please re-upload your CV. The previous reference was invalid.",
+        })
+      }
+
       const { error } = await supabase
         .from("profiles")
         .upsert({
@@ -502,6 +521,12 @@ export function SetupWizard() {
         <p className="text-muted-foreground max-w-xl mx-auto">
           Configure your job search criteria to help us find the perfect opportunities for you.
         </p>
+        {/* Show logged-in account to prevent accidental saves to wrong account */}
+        {loggedInEmail && (
+          <p className="text-xs text-muted-foreground/70">
+            Configuring for: <span className="font-medium text-foreground/80">{loggedInEmail}</span>
+          </p>
+        )}
       </div>
 
       {/* How It Works Info Box */}

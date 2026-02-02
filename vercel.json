@@ -10,5 +10,19 @@
     "src/app/api/cron/daily-curation/route.ts": {
       "maxDuration": 300
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/jobs/:id",
+      "destination": "/api/jobs/:id"
+    },
+    {
+      "source": "/api/jobs/:id/chat",
+      "destination": "/api/jobs/:id/chat"
+    },
+    {
+      "source": "/api/jobs/:id/favorite",
+      "destination": "/api/jobs/:id/favorite"
+    }
+  ]
 }

@@ -5,6 +5,8 @@ import { checkRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit"
 import { logAccountEvent, createAuditContext } from "@/lib/security/audit-log"
 import { getStripeClient } from "@/lib/stripe/client"
 
+export const dynamic = 'force-dynamic'
+
 export async function DELETE(request: Request) {
   try {
     const supabase = await createClient()

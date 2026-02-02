@@ -687,6 +687,7 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
                 {(message.imageUrls || message.imageUrl) && (
                   <div className="mb-2 flex flex-wrap gap-2">
                     {(message.imageUrls || [message.imageUrl]).filter(Boolean).map((url, imgIndex) => (
+                      // eslint-disable-next-line @next/next/no-img-element -- Base64 data URLs for user uploads, Next Image doesn't support these
                       <img
                         key={imgIndex}
                         src={url!}
@@ -783,6 +784,7 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
           <div className="flex gap-2 flex-wrap">
             {imagePreviews.map((preview, index) => (
               <div key={index} className="relative inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element -- Base64 data URL previews, Next Image doesn't support these */}
                 <img
                   src={preview}
                   alt={`Preview ${index + 1}`}
