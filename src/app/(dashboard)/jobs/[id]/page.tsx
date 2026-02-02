@@ -8,13 +8,15 @@ import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { MapPin, Calendar, ExternalLink, ArrowLeft, Trash2, Flag, Sparkles, Check, MessageSquare, Briefcase } from "lucide-react"
+import { MapPin, Calendar, ExternalLink, ArrowLeft, Trash2, Flag, Sparkles, Check, MessageSquare, Briefcase, FileText } from "lucide-react"
 import type { Job, Profile } from "@/lib/supabase/types"
 import { ReportProblemDialog } from "@/components/report"
 import { dispatchSetJobContext } from "@/lib/events/chat-events"
 import { FavoriteButton } from "@/components/dashboard/FavoriteButton"
 import { useSubscription } from "@/contexts/SubscriptionContext"
 import { JobAIChat } from "@/components/ai-assistant"
+import { CVGeneratorDialog } from "@/components/cv"
+import { FeatureGate } from "@/components/ui/feature-gate"
 
 export default function JobDetailPage() {
   const params = useParams()
@@ -26,6 +28,7 @@ export default function JobDetailPage() {
   const [profile, setProfile] = React.useState<Profile | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
   const [showReportDialog, setShowReportDialog] = React.useState(false)
+  const [showCvGenerator, setShowCvGenerator] = React.useState(false)
   const [isFavorited, setIsFavorited] = React.useState(false)
   const [preferenceReasons, setPreferenceReasons] = React.useState<string[]>([])
   const { plan, isTester } = useSubscription()
@@ -159,6 +162,16 @@ export default function JobDetailPage() {
                 {job.job_type && <Badge variant="outline" className="text-[9px] h-3.5 px-1">{job.job_type}</Badge>}
               </div>
             </div>
+            <FeatureGate feature="cv_generator" mode="overlay">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 text-[10px] px-2"
+                onClick={() => setShowCvGenerator(true)}
+              >
+                <FileText className="w-3 h-3 mr-0.5" />Generate CV
+              </Button>
+            </FeatureGate>
             <Button
               variant="outline"
               size="sm"
@@ -263,6 +276,20 @@ export default function JobDetailPage() {
             id: job.id,
             title: job.title,
             company: job.company,
+          }}
+        />
+      )}
+
+      {/* CV Generator Dialog for this job */}
+      {job && (
+        <CVGeneratorDialog
+          open={showCvGenerator}
+          onOpenChange={setShowCvGenerator}
+          job={job}
+          onCVGenerated={(cvUrl, signedUrl) => {
+            if (signedUrl) {
+              window.open(signedUrl, '_blank')
+            }
           }}
         />
       )}

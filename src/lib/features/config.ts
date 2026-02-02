@@ -11,6 +11,7 @@ export type Feature =
   | 'priority_support'
   | 'dedicated_support'
   | 'ai_learning'
+  | 'cv_generator'
 
 /**
  * Minimum plan required to access each feature
@@ -26,6 +27,7 @@ export const FEATURE_REQUIREMENTS: Record<Feature, SubscriptionPlan> = {
   priority_support: 'pro',
   dedicated_support: 'pro',
   ai_learning: 'pro',
+  cv_generator: 'pro',
 }
 
 /**
@@ -64,6 +66,10 @@ export const FEATURE_INFO: Record<Feature, { name: string; description: string }
   ai_learning: {
     name: 'AI Learning',
     description: 'AI learns your job preferences from your favorites and interactions for better recommendations',
+  },
+  cv_generator: {
+    name: 'CV Generator',
+    description: 'Generate professional CVs tailored to specific jobs',
   },
 }
 

@@ -30,6 +30,7 @@ import {
   Trash2,
   AlertTriangle,
   ExternalLink,
+  Sparkles,
 } from "lucide-react"
 import { FeatureGate } from "@/components/ui/feature-gate"
 import { Switch } from "@/components/ui/switch"
@@ -44,6 +45,7 @@ import {
 import { PhoneInput } from "@/components/ui/phone-input"
 import type { Profile, JobFilters, ScreeningAnswers, NotificationPreferences } from "@/lib/supabase/types"
 import { SubscriptionManagement } from "@/components/profile/SubscriptionManagement"
+import { CVGeneratorDialog } from "@/components/cv"
 
 // Loading fallback for Suspense
 function ProfileLoading() {
@@ -87,6 +89,8 @@ function ProfilePageContent() {
   // CV viewer states
   const [cvViewUrl, setCvViewUrl] = React.useState<string | null>(null)
   const [isLoadingCv, setIsLoadingCv] = React.useState(false)
+  // CV generator dialog state
+  const [showCvGenerator, setShowCvGenerator] = React.useState(false)
   const { toast } = useToast()
   const supabase = createClient()
 
@@ -525,10 +529,24 @@ function ProfilePageContent() {
           <TabsContent value="cv">
             <Card>
               <CardHeader>
-                <CardTitle>CV / Resume</CardTitle>
-                <CardDescription>
-                  Upload your CV to enable AI-powered job matching and auto-fill applications
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>CV / Resume</CardTitle>
+                    <CardDescription>
+                      Upload your CV or generate a professional one from your information
+                    </CardDescription>
+                  </div>
+                  <FeatureGate feature="cv_generator" mode="overlay">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowCvGenerator(true)}
+                      className="gap-2"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Generate CV
+                    </Button>
+                  </FeatureGate>
+                </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Upload area */}
@@ -784,6 +802,16 @@ function ProfilePageContent() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* CV Generator Dialog */}
+      <CVGeneratorDialog
+        open={showCvGenerator}
+        onOpenChange={setShowCvGenerator}
+        onCVGenerated={(cvUrl, signedUrl) => {
+          setProfile(prev => prev ? { ...prev, cv_url: cvUrl } : prev)
+          setCvViewUrl(signedUrl || null)
+        }}
+      />
 
       {/* Delete Account Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

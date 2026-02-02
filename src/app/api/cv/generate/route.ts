@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { generateCV, generateTailoredCV, type CVData } from '@/lib/cv/pdf-generator'
 import type { ScreeningAnswers } from '@/lib/supabase/types'
 
 interface GenerateRequest {
   screeningAnswers: ScreeningAnswers
-}
-
-interface PythonFunctionResponse {
-  success: boolean
-  pdf?: string
-  filename?: string
-  error?: string
+  jobContext?: {
+    id: string
+    title: string
+    company: string
+    description?: string
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json() as GenerateRequest
-    const { screeningAnswers } = body
+    const { screeningAnswers, jobContext } = body
 
     if (!screeningAnswers) {
       return NextResponse.json(
@@ -70,70 +70,46 @@ export async function POST(request: NextRequest) {
     ].filter(Boolean)
     const location = locationParts.join(', ')
 
-    // Prepare data for Python function
-    const cvData = {
-      first_name: screeningAnswers.first_name,
-      last_name: screeningAnswers.last_name,
+    // Prepare CV data
+    const cvData: CVData = {
+      first_name: screeningAnswers.first_name || '',
+      last_name: screeningAnswers.last_name || '',
       email: user.email || '',
       phone,
       location,
-      linkedin_url: screeningAnswers.linkedin_url,
-      experience_summary: screeningAnswers.experience_summary,
-      work_history: screeningAnswers.work_history,
-      education: screeningAnswers.education,
+      linkedin_url: screeningAnswers.linkedin_url || undefined,
+      experience_summary: screeningAnswers.experience_summary || undefined,
+      work_history: (screeningAnswers.work_history || []).filter(w => w.company && w.position),
+      education: (screeningAnswers.education || []).filter(e => e.institution && e.degree),
       skills: screeningAnswers.skills || [],
     }
 
-    // Determine the base URL for the Python function
-    // In production, this would be the same domain
-    // In development, we might need to handle this differently
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-
-    // Call the Python serverless function
-    let pythonResponse: PythonFunctionResponse
-
+    // Generate PDF
+    let pdfBytes: Uint8Array
     try {
-      const functionUrl = `${baseUrl}/api/generate-cv`
-      const response = await fetch(functionUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(cvData),
-      })
-
-      pythonResponse = await response.json()
-
-      if (!pythonResponse.success || !pythonResponse.pdf) {
-        // If Python function fails, try to generate inline (fallback)
-        console.warn('Python function failed, using fallback:', pythonResponse.error)
-        return NextResponse.json(
-          { error: pythonResponse.error || 'CV generation failed' },
-          { status: 500 }
-        )
+      if (jobContext) {
+        pdfBytes = await generateTailoredCV(cvData, jobContext)
+      } else {
+        pdfBytes = await generateCV(cvData)
       }
-    } catch (fetchError) {
-      console.error('Failed to call Python function:', fetchError)
+    } catch (genError) {
+      console.error('PDF generation error:', genError)
       return NextResponse.json(
-        { error: 'CV generation service unavailable' },
-        { status: 503 }
+        { error: 'Failed to generate CV PDF' },
+        { status: 500 }
       )
     }
-
-    // Decode base64 PDF
-    const pdfBuffer = Buffer.from(pythonResponse.pdf, 'base64')
 
     // Generate filename
     const safeFirstName = (screeningAnswers.first_name || 'cv').replace(/[^a-zA-Z0-9]/g, '_')
     const safeLastName = (screeningAnswers.last_name || '').replace(/[^a-zA-Z0-9]/g, '_')
-    const fileName = `${user.id}/${Date.now()}-${safeFirstName}_${safeLastName}_CV.pdf`
+    const jobSuffix = jobContext ? `_${jobContext.company.replace(/[^a-zA-Z0-9]/g, '_')}` : ''
+    const fileName = `${user.id}/${Date.now()}-${safeFirstName}_${safeLastName}${jobSuffix}_CV.pdf`
 
     // Upload PDF to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('cvs')
-      .upload(fileName, pdfBuffer, {
+      .upload(fileName, pdfBytes, {
         contentType: 'application/pdf',
         upsert: false
       })
@@ -146,27 +122,35 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update profile with CV URL and set cv_is_generated flag
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .upsert({
-        id: user.id,
-        cv_url: uploadData.path,
-        cv_is_generated: true,
-        updated_at: new Date().toISOString(),
-      })
+    // Update profile with CV URL and set cv_is_generated flag (only if not job-specific)
+    if (!jobContext) {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user.id,
+          cv_url: uploadData.path,
+          cv_is_generated: true,
+          updated_at: new Date().toISOString(),
+        })
 
-    if (updateError) {
-      console.error('Profile update error:', updateError)
-      return NextResponse.json(
-        { error: 'Failed to update profile' },
-        { status: 500 }
-      )
+      if (updateError) {
+        console.error('Profile update error:', updateError)
+        return NextResponse.json(
+          { error: 'Failed to update profile' },
+          { status: 500 }
+        )
+      }
     }
+
+    // Get signed URL for the generated CV
+    const { data: signedUrlData } = await supabase.storage
+      .from('cvs')
+      .createSignedUrl(uploadData.path, 3600) // 1 hour expiry
 
     return NextResponse.json({
       success: true,
       cv_url: uploadData.path,
+      signed_url: signedUrlData?.signedUrl,
       message: 'CV generated successfully'
     })
 
