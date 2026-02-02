@@ -370,7 +370,7 @@ export default function AdminPage() {
       fetchTesters()
       // Auto-copy the new invite link
       if (data.invite?.code) {
-        const inviteUrl = `${window.location.origin}/signup?invite=${data.invite.code}`
+        const inviteUrl = `${window.location.origin}/tester?code=${data.invite.code}`
         navigator.clipboard.writeText(inviteUrl)
         setCopiedInviteId(data.invite.id)
         setTimeout(() => setCopiedInviteId(null), 2000)
@@ -417,7 +417,7 @@ export default function AdminPage() {
   }
 
   const copyInviteLink = (invite: TesterInvite) => {
-    const inviteUrl = `${window.location.origin}/signup?invite=${invite.code}`
+    const inviteUrl = `${window.location.origin}/tester?code=${invite.code}`
     navigator.clipboard.writeText(inviteUrl)
     setCopiedInviteId(invite.id)
     toast({ title: "Copied", description: "Invite link copied to clipboard" })

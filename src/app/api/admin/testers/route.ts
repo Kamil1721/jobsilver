@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         invite,
-        signup_url: `${process.env.NEXT_PUBLIC_APP_URL || ''}/signup?invite=${invite_code}`,
+        signup_url: `${process.env.NEXT_PUBLIC_APP_URL || ''}/tester?code=${invite_code}`,
       },
       {
         status: 201,

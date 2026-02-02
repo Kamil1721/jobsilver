@@ -74,12 +74,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Normalize invite code to uppercase for consistent matching
+    const normalizedInviteCode = inviteCode.toUpperCase()
+
     // SECURITY FIX: Use atomic operation to prevent race condition
     // This combines the check and update in a single transaction
     const { data: redeemResult, error: redeemError } = await supabaseService.rpc(
       'redeem_tester_invite_atomic',
       {
-        p_invite_code: inviteCode,
+        p_invite_code: normalizedInviteCode,
         p_user_id: user.id,
       }
     )
@@ -97,7 +100,7 @@ export async function POST(request: NextRequest) {
           used_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
-        .eq('invite_code', inviteCode)
+        .eq('invite_code', normalizedInviteCode)
         .is('used_by', null)  // Only update if not already used (atomic check)
         .eq('is_active', true)
         .gte('expires_at', new Date().toISOString())
@@ -109,7 +112,7 @@ export async function POST(request: NextRequest) {
         const { data: invite } = await supabaseService
           .from('tester_invites')
           .select('id, used_by, is_active, expires_at')
-          .eq('invite_code', inviteCode)
+          .eq('invite_code', normalizedInviteCode)
           .single()
 
         if (!invite) {
@@ -183,7 +186,7 @@ export async function POST(request: NextRequest) {
       .from('profiles')
       .update({
         is_tester: true,
-        tester_invite_code: inviteCode,
+        tester_invite_code: normalizedInviteCode,
         has_selected_plan: true,
         subscription_plan: 'pro',
         updated_at: new Date().toISOString(),
