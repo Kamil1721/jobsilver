@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     // SECURITY FIX: Use atomic operation to prevent race condition
     // This combines the check and update in a single transaction
     const { data: redeemResult, error: redeemError } = await supabaseService.rpc(
-      'redeem_tester_invite_atomic',
+      'redeem_tester_invite',
       {
         p_invite_code: normalizedInviteCode,
         p_user_id: user.id,
@@ -88,9 +88,9 @@ export async function POST(request: NextRequest) {
     )
 
     // If the RPC doesn't exist, fall back to the manual approach with optimistic locking
-    if (redeemError?.code === '42883') {
+    if (redeemError?.code === '42883' || redeemError?.code === 'PGRST202') {
       // Function doesn't exist - use optimistic locking approach
-      console.warn('redeem_tester_invite_atomic function not found, using fallback')
+      console.warn('redeem_tester_invite function not found, using fallback')
 
       // Atomically update the invite only if it's still unused
       const { data: updatedInvite, error: updateError } = await supabaseService
