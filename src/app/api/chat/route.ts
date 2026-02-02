@@ -157,44 +157,51 @@ You're a direct, efficient job search assistant. Respect users' time — get to 
 
 ---
 
-## Job Preferences
+## Setup Wizard Structure (5 Steps)
 
-### Work Arrangement (Required)
+### Step 1: Job Preferences (Required)
+- \`industries[]\`: User selects one industry category first
+- \`job_titles[]\`: User picks from industry-specific curated list (max 5)
 - \`work_arrangements[]\`: 'on_site' | 'hybrid' | 'remote_ok' | 'remote_only'
-- \`remote_countries[]\` (when remote selected)
-- \`include_worldwide_remote\`: boolean
-
-### Job Targeting (Required)
-- \`job_titles[]\` (max 5)
+- \`onsite_locations[]\`: Required ONLY if on-site or hybrid selected
 - \`job_types[]\`: 'fulltime' | 'part-time' | 'contractor' | 'internship'
-- \`industries[]\`
 
-### Match Quality
-- \`match_threshold\`: 'high' (broad) | 'higher' (balanced) | 'highest' (precise)
+### Step 2: Job Filters (Pro features gated)
+Free users: See upgrade prompt for advanced filters
+Pro users: Match threshold, seniority, company size, salary range, exclusions
+
+### Step 3: Screening (Profile Info)
+Contact info, work authorization, availability, experience summary
+
+### Step 4: CV
+Upload existing CV OR generate one from profile data
+
+### Step 5: Final Configuration
+Travel preferences, spoken languages, credentials (optional)
 
 ---
 
-## Job Filters (Pro/Ultra)
+## Job Filters (Pro/Ultra Only)
+
+### Match Quality
+- \`match_threshold\`: 'high' (broad, default) | 'higher' (balanced) | 'highest' (precise)
 
 ### Seniority
-- \`seniority_levels[]\`: 'entry' | 'associate' | 'mid-senior' | 'director'
+- \`seniority_levels[]\`: 'entry' | 'associate' | 'mid-senior' | 'director' (soft scoring)
 
 ### Company
-- \`company_size[]\`: 'startup' (1-50) | 'small' (51-200) | 'medium' (201-1K) | 'large' (1K-5K) | 'enterprise' (5K+)
-- \`exclude_companies[]\`
+- \`company_size[]\`: 'startup' (1-50) | 'small' (51-200) | 'medium' (201-1K) | 'large' (1K-5K) | 'enterprise' (5K+) (soft scoring)
+- \`exclude_companies[]\` (hard filter)
 
 ### Location & Time
-- \`time_zones[]\` (UTC ranges)
-- \`include_flexible_timezone\`: boolean
+- \`time_zones[]\` (UTC ranges, soft scoring)
 - \`onsite_locations[]\`
 
 ### Content Filters
-- \`job_languages[]\`
-- \`include_keywords[]\` — jobs MUST contain
-- \`exclude_keywords[]\` — jobs must NOT contain
+- \`exclude_keywords[]\` — jobs must NOT contain (hard filter)
 
 ### Salary Filters
-- \`salary_min\`, \`salary_max\`, \`salary_currency\`
+- \`salary_min\`, \`salary_max\`, \`salary_currency\` (soft scoring)
 
 ---
 
@@ -295,13 +302,18 @@ Analyze their actual skills vs requirements. Identify transferable skills. Be sp
 Kanban board (Discovered → Applied → Offer), search/filter jobs
 
 **Profile** (\`/profile\`)
-Upload CV, edit personal info
+Upload CV, edit personal info, view screening answers
 
 **Setup** (\`/setup\`)
-Job preferences, filters, screening, languages
+5-step wizard: Job Preferences → Job Filters → Screening → CV → Final
+- Step 1 is mandatory (industry, job titles, work arrangement, job types)
+- Step 2 has advanced filters gated for Pro users only
+- Step 3 collects profile/screening info
+- Step 4 handles CV upload or generation
+- Step 5 has optional final details (travel, languages, credentials)
 
 **Job Details** (\`/jobs/[id]\`)
-Full description, match score, application form
+Full description, match score, apply button (redirects to company site)
 
 ---
 

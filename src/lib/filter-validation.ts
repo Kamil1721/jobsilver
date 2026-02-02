@@ -16,10 +16,17 @@ export type FilterValidationResult = ValidationResult
 
 /**
  * Validates that mandatory filters are set before allowing job search.
- * Mandatory filters:
- * - Job Titles (1-5 non-empty strings)
- * - Work Location Type (remote OR onsite/hybrid must be selected)
- * - Job Types (at least 1)
+ *
+ * Simplified Filter Structure (Jan 2026):
+ * - Industry: Required (at least 1)
+ * - Job Titles: Required (1-5 from curated lists)
+ * - Work Arrangement: Required (remote/hybrid/on-site)
+ * - Job Types: Required (full-time/part-time/contractor/internship)
+ * - Location: Required ONLY if on-site or hybrid selected
+ *
+ * Removed:
+ * - job_languages (99% English, adds complexity)
+ * - include_keywords (redundant with job_titles)
  */
 export function validateMandatoryFilters(filters: JobFilters | null): FilterValidationResult {
   const errors: FilterValidationError[] = []
@@ -31,7 +38,16 @@ export function validateMandatoryFilters(filters: JobFilters | null): FilterVali
     }
   }
 
-  // 1. Job Titles - at least one required, max 5, non-empty strings
+  // 1. Industries - at least one required
+  const validIndustries = (filters.industries || []).filter(i => i.trim().length > 0)
+  if (validIndustries.length === 0) {
+    errors.push({
+      field: 'industries',
+      message: 'Select at least one industry'
+    })
+  }
+
+  // 2. Job Titles - at least one required, max 5, non-empty strings
   const validJobTitles = (filters.job_titles || [])
     .map(t => t.trim())
     .filter(t => t.length > 0)
@@ -39,7 +55,7 @@ export function validateMandatoryFilters(filters: JobFilters | null): FilterVali
   if (validJobTitles.length === 0) {
     errors.push({
       field: 'job_titles',
-      message: 'At least one job title is required'
+      message: 'Select at least one job title'
     })
   } else if (validJobTitles.length > 5) {
     errors.push({
@@ -48,7 +64,7 @@ export function validateMandatoryFilters(filters: JobFilters | null): FilterVali
     })
   }
 
-  // 2. Work Location Type - at least one must be selected
+  // 3. Work Location Type - at least one must be selected
   // Check both new work_arrangements and legacy fields for backward compatibility
   const hasWorkArrangements = filters.work_arrangements && filters.work_arrangements.length > 0
   const hasLegacyLocation = filters.remote_jobs || filters.onsite_hybrid
@@ -60,11 +76,28 @@ export function validateMandatoryFilters(filters: JobFilters | null): FilterVali
     })
   }
 
-  // 3. Job Types - at least one required
+  // 4. Job Types - at least one required
   if (!filters.job_types || filters.job_types.length === 0) {
     errors.push({
       field: 'job_types',
       message: 'Select at least one job type (Full-time, Part-time, etc.)'
+    })
+  }
+
+  // 5. Location - required ONLY if on-site or hybrid selected
+  const requiresLocation =
+    filters.work_arrangements?.includes('on_site') ||
+    filters.work_arrangements?.includes('hybrid') ||
+    filters.onsite_hybrid === true
+
+  const hasLocation =
+    (filters.onsite_locations && filters.onsite_locations.length > 0) ||
+    (filters.remote_countries && filters.remote_countries.length > 0)
+
+  if (requiresLocation && !hasLocation) {
+    errors.push({
+      field: 'location',
+      message: 'Add at least one location for on-site or hybrid work'
     })
   }
 
@@ -77,10 +110,16 @@ export function validateMandatoryFilters(filters: JobFilters | null): FilterVali
 /**
  * Check if a specific mandatory filter is valid
  */
-export function isMandatoryFilterValid(filters: JobFilters | null, field: 'job_titles' | 'work_location' | 'job_types'): boolean {
+export function isMandatoryFilterValid(
+  filters: JobFilters | null,
+  field: 'industries' | 'job_titles' | 'work_location' | 'job_types' | 'location'
+): boolean {
   if (!filters) return false
 
   switch (field) {
+    case 'industries': {
+      return filters.industries && filters.industries.filter(i => i.trim().length > 0).length > 0
+    }
     case 'job_titles': {
       const validTitles = (filters.job_titles || []).filter(t => t.trim().length > 0)
       return validTitles.length > 0 && validTitles.length <= 5
@@ -91,6 +130,20 @@ export function isMandatoryFilterValid(filters: JobFilters | null, field: 'job_t
     }
     case 'job_types':
       return filters.job_types && filters.job_types.length > 0
+    case 'location': {
+      // Location is only required if on-site/hybrid is selected
+      const requiresLocation =
+        filters.work_arrangements?.includes('on_site') ||
+        filters.work_arrangements?.includes('hybrid') ||
+        filters.onsite_hybrid === true
+
+      if (!requiresLocation) return true // Not required, so valid
+
+      return (
+        (filters.onsite_locations && filters.onsite_locations.length > 0) ||
+        (filters.remote_countries && filters.remote_countries.length > 0)
+      )
+    }
     default: {
       // TypeScript exhaustive check
       const _exhaustiveCheck: never = field

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
-import type { JobFilters, Job, CurationLogStatus } from '@/lib/supabase/types'
+import type { JobFilters, Job, CurationLogStatus, AllSubscriptionPlans } from '@/lib/supabase/types'
 import { notifyNewMatches } from '@/lib/email/triggers'
 import type { JobMatch } from '@/lib/email/templates/job-matches'
+import { getDailyJobLimit } from '@/lib/stripe/plans'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes max for Vercel
 
-const DAILY_JOB_TARGET = 20
 const MAX_FETCH_ATTEMPTS = 3
 
 interface CurationSummary {
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<CurationSu
     // Get all users with production mode enabled
     const { data: productionUsers, error: usersError } = await supabase
       .from('profiles')
-      .select('id, email, production_mode, job_filters, cv_url')
+      .select('id, email, production_mode, job_filters, cv_url, subscription_plan')
       .eq('production_mode', true)
 
     if (usersError) {
@@ -192,18 +192,25 @@ async function curateJobsForUser(
     production_mode: boolean
     job_filters: JobFilters | null
     cv_url: string | null
+    subscription_plan: string | null
   }
 ): Promise<UserCurationResult> {
+  // Calculate per-user job target based on subscription plan
+  const userPlan = (user.subscription_plan || 'free') as AllSubscriptionPlans
+  const jobTarget = getDailyJobLimit(userPlan) // 50 for pro, 3 for free
+
+  console.log(`[Daily Curation] User ${user.id}: plan=${userPlan}, jobTarget=${jobTarget}`)
+
   // Create curation log entry
   const { data: logEntry, error: logError } = await supabase
     .from('curation_logs')
     .insert({
       user_id: user.id,
       status: 'running' as CurationLogStatus,
-      jobs_target: DAILY_JOB_TARGET,
+      jobs_target: jobTarget,
       jobs_curated: 0,
       jobs_failed: 0,
-      metadata: { triggered_by: 'cron' },
+      metadata: { triggered_by: 'cron', plan: userPlan },
     })
     .select()
     .single()
@@ -238,7 +245,7 @@ async function curateJobsForUser(
     const { data: quotaResult, error: quotaError } = await supabase
       .rpc('check_and_reserve_daily_quota', {
         p_user_id: user.id,
-        p_jobs_needed: DAILY_JOB_TARGET,
+        p_jobs_needed: jobTarget,
       })
 
     if (quotaError) {
@@ -252,7 +259,7 @@ async function curateJobsForUser(
         .gte('created_at', `${today}T00:00:00`)
         .in('status', ['discovered', 'saved'])
 
-      jobsNeeded = Math.max(0, DAILY_JOB_TARGET - (existingJobsCount || 0))
+      jobsNeeded = Math.max(0, jobTarget - (existingJobsCount || 0))
     } else {
       jobsNeeded = quotaResult as number
     }
@@ -261,9 +268,9 @@ async function curateJobsForUser(
       console.log(`[Daily Curation] User ${user.id} already has daily quota`)
       await updateCurationLog(supabase, logId, {
         status: 'success',
-        jobs_target: DAILY_JOB_TARGET,
+        jobs_target: jobTarget,
         jobs_curated: 0,
-        metadata: { reason: 'daily_quota_met' },
+        metadata: { reason: 'daily_quota_met', plan: userPlan },
       })
       return {
         userId: user.id,
@@ -275,12 +282,13 @@ async function curateJobsForUser(
       }
     }
 
-    // Fetch and curate jobs
+    // Fetch and curate jobs (pass user.id for search context)
     const result = await fetchAndCurateJobs(
       supabase,
       user.id,
       user.job_filters,
-      jobsNeeded
+      jobsNeeded,
+      user.id
     )
 
     // Update curation log
@@ -345,7 +353,8 @@ async function fetchAndCurateJobs(
   supabase: ReturnType<typeof createServiceClient>,
   userId: string,
   filters: JobFilters,
-  targetCount: number
+  targetCount: number,
+  searchUserId: string
 ): Promise<{ jobsCurated: number; jobsFailed: number; curatedJobs: JobMatch[] }> {
   let jobsCurated = 0
   let jobsFailed = 0
@@ -366,7 +375,7 @@ async function fetchAndCurateJobs(
   while (jobsCurated < targetCount && attempts < MAX_FETCH_ATTEMPTS) {
     attempts++
 
-    const jobs = await fetchJobsFromSearch(searchQueries, filters, targetCount - jobsCurated, existingIds)
+    const jobs = await fetchJobsFromSearch(searchQueries, filters, targetCount - jobsCurated, existingIds, searchUserId)
 
     if (jobs.length === 0) {
       console.log(`[Daily Curation] No more jobs available for user ${userId}`)
@@ -461,10 +470,13 @@ async function fetchJobsFromSearch(
   queries: string[],
   filters: JobFilters,
   count: number,
-  existingIds: Set<string | null>
+  existingIds: Set<string | null>,
+  userId: string
 ): Promise<Partial<Job>[]> {
   const jobs: Partial<Job>[] = []
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  // SECURITY: Use a hardcoded internal URL to prevent SSRF attacks
+  // NEXT_PUBLIC_APP_URL could be manipulated in deployment configs
+  const appUrl = process.env.INTERNAL_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
   for (const query of queries) {
     if (jobs.length >= count * 2) break // Fetch extra to account for duplicates
@@ -482,6 +494,7 @@ async function fetchJobsFromSearch(
           filters,
           limit: count,
           skipQuota: true, // Internal curation doesn't count against quota
+          userId, // Pass the user ID for proper context
         }),
       })
 

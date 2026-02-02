@@ -34,7 +34,7 @@ const STEPS = [
   { id: 5, title: "Finalize", icon: Settings, description: "Review & save" },
 ]
 
-const DEFAULT_JOB_FILTERS: JobFilters = {
+export const DEFAULT_JOB_FILTERS: JobFilters = {
   remote_jobs: true,
   remote_countries: [],
   onsite_hybrid: false,
@@ -190,6 +190,17 @@ export function SetupWizard() {
     }))
   }, [])
 
+  const resetJobFilters = React.useCallback(() => {
+    setWizardData((prev) => ({
+      ...prev,
+      jobFilters: DEFAULT_JOB_FILTERS,
+    }))
+    toast({
+      title: "Filters reset",
+      description: "All job filters have been reset to defaults",
+    })
+  }, [toast])
+
   const handleNext = () => {
     // Validate mandatory filters before leaving Step 1
     if (currentStep === 1) {
@@ -222,17 +233,27 @@ export function SetupWizard() {
       const hasUploadedCV = !!wizardData.screeningAnswers.cv_url
       const isGeneratingCV = wizardData.screeningAnswers.cv_generation_mode === "generate"
 
-      // If generating CV, check that work history has at least one valid entry
+      // If generating CV, check that work history and education have at least one valid entry each
       if (isGeneratingCV) {
         const workHistory = wizardData.screeningAnswers.work_history || []
+        const education = wizardData.screeningAnswers.education || []
+
         const hasValidWorkHistory = workHistory.some(
-          (entry) => entry.company && entry.position
+          (entry) => entry.company && entry.position && entry.start_date
         )
-        if (!hasValidWorkHistory) {
+        const hasValidEducation = education.some(
+          (entry) => entry.institution && entry.degree && entry.area && entry.graduation_year
+        )
+
+        if (!hasValidWorkHistory || !hasValidEducation) {
+          const missing = []
+          if (!hasValidWorkHistory) missing.push("work experience (company, position, start date)")
+          if (!hasValidEducation) missing.push("education (institution, degree, area, graduation year)")
+
           toast({
             variant: "destructive",
-            title: "Work history required",
-            description: "Please add at least one work experience entry with company and position to generate your CV.",
+            title: "Required fields missing",
+            description: `Please complete at least one ${missing.join(" and one ")} to generate your CV.`,
           })
           return
         }
@@ -529,12 +550,26 @@ export function SetupWizard() {
               <button
                 key={step.id}
                 onClick={() => {
-                  // Only allow navigating to completed steps or the next step
-                  // Prevent jumping ahead to uncompleted steps
+                  // Going backwards is always allowed
+                  if (step.id < currentStep) {
+                    setCurrentStep(step.id)
+                    return
+                  }
+
+                  // Going forward - prevent skipping multiple steps
+                  if (step.id > currentStep + 1) {
+                    toast({
+                      variant: "destructive",
+                      title: "Complete current step first",
+                      description: "Please complete each step before proceeding.",
+                    })
+                    return
+                  }
+
+                  // Validate current step before advancing
                   if (step.id > currentStep) {
-                    // Going forward - must validate all steps up to target
                     // Step 1 validation (mandatory filters)
-                    if (currentStep <= 1 && step.id > 1) {
+                    if (currentStep === 1) {
                       const validation = validateMandatoryFilters(wizardData.jobFilters)
                       if (!validation.isValid) {
                         toast({
@@ -545,17 +580,21 @@ export function SetupWizard() {
                         return
                       }
                     }
-                    // Only allow advancing one step at a time via step buttons
-                    // This prevents skipping steps entirely
-                    if (step.id > currentStep + 1) {
-                      toast({
-                        variant: "destructive",
-                        title: "Complete current step first",
-                        description: "Please complete each step before proceeding.",
-                      })
-                      return
+
+                    // Step 3 validation (screening)
+                    if (currentStep === 3) {
+                      const screeningValidation = validateScreeningAnswers(wizardData.screeningAnswers)
+                      if (!screeningValidation.isValid) {
+                        toast({
+                          variant: "destructive",
+                          title: "Required profile fields missing",
+                          description: screeningValidation.errors.map(e => e.message).join(". "),
+                        })
+                        return
+                      }
                     }
                   }
+
                   setCurrentStep(step.id)
                 }}
                 className={cn(
@@ -616,12 +655,14 @@ export function SetupWizard() {
             <StepJobPreferences
               data={wizardData.jobFilters}
               onUpdate={updateJobFilters}
+              onReset={resetJobFilters}
             />
           )}
           {currentStep === 2 && (
             <StepJobFilters
               data={wizardData.jobFilters}
               onUpdate={updateJobFilters}
+              onReset={resetJobFilters}
             />
           )}
           {currentStep === 3 && (

@@ -15,7 +15,6 @@ import {
   Calendar,
   Globe,
   Linkedin,
-  DollarSign,
   X,
   Shield,
 } from "lucide-react"
@@ -69,31 +68,11 @@ const NATIONALITIES = [
   "Indian",
 ]
 
-const CURRENCIES = [
-  { code: "USD", symbol: "$", name: "US Dollar" },
-  { code: "EUR", symbol: "€", name: "Euro" },
-  { code: "GBP", symbol: "£", name: "British Pound" },
-  { code: "PLN", symbol: "zł", name: "Polish Zloty" },
-  { code: "CHF", symbol: "Fr", name: "Swiss Franc" },
-  { code: "CAD", symbol: "C$", name: "Canadian Dollar" },
-  { code: "AUD", symbol: "A$", name: "Australian Dollar" },
-  { code: "JPY", symbol: "¥", name: "Japanese Yen" },
-  { code: "SEK", symbol: "kr", name: "Swedish Krona" },
-  { code: "NOK", symbol: "kr", name: "Norwegian Krone" },
-  { code: "DKK", symbol: "kr", name: "Danish Krone" },
-  { code: "SGD", symbol: "S$", name: "Singapore Dollar" },
-  { code: "INR", symbol: "₹", name: "Indian Rupee" },
-  { code: "CNY", symbol: "¥", name: "Chinese Yuan" },
-]
-
 export function StepScreening({ data, onUpdate }: StepScreeningProps) {
   const [showCountryDropdown, setShowCountryDropdown] = React.useState(false)
   const [showAuthCountryDropdown, setShowAuthCountryDropdown] = React.useState(false)
   const [showNationalityDropdown, setShowNationalityDropdown] = React.useState(false)
-  const [showCurrencyDropdown, setShowCurrencyDropdown] = React.useState(false)
   const [countrySearch, setCountrySearch] = React.useState("")
-
-  const selectedCurrency = CURRENCIES.find(c => c.code === data.salary_currency) || CURRENCIES[0]
 
   const filteredCountries = COUNTRIES.filter(
     (c) => c.toLowerCase().includes(countrySearch.toLowerCase())
@@ -440,94 +419,6 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
         )}
       </div>
 
-      {/* Salary */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <DollarSign className="w-4 h-4 text-zinc-500" />
-          <h3 className="font-medium">Salary Expectations</h3>
-        </div>
-
-        {/* Currency Selector */}
-        <div className="space-y-2">
-          <Label className="text-sm text-muted-foreground">Currency</Label>
-          <div className="relative">
-            <button
-              onClick={() => setShowCurrencyDropdown(!showCurrencyDropdown)}
-              className="flex items-center justify-between w-full max-w-[200px] h-10 px-3 bg-zinc-100 dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 transition-colors"
-            >
-              <span className="flex items-center gap-2">
-                <span className="text-lg font-medium">{selectedCurrency.symbol}</span>
-                <span className="text-sm">{selectedCurrency.code}</span>
-              </span>
-              <svg className="w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            {showCurrencyDropdown && (
-              <div className="absolute z-50 w-64 mt-1 py-1 bg-white dark:bg-[#111113] rounded-lg border border-zinc-200 dark:border-white/[0.06] shadow-lg max-h-60 overflow-auto">
-                {CURRENCIES.map((currency) => (
-                  <button
-                    key={currency.code}
-                    type="button"
-                    className={cn(
-                      "w-full px-3 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-zinc-50 dark:hover:bg-white/[0.05] transition-colors",
-                      data.salary_currency === currency.code && "bg-zinc-50 dark:bg-white/[0.05]"
-                    )}
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      onUpdate({ salary_currency: currency.code })
-                      setShowCurrencyDropdown(false)
-                    }}
-                  >
-                    <span className="w-8 text-lg font-medium">{currency.symbol}</span>
-                    <span className="font-medium">{currency.code}</span>
-                    <span className="text-muted-foreground text-xs">- {currency.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Salary Inputs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">
-              Current Salary (Annual)
-            </Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
-                {selectedCurrency.symbol}
-              </span>
-              <Input
-                type="number"
-                placeholder="e.g., 75000"
-                value={data.current_salary || ""}
-                onChange={(e) => onUpdate({ current_salary: e.target.value ? Number(e.target.value) : null })}
-                className="pl-8"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">
-              Expected Salary (Annual)
-            </Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
-                {selectedCurrency.symbol}
-              </span>
-              <Input
-                type="number"
-                placeholder="e.g., 90000"
-                value={data.expected_salary || ""}
-                onChange={(e) => onUpdate({ expected_salary: e.target.value ? Number(e.target.value) : null })}
-                className="pl-8"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* LinkedIn */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
@@ -580,14 +471,13 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
       </div>
 
       {/* Click outside to close dropdowns */}
-      {(showCountryDropdown || showAuthCountryDropdown || showNationalityDropdown || showCurrencyDropdown) && (
+      {(showCountryDropdown || showAuthCountryDropdown || showNationalityDropdown) && (
         <div
           className="fixed inset-0 z-40"
           onClick={() => {
             setShowCountryDropdown(false)
             setShowAuthCountryDropdown(false)
             setShowNationalityDropdown(false)
-            setShowCurrencyDropdown(false)
           }}
         />
       )}

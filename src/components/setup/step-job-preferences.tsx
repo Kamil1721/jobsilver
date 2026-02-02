@@ -4,14 +4,12 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import {
   Globe,
   MapPin,
   Briefcase,
   X,
-  Plus,
   Building2,
   Clock,
   GraduationCap,
@@ -21,12 +19,18 @@ import {
   Factory,
   Check,
   ChevronDown,
+  Search,
+  RotateCcw,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import type { JobFilters, WorkArrangement } from "@/lib/supabase/types"
+import { JOB_TITLES_BY_INDUSTRY, INDUSTRY_CATEGORIES } from "@/lib/job-titles-by-industry"
+import { DEFAULT_JOB_FILTERS } from "./setup-wizard"
 
 interface StepJobPreferencesProps {
   data: JobFilters
   onUpdate: (updates: Partial<JobFilters>) => void
+  onReset?: () => void
 }
 
 const COUNTRIES = [
@@ -63,58 +67,58 @@ const WORK_ARRANGEMENTS: { id: WorkArrangement; label: string; description: stri
   { id: "remote_only", label: "Fully Remote", description: "100% work from home", icon: Globe },
 ]
 
-// Industry categories from fantastic.jobs API (ai_taxonomies_a_filter)
-const INDUSTRIES = [
-  // Healthcare & Medical
-  { id: "Healthcare", label: "Healthcare", category: "Healthcare" },
-  // Business & Sales
-  { id: "Sales", label: "Sales", category: "Business" },
-  { id: "Marketing", label: "Marketing", category: "Business" },
-  { id: "Finance & Accounting", label: "Finance & Accounting", category: "Business" },
-  { id: "Consulting", label: "Consulting", category: "Business" },
-  { id: "Human Resources", label: "Human Resources", category: "Business" },
-  { id: "Administrative", label: "Administrative", category: "Business" },
-  // Customer Facing
-  { id: "Customer Service & Support", label: "Customer Service", category: "Service" },
-  { id: "Retail", label: "Retail", category: "Service" },
-  { id: "Hospitality", label: "Hospitality", category: "Service" },
-  { id: "Food & Beverage", label: "Food & Beverage", category: "Service" },
-  // Technology
-  { id: "Technology", label: "Technology", category: "Tech" },
-  { id: "Software", label: "Software", category: "Tech" },
-  { id: "Data & Analytics", label: "Data & Analytics", category: "Tech" },
-  { id: "Engineering", label: "Engineering", category: "Tech" },
-  // Trade & Industry
-  { id: "Construction", label: "Construction", category: "Trades" },
-  { id: "Manufacturing", label: "Manufacturing", category: "Trades" },
-  { id: "Trades", label: "Skilled Trades", category: "Trades" },
-  { id: "Logistics", label: "Logistics & Supply Chain", category: "Trades" },
-  { id: "Transportation", label: "Transportation", category: "Trades" },
-  // Professional & Public
-  { id: "Education", label: "Education", category: "Professional" },
-  { id: "Legal", label: "Legal", category: "Professional" },
-  { id: "Government & Public Sector", label: "Government", category: "Professional" },
-  { id: "Science & Research", label: "Science & Research", category: "Professional" },
-  { id: "Social Services", label: "Social Services", category: "Professional" },
-  // Creative & Other
-  { id: "Creative & Media", label: "Creative & Media", category: "Creative" },
-  { id: "Art & Design", label: "Art & Design", category: "Creative" },
-  { id: "Sports & Recreation", label: "Sports & Recreation", category: "Other" },
-  { id: "Security & Safety", label: "Security & Safety", category: "Other" },
-  { id: "Environmental & Sustainability", label: "Environmental", category: "Other" },
-  { id: "Energy", label: "Energy", category: "Other" },
-  { id: "Agriculture", label: "Agriculture", category: "Other" },
-  { id: "Management & Leadership", label: "Management", category: "Other" },
-]
+// Industry categories for the guided flow
+const INDUSTRIES = Object.entries(INDUSTRY_CATEGORIES).map(([id, info]) => ({
+  id,
+  label: info.label,
+  category: info.category,
+}))
 
-export function StepJobPreferences({ data, onUpdate }: StepJobPreferencesProps) {
-  const [newJobTitle, setNewJobTitle] = React.useState("")
+// Group industries by category for display
+const INDUSTRIES_BY_CATEGORY = INDUSTRIES.reduce((acc, industry) => {
+  if (!acc[industry.category]) {
+    acc[industry.category] = []
+  }
+  acc[industry.category].push(industry)
+  return acc
+}, {} as Record<string, typeof INDUSTRIES>)
+
+const CATEGORY_ORDER = ["Tech", "Business", "Service", "Trades", "Professional", "Creative", "Healthcare", "Other"]
+
+export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferencesProps) {
   const [showCountryDropdown, setShowCountryDropdown] = React.useState(false)
   const [countrySearch, setCountrySearch] = React.useState("")
   const [showIndustryDropdown, setShowIndustryDropdown] = React.useState(false)
+  const [showJobTitleDropdown, setShowJobTitleDropdown] = React.useState(false)
+  const [jobTitleSearch, setJobTitleSearch] = React.useState("")
   const countryInputRef = React.useRef<HTMLInputElement>(null)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
   const industryDropdownRef = React.useRef<HTMLDivElement>(null)
+  const jobTitleDropdownRef = React.useRef<HTMLDivElement>(null)
+  const jobTitleInputRef = React.useRef<HTMLInputElement>(null)
+
+  // Get selected industry for job title suggestions
+  const selectedIndustry = data.industries?.[0] || null
+
+  // Get job titles for selected industry (or all if none selected)
+  const availableJobTitles = React.useMemo(() => {
+    if (selectedIndustry && JOB_TITLES_BY_INDUSTRY[selectedIndustry]) {
+      return JOB_TITLES_BY_INDUSTRY[selectedIndustry]
+    }
+    // If no industry selected, show all job titles
+    return Object.values(JOB_TITLES_BY_INDUSTRY).flat()
+  }, [selectedIndustry])
+
+  // Filter job titles based on search
+  const filteredJobTitles = React.useMemo(() => {
+    const search = jobTitleSearch.toLowerCase()
+    return availableJobTitles
+      .filter(title =>
+        title.toLowerCase().includes(search) &&
+        !data.job_titles.includes(title)
+      )
+      .slice(0, 15) // Limit to prevent overwhelming the UI
+  }, [availableJobTitles, jobTitleSearch, data.job_titles])
 
   // Initialize work_arrangements from legacy fields if not set
   const workArrangements = data.work_arrangements || []
@@ -141,12 +145,26 @@ export function StepJobPreferences({ data, onUpdate }: StepJobPreferencesProps) 
     updateWorkArrangements(newArrangements)
   }
 
-  const toggleIndustry = (industry: string) => {
-    const current = data.industries || []
-    const newIndustries = current.includes(industry)
-      ? current.filter((i) => i !== industry)
-      : [...current, industry]
-    onUpdate({ industries: newIndustries })
+  // Check if location is required (on-site or hybrid selected)
+  const requiresLocation = workArrangements.includes('on_site') || workArrangements.includes('hybrid')
+
+  // Check if user wants fully remote work
+  const isRemoteOnly = workArrangements.length > 0 &&
+    !workArrangements.includes('on_site') &&
+    !workArrangements.includes('hybrid')
+
+  const selectIndustry = (industry: string) => {
+    // Only allow single industry selection for free users
+    // Clear job titles if industry changes
+    if (data.industries?.[0] !== industry) {
+      onUpdate({
+        industries: [industry],
+        job_titles: [], // Reset job titles when industry changes
+      })
+    } else {
+      onUpdate({ industries: [industry] })
+    }
+    setShowIndustryDropdown(false)
   }
 
   // Close dropdown when clicking outside
@@ -160,6 +178,14 @@ export function StepJobPreferences({ data, onUpdate }: StepJobPreferencesProps) 
       ) {
         setShowCountryDropdown(false)
       }
+      if (
+        jobTitleDropdownRef.current &&
+        !jobTitleDropdownRef.current.contains(event.target as Node) &&
+        jobTitleInputRef.current &&
+        !jobTitleInputRef.current.contains(event.target as Node)
+      ) {
+        setShowJobTitleDropdown(false)
+      }
     }
 
     document.addEventListener("mousedown", handleClickOutside)
@@ -169,12 +195,23 @@ export function StepJobPreferences({ data, onUpdate }: StepJobPreferencesProps) 
   const filteredCountries = COUNTRIES.filter(
     (country) =>
       country.toLowerCase().includes(countrySearch.toLowerCase()) &&
-      !data.remote_countries.includes(country)
+      !data.remote_countries.includes(country) &&
+      !data.onsite_locations?.includes(country)
   )
 
   const addCountry = (country: string) => {
-    if (!data.remote_countries.includes(country)) {
-      onUpdate({ remote_countries: [...data.remote_countries, country] })
+    // Add to both remote_countries and onsite_locations if on-site/hybrid selected
+    if (requiresLocation && !isRemoteOnly) {
+      if (!data.onsite_locations?.includes(country)) {
+        onUpdate({
+          onsite_locations: [...(data.onsite_locations || []), country],
+          remote_countries: [...data.remote_countries, country],
+        })
+      }
+    } else {
+      if (!data.remote_countries.includes(country)) {
+        onUpdate({ remote_countries: [...data.remote_countries, country] })
+      }
     }
     setCountrySearch("")
     setShowCountryDropdown(false)
@@ -184,14 +221,15 @@ export function StepJobPreferences({ data, onUpdate }: StepJobPreferencesProps) 
   const removeCountry = (country: string) => {
     onUpdate({
       remote_countries: data.remote_countries.filter((c) => c !== country),
+      onsite_locations: (data.onsite_locations || []).filter((c) => c !== country),
     })
   }
 
-  const addJobTitle = () => {
-    const title = newJobTitle.trim()
+  const addJobTitle = (title: string) => {
     if (title && !data.job_titles.includes(title) && data.job_titles.length < 5) {
       onUpdate({ job_titles: [...data.job_titles, title] })
-      setNewJobTitle("")
+      setJobTitleSearch("")
+      setShowJobTitleDropdown(false)
     }
   }
 
@@ -206,24 +244,228 @@ export function StepJobPreferences({ data, onUpdate }: StepJobPreferencesProps) 
     onUpdate({ job_types: newTypes })
   }
 
+  // Get all selected locations
+  const selectedLocations = Array.from(new Set([
+    ...data.remote_countries,
+    ...(data.onsite_locations || []),
+  ]))
+
+  // Handle reset all filters
+  const handleReset = () => {
+    if (onReset) {
+      onReset()
+    } else {
+      // Fallback: reset to defaults inline
+      onUpdate(DEFAULT_JOB_FILTERS)
+    }
+  }
+
   return (
     <div className="space-y-8">
       {/* Section Header */}
-      <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-          <Briefcase className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
-          Job Preferences
-        </h2>
-        <p className="text-muted-foreground text-sm">
-          Tell us about the type of work you are looking for
-        </p>
+      <div className="flex items-start justify-between">
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
+            <Briefcase className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+            Job Preferences
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            Tell us about the type of work you are looking for
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleReset}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <RotateCcw className="w-4 h-4 mr-1.5" />
+          Reset All
+        </Button>
       </div>
 
-      {/* Work Arrangement Section */}
+      {/* Step 1: Industry Section - Required */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Factory className="w-4 h-4 text-zinc-500" />
+          <h3 className="font-medium">Step 1: Industry</h3>
+          <span className="text-xs text-red-500 font-medium">* Required</span>
+        </div>
+
+        <p className="text-sm text-muted-foreground">
+          What industry do you work in? This helps us show relevant job titles.
+        </p>
+
+        {/* Validation Warning */}
+        {!selectedIndustry && (
+          <div className="flex items-center gap-2 text-amber-600 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            Select an industry to continue
+          </div>
+        )}
+
+        {/* Industry Selector */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowIndustryDropdown(!showIndustryDropdown)}
+            className={cn(
+              "w-full flex items-center justify-between p-3 rounded-lg border-2 transition-all text-left",
+              selectedIndustry
+                ? "border-zinc-400 bg-zinc-50 dark:bg-white/[0.05]"
+                : "border-zinc-200 dark:border-white/[0.06] hover:border-zinc-400"
+            )}
+          >
+            <span className={cn(
+              "text-sm",
+              selectedIndustry ? "text-zinc-700 dark:text-zinc-300 font-medium" : "text-muted-foreground"
+            )}>
+              {selectedIndustry
+                ? INDUSTRY_CATEGORIES[selectedIndustry as keyof typeof INDUSTRY_CATEGORIES]?.label || selectedIndustry
+                : "Select your industry..."}
+            </span>
+            <ChevronDown className={cn(
+              "w-4 h-4 text-muted-foreground transition-transform",
+              showIndustryDropdown && "rotate-180"
+            )} />
+          </button>
+
+          {showIndustryDropdown && (
+            <div
+              ref={industryDropdownRef}
+              className="absolute z-[100] w-full mt-1 py-2 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-xl max-h-80 overflow-auto"
+            >
+              {CATEGORY_ORDER.map(category => {
+                const industriesInCategory = INDUSTRIES_BY_CATEGORY[category]
+                if (!industriesInCategory) return null
+
+                return (
+                  <div key={category}>
+                    <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-zinc-50 dark:bg-white/[0.02]">
+                      {category}
+                    </div>
+                    {industriesInCategory.map((industry) => {
+                      const isSelected = selectedIndustry === industry.id
+                      return (
+                        <button
+                          key={industry.id}
+                          type="button"
+                          className={cn(
+                            "w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-white/[0.05] transition-colors",
+                            isSelected && "bg-zinc-50 dark:bg-white/[0.03]"
+                          )}
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            selectIndustry(industry.id)
+                          }}
+                        >
+                          <span>{industry.label}</span>
+                          {isSelected && <Check className="w-4 h-4 text-emerald-500" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Step 2: Job Titles Section - Required, dependent on industry */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Briefcase className="w-4 h-4 text-zinc-500" />
+            <h3 className="font-medium">Step 2: Job Titles</h3>
+            <span className="text-xs text-red-500 font-medium">* Required</span>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {data.job_titles.length}/5 selected
+          </span>
+        </div>
+
+        <p className="text-sm text-muted-foreground">
+          {selectedIndustry
+            ? `Select job titles you're interested in for ${INDUSTRY_CATEGORIES[selectedIndustry as keyof typeof INDUSTRY_CATEGORIES]?.label || selectedIndustry}.`
+            : "Select an industry first to see relevant job titles."}
+        </p>
+
+        {/* Validation Warning */}
+        {data.job_titles.length === 0 && (
+          <div className="flex items-center gap-2 text-amber-600 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            {selectedIndustry ? "Select at least one job title" : "Select an industry first"}
+          </div>
+        )}
+
+        {/* Job Title Selector */}
+        <div className="relative">
+          <div className="relative">
+            <Input
+              ref={jobTitleInputRef}
+              placeholder={selectedIndustry ? "Search job titles..." : "Select an industry first"}
+              value={jobTitleSearch}
+              onChange={(e) => {
+                setJobTitleSearch(e.target.value)
+                setShowJobTitleDropdown(true)
+              }}
+              onFocus={() => setShowJobTitleDropdown(true)}
+              disabled={!selectedIndustry || data.job_titles.length >= 5}
+              className="pl-10"
+            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          </div>
+
+          {/* Job Title Dropdown */}
+          {showJobTitleDropdown && selectedIndustry && filteredJobTitles.length > 0 && (
+            <div
+              ref={jobTitleDropdownRef}
+              className="absolute z-[100] w-full mt-1 py-1 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-xl max-h-48 overflow-auto"
+            >
+              {filteredJobTitles.map((title) => (
+                <button
+                  key={title}
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-white/[0.05] transition-colors"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    addJobTitle(title)
+                  }}
+                >
+                  {title}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Selected Job Titles */}
+        {data.job_titles.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {data.job_titles.map((title) => (
+              <Badge
+                key={title}
+                className="bg-gradient-to-r from-zinc-500 to-zinc-600 text-white hover:from-zinc-400 hover:to-zinc-500 pl-3 pr-1.5 py-1.5 gap-1.5 transition-colors"
+              >
+                {title}
+                <button
+                  onClick={() => removeJobTitle(title)}
+                  className="hover:bg-zinc-400 rounded-full p-0.5 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Step 3: Work Arrangement Section */}
       <div className="space-y-5">
         <div className="flex items-center gap-2">
           <MapPin className="w-4 h-4 text-zinc-500" />
-          <h3 className="font-medium">Work Arrangement</h3>
+          <h3 className="font-medium">Step 3: Work Arrangement</h3>
           <span className="text-xs text-red-500 font-medium">* Required</span>
         </div>
 
@@ -235,7 +477,7 @@ export function StepJobPreferences({ data, onUpdate }: StepJobPreferencesProps) 
         {workArrangements.length === 0 && (
           <div className="flex items-center gap-2 text-amber-600 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            Select at least one work arrangement to enable job search
+            Select at least one work arrangement
           </div>
         )}
 
@@ -284,12 +526,23 @@ export function StepJobPreferences({ data, onUpdate }: StepJobPreferencesProps) 
           })}
         </div>
 
-        {/* Remote Countries - show when remote options selected */}
-        {(workArrangements.includes('remote_ok') || workArrangements.includes('remote_only')) && (
+        {/* Location - show for on-site/hybrid, or for any remote option */}
+        {workArrangements.length > 0 && (
           <div className="space-y-3 animate-fade-in-up">
             <Label className="text-sm text-muted-foreground">
-              Which countries would you consider for remote work?
+              {requiresLocation
+                ? "Where would you like to work? (Required for on-site/hybrid)"
+                : "Which countries would you consider for remote work? (Optional)"}
             </Label>
+
+            {/* Validation Warning for location */}
+            {requiresLocation && selectedLocations.length === 0 && (
+              <div className="flex items-center gap-2 text-amber-600 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                Add at least one location for on-site or hybrid work
+              </div>
+            )}
+
             <div className="relative">
               <Input
                 ref={countryInputRef}
@@ -308,7 +561,7 @@ export function StepJobPreferences({ data, onUpdate }: StepJobPreferencesProps) 
               {showCountryDropdown && filteredCountries.length > 0 && (
                 <div
                   ref={dropdownRef}
-                  className="absolute z-50 w-full mt-1 py-1 bg-white dark:bg-[#111113] rounded-lg border border-zinc-200 dark:border-white/[0.06] shadow-lg max-h-48 overflow-auto"
+                  className="absolute z-[100] w-full mt-1 py-1 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-xl max-h-48 overflow-auto"
                 >
                   {filteredCountries.map((country) => (
                     <button
@@ -327,10 +580,10 @@ export function StepJobPreferences({ data, onUpdate }: StepJobPreferencesProps) 
               )}
             </div>
 
-            {/* Selected Countries */}
-            {data.remote_countries.length > 0 && (
+            {/* Selected Locations */}
+            {selectedLocations.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {data.remote_countries.map((country) => (
+                {selectedLocations.map((country) => (
                   <Badge
                     key={country}
                     className="bg-zinc-100 text-zinc-700 dark:bg-white/[0.05] dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-white/[0.08] pl-3 pr-1.5 py-1.5 gap-1.5 transition-colors"
@@ -350,96 +603,23 @@ export function StepJobPreferences({ data, onUpdate }: StepJobPreferencesProps) 
         )}
       </div>
 
-      {/* Industry Section */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Factory className="w-4 h-4 text-zinc-500" />
-          <h3 className="font-medium">Industries</h3>
-          <span className="text-xs text-muted-foreground">(Optional)</span>
-        </div>
-
-        <p className="text-sm text-muted-foreground">
-          Filter by industry sector. Leave empty to search all industries.
-        </p>
-
-        {/* Industry Selector */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowIndustryDropdown(!showIndustryDropdown)}
-            className="w-full flex items-center justify-between p-3 rounded-lg border border-zinc-200 dark:border-white/[0.06] hover:border-zinc-400 transition-colors text-left"
-          >
-            <span className="text-sm text-muted-foreground">
-              {(data.industries?.length || 0) > 0
-                ? `${data.industries?.length} industries selected`
-                : "Select industries..."}
-            </span>
-            <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", showIndustryDropdown && "rotate-180")} />
-          </button>
-
-          {showIndustryDropdown && (
-            <div
-              ref={industryDropdownRef}
-              className="absolute z-50 w-full mt-1 py-2 bg-white dark:bg-[#111113] rounded-lg border border-zinc-200 dark:border-white/[0.06] shadow-lg max-h-64 overflow-auto"
-            >
-              {INDUSTRIES.map((industry) => {
-                const isSelected = data.industries?.includes(industry.id)
-                return (
-                  <button
-                    key={industry.id}
-                    type="button"
-                    className={cn(
-                      "w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-white/[0.05] transition-colors",
-                      isSelected && "bg-zinc-50 dark:bg-white/[0.03]"
-                    )}
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      toggleIndustry(industry.id)
-                    }}
-                  >
-                    <span>{industry.label}</span>
-                    {isSelected && <Check className="w-4 h-4 text-emerald-500" />}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Selected Industries */}
-        {(data.industries?.length || 0) > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {data.industries?.map((industry) => (
-              <Badge
-                key={industry}
-                className="bg-zinc-100 text-zinc-700 dark:bg-white/[0.05] dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-white/[0.08] pl-3 pr-1.5 py-1.5 gap-1.5 transition-colors"
-              >
-                {INDUSTRIES.find(i => i.id === industry)?.label || industry}
-                <button
-                  onClick={() => toggleIndustry(industry)}
-                  className="hover:bg-zinc-300/50 dark:hover:bg-white/[0.1] rounded-full p-0.5 transition-colors"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Job Types Section */}
+      {/* Step 4: Job Types Section */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Briefcase className="w-4 h-4 text-zinc-500" />
-          <h3 className="font-medium">Job Types</h3>
+          <h3 className="font-medium">Step 4: Job Types</h3>
           <span className="text-xs text-red-500 font-medium">* Required</span>
         </div>
+
+        <p className="text-sm text-muted-foreground">
+          What type of employment are you looking for?
+        </p>
 
         {/* Validation Warning */}
         {data.job_types.length === 0 && (
           <div className="flex items-center gap-2 text-amber-600 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            Select at least one job type to enable job search
+            Select at least one job type
           </div>
         )}
 
@@ -482,79 +662,6 @@ export function StepJobPreferences({ data, onUpdate }: StepJobPreferencesProps) 
             )
           })}
         </div>
-      </div>
-
-      {/* Job Titles Section */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Briefcase className="w-4 h-4 text-zinc-500" />
-            <h3 className="font-medium">Job Titles</h3>
-            <span className="text-xs text-red-500 font-medium">* Required</span>
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {data.job_titles.length}/5 selected
-          </span>
-        </div>
-
-        <p className="text-sm text-muted-foreground">
-          What job titles are you looking for? Type in and select up to 5.
-        </p>
-
-        {/* Validation Warning */}
-        {data.job_titles.length === 0 && (
-          <div className="flex items-center gap-2 text-amber-600 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            Add at least one job title to enable job search
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Input
-              placeholder="e.g., Software Engineer, Product Manager..."
-              value={newJobTitle}
-              onChange={(e) => setNewJobTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault()
-                  addJobTitle()
-                }
-              }}
-              disabled={data.job_titles.length >= 5}
-              className="pr-10"
-            />
-            {newJobTitle && (
-              <button
-                onClick={addJobTitle}
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md bg-gradient-to-r from-zinc-500 to-zinc-600 text-white flex items-center justify-center hover:from-zinc-400 hover:to-zinc-500 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Selected Job Titles */}
-        {data.job_titles.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {data.job_titles.map((title) => (
-              <Badge
-                key={title}
-                className="bg-gradient-to-r from-zinc-500 to-zinc-600 text-white hover:from-zinc-400 hover:to-zinc-500 pl-3 pr-1.5 py-1.5 gap-1.5 transition-colors"
-              >
-                {title}
-                <button
-                  onClick={() => removeJobTitle(title)}
-                  className="hover:bg-zinc-400 rounded-full p-0.5 transition-colors"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-          </div>
-        )}
-
       </div>
 
     </div>

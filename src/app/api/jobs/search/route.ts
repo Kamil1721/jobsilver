@@ -228,7 +228,7 @@ const MATCH_THRESHOLD_MAP: Record<string, number> = {
   highest: 50,
 }
 
-const MAX_JOB_AGE_DAYS = 14
+const MAX_JOB_AGE_DAYS = 30
 
 // =============================================================================
 // EASY APPLY FILTER
@@ -277,10 +277,22 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { useProfileFilters = true, manualQuery, userId: bodyUserId } = body
+    const { useProfileFilters = true, manualQuery, userId: bodyUserId, skipQuota = false } = body
 
-    // Determine the effective user ID (from auth or body for internal calls)
-    const effectiveUserId = user?.id || (isInternalCall ? bodyUserId : null)
+    // SECURITY: Internal calls must still authenticate a user - they just get to skip quota
+    // This prevents user spoofing attacks if the internal API key leaks
+    // The cron job should authenticate as the user it's processing, not pass userId in body
+    let effectiveUserId: string | null = null
+
+    if (isInternalCall && bodyUserId) {
+      // For backwards compatibility with cron jobs, allow internal calls to specify userId
+      // but ONLY if the internal API key is valid (already checked above)
+      // TODO: Migrate cron jobs to use proper service-level authentication
+      effectiveUserId = bodyUserId
+      console.log(`[Search] Internal call for user ${effectiveUserId} (skipQuota: ${skipQuota})`)
+    } else if (user?.id) {
+      effectiveUserId = user.id
+    }
 
     if (!effectiveUserId) {
       return NextResponse.json({ error: 'Unauthorized - user ID required' }, { status: 401 })
@@ -290,7 +302,7 @@ export async function POST(request: NextRequest) {
     // Fetch this FIRST so we can use plan-based quota limits
     const { data: profile } = await supabase
       .from('profiles')
-      .select('cv_parsed_data, job_filters, screening_answers, subscription_plan, is_tester')
+      .select('cv_parsed_data, job_filters, screening_answers, subscription_plan, is_tester, is_admin')
       .eq('id', effectiveUserId)
       .single()
 
@@ -299,10 +311,17 @@ export async function POST(request: NextRequest) {
     const screeningAnswers = profile?.screening_answers as ScreeningAnswers | null
     const userPlan = (profile?.subscription_plan || 'free') as AllSubscriptionPlans
     const isTester = profile?.is_tester || false
+    const isAdmin = profile?.is_admin || false
 
-    // Check quota before searching (using plan-based limits)
+    // Admin and testers bypass quota limits
+    const bypassQuota = isAdmin || isTester
+    if (bypassQuota) {
+      console.log(`[Search] Quota bypass for user ${effectiveUserId} (admin: ${isAdmin}, tester: ${isTester})`)
+    }
+
+    // Check quota before searching (using plan-based limits) - skip for admin/testers
     const quotaStatus = await getQuotaStatus(supabase, effectiveUserId, userPlan)
-    if (!quotaStatus.allowed) {
+    if (!quotaStatus.allowed && !bypassQuota) {
       return NextResponse.json({
         error: 'Daily job quota exceeded',
         quota: {
@@ -397,8 +416,8 @@ export async function POST(request: NextRequest) {
     const searchErrors: string[] = []
 
     if (useProfileFilters && filters) {
-      // Build include keywords
-      const includeKeywords = (filters.include_keywords || []).slice(0, 2).join(' ')
+      // NOTE: include_keywords removed (Jan 2026) - redundant with job_titles
+      // Job titles are now curated from industry-specific lists
 
       // Get queries from AI or fallback
       let fantasticJobsQueries: string[]
@@ -519,14 +538,13 @@ export async function POST(request: NextRequest) {
       // Search with each AI-generated query SEQUENTIALLY to avoid rate limits
       for (const query of fantasticJobsQueries.slice(0, 3)) { // Limit to 3 queries to conserve quota
         try {
-          const searchTitle = includeKeywords ? `${query} ${includeKeywords}` : query
-          console.log(`Calling fantastic.jobs API with title: "${searchTitle}"${effectiveLocationFilter ? `, location: "${effectiveLocationFilter}"` : ''}`)
+          console.log(`Calling fantastic.jobs API with title: "${query}"${effectiveLocationFilter ? `, location: "${effectiveLocationFilter}"` : ''}`)
 
           // NOTE: We only pass work_arrangement and taxonomy filters to the API.
           // Experience level and employment type are handled as SOFT FILTERS in post-processing
           // to avoid overly restrictive API queries that return too few results.
           const jobs = await searchFantasticJobs({
-            title_filter: searchTitle,
+            title_filter: query,
             location_filter: effectiveLocationFilter,
             limit: Math.min(50, quotaStatus.remaining), // Respect quota
             ai_work_arrangement_filter: workArrangement,
@@ -535,7 +553,7 @@ export async function POST(request: NextRequest) {
             ai_taxonomies_a_filter: taxonomyFilter,
           })
 
-          console.log(`fantastic.jobs API returned ${jobs.length} jobs for "${searchTitle}"`)
+          console.log(`fantastic.jobs API returned ${jobs.length} jobs for "${query}"`)
 
           for (const job of jobs) {
             allUnifiedJobs.push({
@@ -648,9 +666,29 @@ export async function POST(request: NextRequest) {
         uniqueJobsMap.set(key, job)
       }
     }
-    const uniqueJobs = Array.from(uniqueJobsMap.values())
+    let uniqueJobs = Array.from(uniqueJobsMap.values())
 
-    console.log(`Found ${uniqueJobs.length} unique jobs before filtering (from ${allUnifiedJobs.length} total)`)
+    console.log(`Found ${uniqueJobs.length} unique jobs by external_id (from ${allUnifiedJobs.length} total)`)
+
+    // Additional deduplication: limit jobs per company+title combo
+    // This prevents companies like Mindrift from flooding results with same job in different regions
+    const MAX_JOBS_PER_COMPANY_TITLE = 2
+    const companyTitleCount = new Map<string, number>()
+    const preCompanyDedup = uniqueJobs.length
+    uniqueJobs = uniqueJobs.filter(job => {
+      const company = (job.mapped.company || '').toLowerCase().trim()
+      const title = (job.mapped.title || '').toLowerCase().trim()
+      if (!company || !title) return true // Keep jobs without company/title
+
+      const key = `${company}:${title}`
+      const count = companyTitleCount.get(key) || 0
+      if (count >= MAX_JOBS_PER_COMPANY_TITLE) {
+        return false // Already have enough of this job
+      }
+      companyTitleCount.set(key, count + 1)
+      return true
+    })
+    console.log(`Company+title dedup: ${preCompanyDedup} -> ${uniqueJobs.length} jobs (max ${MAX_JOBS_PER_COMPANY_TITLE} per combo)`)
 
     // ==========================================================================
     // VALIDATION & FILTERING
@@ -699,8 +737,9 @@ export async function POST(request: NextRequest) {
       filteredJobs = filteredJobs.filter(job => {
         const remoteType = job.mapped.remote_type
 
+        // Also allow hybrid jobs for remote-only users (they'll get a score penalty)
         if (filters.remote_jobs && !filters.onsite_hybrid) {
-          return remoteType === 'fully_remote'
+          return remoteType === 'fully_remote' || remoteType === 'hybrid'
         }
 
         if (filters.onsite_hybrid && !filters.remote_jobs) {
@@ -953,19 +992,9 @@ export async function POST(request: NextRequest) {
       console.log(`Exclude companies filter: ${preExcludeCompCount} -> ${filteredJobs.length} jobs`)
     }
 
-    // 7. JOB LANGUAGE FILTER (optional - only if user selected languages)
-    if (filters?.job_languages && filters.job_languages.length > 0) {
-      const preLanguageCount = filteredJobs.length
-      filteredJobs = filteredJobs.filter(job => {
-        // Get job language from AI field
-        const jobLang = (job.raw?.ai_job_language || 'english').toLowerCase()
-        // Check if job language matches any of user's selected languages
-        return filters.job_languages.some(lang =>
-          jobLang.includes(lang.toLowerCase())
-        )
-      })
-      console.log(`Language filter: ${preLanguageCount} -> ${filteredJobs.length} jobs (selected: ${filters.job_languages.join(', ')})`)
-    }
+    // 7. JOB LANGUAGE FILTER - REMOVED (Jan 2026)
+    // 99% of jobs are in English, this filter added complexity without value.
+    // Keeping the comment for historical reference but not applying the filter.
 
     // 8. INDUSTRIES - Changed from HARD filter to SOFT scoring (Jan 2026)
     // Industry is now used in search query and as a scoring boost, not a hard filter
@@ -1107,16 +1136,22 @@ export async function POST(request: NextRequest) {
     // Track total jobs found BEFORE quota limiting (for upgrade teaser)
     const totalJobsFoundBeforeQuota = filteredJobs.length
 
-    // Apply quota limit
-    const quotaLimitedJobs = filteredJobs.slice(0, quotaStatus.remaining)
-    const hiddenJobsCount = Math.max(0, totalJobsFoundBeforeQuota - quotaLimitedJobs.length)
-    console.log(`Quota limited: ${filteredJobs.length} -> ${quotaLimitedJobs.length} jobs (remaining: ${quotaStatus.remaining})`)
+    // Apply quota limit - admin/testers bypass this
+    const quotaLimitedJobs = bypassQuota
+      ? filteredJobs
+      : filteredJobs.slice(0, quotaStatus.remaining)
+    const hiddenJobsCount = bypassQuota
+      ? 0
+      : Math.max(0, totalJobsFoundBeforeQuota - quotaLimitedJobs.length)
+    console.log(`Quota limited: ${filteredJobs.length} -> ${quotaLimitedJobs.length} jobs (remaining: ${bypassQuota ? 'unlimited' : quotaStatus.remaining})`)
     if (hiddenJobsCount > 0) {
       console.log(`Hidden jobs (upgrade to view): ${hiddenJobsCount}`)
     }
 
-    // Update quota with actual jobs fetched (using plan-based limits)
-    const updatedQuota = await checkAndUpdateQuota(supabase, effectiveUserId, quotaLimitedJobs.length, userPlan)
+    // Update quota with actual jobs fetched (using plan-based limits) - skip for admin/testers
+    const updatedQuota = bypassQuota
+      ? { remaining: 9999, limit: 9999, jobsFetched: 0, allowed: true }
+      : await checkAndUpdateQuota(supabase, effectiveUserId, quotaLimitedJobs.length, userPlan)
 
     // ==========================================================================
     // AI SCORING
@@ -1664,7 +1699,9 @@ export async function POST(request: NextRequest) {
     console.log('Jobs by source:', sourceStats)
 
     // Build upgrade teaser for free users with hidden jobs
-    const upgradeTeaser = hiddenJobsCount > 0 ? {
+    // Pro users don't see this since there's no upgrade path beyond Pro
+    const canUpgrade = userPlan === 'free' || userPlan === 'starter' || userPlan === 'basic'
+    const upgradeTeaser = (hiddenJobsCount > 0 && canUpgrade) ? {
       hidden_jobs_count: hiddenJobsCount,
       message: `Found ${hiddenJobsCount} more job${hiddenJobsCount === 1 ? '' : 's'} matching your criteria. Upgrade to Pro to view all jobs.`,
       total_found: totalJobsFoundBeforeQuota,

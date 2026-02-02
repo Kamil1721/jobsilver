@@ -838,33 +838,7 @@ function DashboardPageContent() {
         </div>
       </div>
 
-      {/* Generated CV Reminder Banner */}
-      {cvIsGenerated && showCvBanner && (
-        <div className="px-4 sm:px-6 py-3 max-w-[1600px] mx-auto">
-          <div className="flex items-center justify-between gap-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
-                <FileText className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <p className="font-medium text-amber-800 dark:text-amber-200">
-                  You&apos;re using an AI-generated CV
-                </p>
-                <p className="text-sm text-amber-700 dark:text-amber-300">
-                  For best results, <a href="/profile" className="underline hover:no-underline font-medium">upload your actual CV</a> to better showcase your experience.
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowCvBanner(false)}
-              className="p-1.5 rounded-lg hover:bg-amber-200/50 dark:hover:bg-amber-800/30 text-amber-600 dark:text-amber-400 transition-colors shrink-0"
-              aria-label="Dismiss banner"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Generated CV Reminder Banner - REMOVED: Users don't need this reminder */}
 
       {/* 3-Column Kanban Board */}
       <div className="p-4 sm:p-6">
