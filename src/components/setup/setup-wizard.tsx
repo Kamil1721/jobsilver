@@ -530,8 +530,8 @@ export function SetupWizard() {
         </div>
       </div>
 
-      {/* Progress Steps */}
-      <div className="relative">
+      {/* Progress Steps - z-index lower than dropdowns in content area */}
+      <div className="relative z-10">
         {/* Progress Line */}
         <div className="absolute top-6 left-0 right-0 h-0.5 bg-zinc-200 dark:bg-zinc-700 hidden sm:block" />
         <div

@@ -17,6 +17,7 @@ import {
   Linkedin,
   X,
   Shield,
+  AlertCircle,
 } from "lucide-react"
 import type { ScreeningAnswers } from "@/lib/supabase/types"
 
@@ -268,10 +269,20 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
         <div className="flex items-center gap-2">
           <Shield className="w-4 h-4 text-zinc-500" />
           <h3 className="font-medium">Work Authorization</h3>
+          <span className="text-xs text-red-500 font-medium">* Required</span>
         </div>
         <p className="text-sm text-muted-foreground">
           Which countries are you authorized to work in?
         </p>
+
+        {/* Validation Warning */}
+        {data.work_authorization_countries.length === 0 && (
+          <div className="flex items-center gap-2 text-amber-600 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            Select at least one country where you are authorized to work
+          </div>
+        )}
+
         <div className="relative">
           <button
             onClick={() => setShowAuthCountryDropdown(!showAuthCountryDropdown)}
