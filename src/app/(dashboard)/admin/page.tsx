@@ -55,9 +55,6 @@ import {
   Eye,
   CheckCircle,
   XCircle,
-  TrendingUp,
-  BarChart3,
-  Clock,
   Flag,
   Bug,
   FileQuestion,
@@ -86,37 +83,6 @@ interface User {
   created_at: string
   updated_at: string
   job_count: number
-}
-
-interface ApiUsageData {
-  current_month: {
-    month: string
-    jobs_fetched: number
-    jobs_limit: number
-    jobs_percentage: number
-    requests_made: number
-    requests_limit: number
-    requests_percentage: number
-    rate_limit_remaining: number | null
-  }
-  plan: {
-    name: string
-    jobs_limit: number
-    requests_limit: number
-    price: number
-  }
-  history: Array<{
-    month_year: string
-    jobs_fetched: number
-    requests_made: number
-    jobs_limit: number
-    requests_limit: number
-  }>
-  totals: {
-    jobs_fetched: number
-    requests_made: number
-    months_tracked: number
-  }
 }
 
 interface UserReport {
@@ -205,7 +171,6 @@ export default function AdminPage() {
   const [users, setUsers] = React.useState<User[]>([])
   const [usersTotal, setUsersTotal] = React.useState(0)
   const [userStats, setUserStats] = React.useState<Record<string, number>>({})
-  const [apiUsage, setApiUsage] = React.useState<ApiUsageData | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [planFilter, setPlanFilter] = React.useState<string>("all")
@@ -271,7 +236,6 @@ export default function AdminPage() {
   React.useEffect(() => {
     if (isAdmin) {
       fetchUsers()
-      fetchApiUsage()
       fetchReports()
       fetchTesters()
     }
@@ -291,17 +255,6 @@ export default function AdminPage() {
       toast({ title: "Error", description: "Failed to fetch users", variant: "destructive" })
     } finally {
       setIsLoading(false)
-    }
-  }
-
-  const fetchApiUsage = async () => {
-    try {
-      const res = await fetch("/api/admin/api-usage")
-      if (!res.ok) throw new Error("Failed to fetch API usage")
-      const data = await res.json()
-      setApiUsage(data)
-    } catch (error) {
-      console.error("Error fetching API usage:", error)
     }
   }
 
@@ -331,8 +284,64 @@ export default function AdminPage() {
       const res = await fetch("/api/admin/testers")
       if (!res.ok) throw new Error("Failed to fetch testers")
       const data = await res.json()
-      setTesters(data.testers || [])
-      setTesterInvites(data.invites || [])
+
+      // Transform testers data
+      const transformedTesters: Tester[] = (data.testers || []).map((t: {
+        id: string
+        email: string | null
+        full_name: string | null
+        is_tester: boolean
+        tester_invite_code: string | null
+        created_at: string
+        subscription_plan?: SubscriptionPlan
+      }) => ({
+        id: t.id,
+        email: t.email,
+        full_name: t.full_name,
+        is_tester: t.is_tester,
+        tester_since: t.created_at, // Using created_at as approximation
+        invite_code_used: t.tester_invite_code,
+        created_at: t.created_at,
+        subscription_plan: t.subscription_plan || 'free',
+      }))
+      setTesters(transformedTesters)
+
+      // Transform invites data - API returns different field names
+      const transformedInvites: TesterInvite[] = (data.invites || []).map((inv: {
+        id: string
+        invite_code: string
+        created_at: string
+        expires_at: string | null
+        is_active: boolean
+        used_by: string | null
+        used_at: string | null
+        created_by: string
+        user?: { email: string | null; full_name: string | null }
+      }) => {
+        // Compute status from is_active, used_by, and expires_at
+        let status: TesterInviteStatus = 'active'
+        if (inv.used_by) {
+          status = 'used'
+        } else if (!inv.is_active) {
+          status = 'revoked'
+        } else if (inv.expires_at && new Date(inv.expires_at) < new Date()) {
+          status = 'expired'
+        }
+
+        return {
+          id: inv.id,
+          code: inv.invite_code, // Map invite_code -> code
+          created_at: inv.created_at,
+          expires_at: inv.expires_at,
+          status,
+          used_by: inv.used_by,
+          used_at: inv.used_at,
+          created_by: inv.created_by,
+          used_by_profile: inv.user, // Map user -> used_by_profile
+        }
+      })
+      setTesterInvites(transformedInvites)
+
       setTesterStats(data.stats || {
         total_testers: 0,
         active_invites: 0,
@@ -605,14 +614,14 @@ export default function AdminPage() {
             Manage users, review reports, and monitor API usage
           </p>
         </div>
-        <Button onClick={() => { fetchUsers(); fetchApiUsage(); fetchReports(); fetchTesters() }} variant="outline" className="gap-2">
+        <Button onClick={() => { fetchUsers(); fetchReports(); fetchTesters() }} variant="outline" className="gap-2">
           <RefreshCw className="w-4 h-4" />
           Refresh All
         </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         <Card className="bg-card/50 border-border">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -639,32 +648,21 @@ export default function AdminPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Jobs This Month</p>
-                <p className="text-3xl font-bold">{apiUsage?.current_month.jobs_fetched || 0}</p>
-              </div>
-              <TrendingUp className="w-10 h-10 text-green-600/70 dark:text-green-500/50" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/50 border-border">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">API Usage</p>
-                <p className="text-3xl font-bold">{apiUsage?.current_month.jobs_percentage || 0}%</p>
-              </div>
-              <BarChart3 className="w-10 h-10 text-purple-600/70 dark:text-purple-500/50" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/50 border-border">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
                 <p className="text-sm text-muted-foreground">Open Reports</p>
                 <p className="text-3xl font-bold">{reportStats.byStatus?.open || 0}</p>
               </div>
               <Flag className="w-10 h-10 text-amber-600/70 dark:text-amber-500/50" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-card/50 border-border">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Active Invites</p>
+                <p className="text-3xl font-bold">{testerStats.active_invites}</p>
+              </div>
+              <Ticket className="w-10 h-10 text-emerald-600/70 dark:text-emerald-500/50" />
             </div>
           </CardContent>
         </Card>
@@ -680,10 +678,6 @@ export default function AdminPage() {
           <TabsTrigger value="reports" className="gap-2">
             <Flag className="w-4 h-4" />
             Reports ({reportsTotal})
-          </TabsTrigger>
-          <TabsTrigger value="api-usage" className="gap-2">
-            <Activity className="w-4 h-4" />
-            API Usage
           </TabsTrigger>
           <TabsTrigger value="testers" className="gap-2">
             <FlaskConical className="w-4 h-4" />
@@ -942,153 +936,6 @@ export default function AdminPage() {
           </Card>
         </TabsContent>
 
-        {/* API Usage Tab */}
-        <TabsContent value="api-usage" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Current Month Usage */}
-            <Card className="bg-card/50 border-border">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Activity className="w-5 h-5" />
-                  Current Month Usage
-                </CardTitle>
-                <CardDescription>
-                  {apiUsage?.current_month.month} - Plan: {apiUsage?.plan.name.toUpperCase()}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Jobs Usage */}
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-sm font-medium">Jobs Fetched</span>
-                    <span className="text-sm text-muted-foreground">
-                      {apiUsage?.current_month.jobs_fetched.toLocaleString()} / {apiUsage?.current_month.jobs_limit.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="h-3 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-zinc-500 to-zinc-400 transition-all"
-                      style={{ width: `${Math.min(apiUsage?.current_month.jobs_percentage || 0, 100)}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {apiUsage?.current_month.jobs_percentage}% used
-                  </p>
-                </div>
-
-                {/* Requests Usage */}
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-sm font-medium">API Requests</span>
-                    <span className="text-sm text-muted-foreground">
-                      {apiUsage?.current_month.requests_made.toLocaleString()} / {apiUsage?.current_month.requests_limit.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="h-3 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-purple-500 to-purple-400 transition-all"
-                      style={{ width: `${Math.min(apiUsage?.current_month.requests_percentage || 0, 100)}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {apiUsage?.current_month.requests_percentage}% used
-                  </p>
-                </div>
-
-                {/* Rate Limit Info */}
-                {apiUsage && apiUsage.current_month.rate_limit_remaining !== null && (
-                  <div className="pt-4 border-t border-border">
-                    <p className="text-sm text-muted-foreground flex items-center gap-2">
-                      <Clock className="w-4 h-4" />
-                      Rate Limit Remaining: {apiUsage.current_month.rate_limit_remaining} requests
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Plan Info */}
-            <Card className="bg-card/50 border-border">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5" />
-                  Plan Information
-                </CardTitle>
-                <CardDescription>Current RapidAPI subscription</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Plan</span>
-                    <Badge className={getPlanBadgeColor(apiUsage?.plan.name || "basic")}>
-                      {apiUsage?.plan.name.toUpperCase()}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Monthly Price</span>
-                    <span className="font-medium">${apiUsage?.plan.price || 0}/mo</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Jobs Limit</span>
-                    <span className="font-medium">{apiUsage?.plan.jobs_limit.toLocaleString()}/mo</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Requests Limit</span>
-                    <span className="font-medium">{apiUsage?.plan.requests_limit.toLocaleString()}/mo</span>
-                  </div>
-
-                  <div className="pt-4 border-t border-border">
-                    <h4 className="font-medium mb-2">All-Time Totals</h4>
-                    <div className="text-sm text-muted-foreground space-y-1">
-                      <p>Jobs Fetched: {apiUsage?.totals.jobs_fetched.toLocaleString()}</p>
-                      <p>API Requests: {apiUsage?.totals.requests_made.toLocaleString()}</p>
-                      <p>Months Tracked: {apiUsage?.totals.months_tracked}</p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Usage History */}
-          <Card className="bg-card/50 border-border">
-            <CardHeader>
-              <CardTitle>Usage History</CardTitle>
-              <CardDescription>Monthly API usage over time</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Month</TableHead>
-                    <TableHead>Jobs Fetched</TableHead>
-                    <TableHead>Jobs Limit</TableHead>
-                    <TableHead>Requests Made</TableHead>
-                    <TableHead>Requests Limit</TableHead>
-                    <TableHead>Usage %</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {apiUsage?.history.map((month) => (
-                    <TableRow key={month.month_year}>
-                      <TableCell className="font-medium">{month.month_year}</TableCell>
-                      <TableCell>{month.jobs_fetched.toLocaleString()}</TableCell>
-                      <TableCell className="text-muted-foreground">{month.jobs_limit.toLocaleString()}</TableCell>
-                      <TableCell>{month.requests_made.toLocaleString()}</TableCell>
-                      <TableCell className="text-muted-foreground">{month.requests_limit.toLocaleString()}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {month.jobs_limit > 0 ? Math.round((month.jobs_fetched / month.jobs_limit) * 100) : 0}%
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         {/* Testers Tab */}
         <TabsContent value="testers" className="space-y-6">
           {/* Quick Stats */}
@@ -1174,6 +1021,109 @@ export default function AdminPage() {
                 Anyone who signs up or logs in through this page will automatically receive tester status with Pro-level access.
                 You can also grant tester status manually by editing a user in the Users tab.
               </p>
+            </CardContent>
+          </Card>
+
+          {/* Invite Codes Section */}
+          <Card className="bg-card/50 border-border">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Ticket className="w-5 h-5 text-emerald-500" />
+                    Invite Codes
+                  </CardTitle>
+                  <CardDescription>Generate invite codes to share with test users</CardDescription>
+                </div>
+                <Button
+                  onClick={generateInviteCode}
+                  disabled={isGeneratingInvite}
+                  className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+                >
+                  {isGeneratingInvite ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Ticket className="w-4 h-4" />
+                  )}
+                  Generate Invite Code
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Used By</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {testerInvites.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        No invite codes yet. Click &quot;Generate Invite Code&quot; to create one.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    testerInvites.map((invite) => (
+                      <TableRow key={invite.id}>
+                        <TableCell>
+                          <code className="px-2 py-1 bg-muted rounded text-sm font-mono">
+                            {invite.code}
+                          </code>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getInviteStatusBadgeColor(invite.status)}>
+                            {invite.status.charAt(0).toUpperCase() + invite.status.slice(1)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {new Date(invite.created_at).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </TableCell>
+                        <TableCell>
+                          {invite.used_by_profile ? (
+                            <span className="text-sm">{invite.used_by_profile.email}</span>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className={copiedInviteId === invite.id ? "text-green-400" : ""}
+                              onClick={() => copyInviteLink(invite)}
+                            >
+                              {copiedInviteId === invite.id ? (
+                                <CheckCircle className="w-4 h-4" />
+                              ) : (
+                                <Copy className="w-4 h-4" />
+                              )}
+                            </Button>
+                            {invite.status === "active" && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-400 hover:text-red-300"
+                                onClick={() => setInviteToRevoke(invite)}
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
 
@@ -1576,6 +1526,26 @@ ${selectedReport.description}
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={removeTesterStatus} className="bg-red-500 hover:bg-red-600">
               Remove Tester
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Revoke Invite Confirmation */}
+      <AlertDialog open={!!inviteToRevoke} onOpenChange={() => setInviteToRevoke(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke Invite Code</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to revoke invite code <code className="px-2 py-1 bg-muted rounded font-mono text-sm">{inviteToRevoke?.code}</code>?
+              <br /><br />
+              <span className="text-muted-foreground">Note: Revoking won&apos;t affect users who already used this code.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={revokeInvite} className="bg-red-500 hover:bg-red-600">
+              Revoke
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
