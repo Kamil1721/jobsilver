@@ -20,7 +20,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   LayoutDashboard,
   User,
-  Settings,
   LogOut,
   Shield,
   AlertTriangle,
@@ -352,12 +351,6 @@ export default function DashboardLayout({
                       <Link href="/profile" className="flex items-center">
                         <User className="mr-2 h-4 w-4" />
                         Profile
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild className="cursor-pointer">
-                      <Link href="/profile" className="flex items-center">
-                        <Settings className="mr-2 h-4 w-4" />
-                        Settings
                       </Link>
                     </DropdownMenuItem>
                     {isAdmin && (

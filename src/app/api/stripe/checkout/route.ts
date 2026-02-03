@@ -152,6 +152,43 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Check trial eligibility by querying Stripe directly
+    // This prevents abuse via account deletion + recreation
+    let isEligibleForTrial = true
+
+    if (email) {
+      try {
+        // Search Stripe for any customers with this email
+        const existingCustomers = await stripe.customers.list({
+          email: email,
+          limit: 100,
+        })
+
+        // Check if any of these customers have ever had a subscription
+        for (const customer of existingCustomers.data) {
+          const subscriptions = await stripe.subscriptions.list({
+            customer: customer.id,
+            limit: 1,
+            status: 'all', // Include canceled, past_due, etc.
+          })
+
+          if (subscriptions.data.length > 0) {
+            isEligibleForTrial = false
+            break
+          }
+        }
+      } catch (error) {
+        // If Stripe check fails, fall back to local database check
+        console.error('Stripe trial eligibility check failed, using local check:', error)
+        const { count: pastSubscriptionCount } = await serviceClient
+          .from('subscriptions')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+
+        isEligibleForTrial = (pastSubscriptionCount ?? 0) === 0
+      }
+    }
+
     // Create Checkout session
     const session = await stripe.checkout.sessions.create({
       customer: stripeCustomerId,
@@ -166,7 +203,8 @@ export async function POST(request: NextRequest) {
       success_url: successUrl || `${getBaseUrl(request)}/setup?subscription=success`,
       cancel_url: cancelUrl || `${getBaseUrl(request)}/choose-plan?subscription=canceled`,
       subscription_data: {
-        trial_period_days: 3,
+        // Only give trial to first-time subscribers
+        ...(isEligibleForTrial && { trial_period_days: 3 }),
         metadata: {
           supabase_user_id: user.id,
           plan: plan,
