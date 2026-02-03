@@ -67,7 +67,7 @@ import { canAccessFeature } from '@/lib/features/config'
 import type { SubscriptionPlan, AllSubscriptionPlans } from '@/lib/supabase/types'
 
 // Plan-based quota limits (2-tier model: free=3 jobs/day, pro=50 jobs/day)
-import { getDailyJobLimit } from '@/lib/stripe/plans'
+import { getDailyJobLimit, getPlanLimits } from '@/lib/stripe/plans'
 
 // =============================================================================
 // QUOTA MANAGEMENT
@@ -1540,11 +1540,68 @@ export async function POST(request: NextRequest) {
     console.log(`Deduplicated batch: ${preferenceScoredJobs.length} -> ${jobsToSave.length} jobs`)
 
     // ==========================================================================
+    // CHECK ACTIVE JOBS LIMIT (savedJobs limit)
+    // ==========================================================================
+    // Active jobs = discovered (NEW MATCHES column only)
+    // Jobs in APPLIED or OFFERS columns don't count toward the limit
+    // Users must discard jobs or move them to APPLIED to make room for new ones
+
+    const planLimits = getPlanLimits(userPlan)
+    const maxActiveJobs = planLimits.savedJobs // 50 for free, 1000 for pro
+
+    // Count current active jobs (only discovered status = NEW MATCHES column)
+    const { count: activeJobsCount, error: countError } = await supabase
+      .from('jobs')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', effectiveUserId)
+      .eq('status', 'discovered')
+
+    if (countError) {
+      console.error('Error counting active jobs:', countError)
+    }
+
+    const currentActiveJobs = activeJobsCount || 0
+    const remainingSlots = Math.max(0, maxActiveJobs - currentActiveJobs)
+    let activeJobsLimitReached = false
+
+    console.log(`Active jobs limit check: ${currentActiveJobs}/${maxActiveJobs} (${remainingSlots} slots remaining)`)
+
+    // If at limit, don't save any new jobs
+    if (remainingSlots === 0) {
+      activeJobsLimitReached = true
+      console.log(`Active jobs limit reached for user ${effectiveUserId}. No new jobs will be saved.`)
+
+      // Return early with the limit message
+      return NextResponse.json({
+        jobs: [], // No jobs to display
+        total: 0,
+        saved_count: 0,
+        active_jobs_limit_reached: true,
+        active_jobs_count: currentActiveJobs,
+        active_jobs_limit: maxActiveJobs,
+        message: `You have ${maxActiveJobs} jobs in New Matches. Discard or move jobs to Applied to discover new ones.`,
+        quota: {
+          remaining: quotaStatus.remaining,
+          limit: quotaStatus.limit,
+          jobs_fetched_today: quotaStatus.jobsFetched,
+        },
+      })
+    }
+
+    // Limit jobs to save based on remaining slots
+    let limitedJobsToSave = jobsToSave
+    if (jobsToSave.length > remainingSlots) {
+      console.log(`Limiting jobs to save from ${jobsToSave.length} to ${remainingSlots} due to active jobs limit`)
+      limitedJobsToSave = jobsToSave.slice(0, remainingSlots)
+      activeJobsLimitReached = true
+    }
+
+    // ==========================================================================
     // SAVE TO DATABASE
     // ==========================================================================
 
-    const jobsBySource = new Map<string, typeof jobsToSave>()
-    for (const job of jobsToSave) {
+    const jobsBySource = new Map<string, typeof limitedJobsToSave>()
+    for (const job of limitedJobsToSave) {
       const source = job.source as string
       if (!jobsBySource.has(source)) {
         jobsBySource.set(source, [])
@@ -1552,10 +1609,10 @@ export async function POST(request: NextRequest) {
       jobsBySource.get(source)!.push(job)
     }
 
-    console.log(`Processing ${jobsToSave.length} jobs across sources:`, Array.from(jobsBySource.keys()).join(', '))
+    console.log(`Processing ${limitedJobsToSave.length} jobs across sources:`, Array.from(jobsBySource.keys()).join(', '))
 
-    const allExternalIds = jobsToSave.map(job => job.external_id).filter(Boolean) as string[]
-    const allApplicationUrls = jobsToSave.map(job => job.application_url).filter(Boolean) as string[]
+    const allExternalIds = limitedJobsToSave.map(job => job.external_id).filter(Boolean) as string[]
+    const allApplicationUrls = limitedJobsToSave.map(job => job.application_url).filter(Boolean) as string[]
 
     // Check for existing jobs by external_id OR application_url to prevent duplicates
     // Use separate queries to avoid SQL injection via string interpolation
@@ -1598,7 +1655,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`Duplicate check: found ${existingJobMap.size} existing jobs (${existingUrlMap.size} unique URLs)`)
 
-    for (const job of jobsToSave) {
+    for (const job of limitedJobsToSave) {
       const source = job.source as string
       const externalId = job.external_id as string
       const applicationUrl = job.application_url as string
@@ -1678,7 +1735,7 @@ export async function POST(request: NextRequest) {
     console.log(`Retrieved ${savedJobs?.length || 0} discovered jobs from database`)
 
     const jobsWithCorrectIds = (savedJobs || []).map(savedJob => {
-      const matchedJob = jobsToSave.find(j =>
+      const matchedJob = limitedJobsToSave.find(j =>
         j.external_id === savedJob.external_id && j.source === savedJob.source
       ) as { match_score?: number; match_reasoning?: string; preference_reasons?: string[]; is_exploration?: boolean } | undefined
       return {
@@ -1732,6 +1789,10 @@ export async function POST(request: NextRequest) {
         limit: updatedQuota.limit,
         jobs_fetched_today: updatedQuota.jobsFetched,
       },
+      // Active jobs limit info
+      active_jobs_limit_reached: activeJobsLimitReached,
+      active_jobs_count: currentActiveJobs + jobsWithCorrectIds.length,
+      active_jobs_limit: maxActiveJobs,
       // Show upgrade teaser for free users when more jobs are available
       upgrade_teaser: upgradeTeaser,
       filters_applied: useProfileFilters && filters ? {
@@ -1755,7 +1816,7 @@ export async function POST(request: NextRequest) {
       validation_stats: {
         total_fetched: uniqueJobs.length,
         after_filtering: filteredJobs.length,
-        final_count: jobsToSave.length,
+        final_count: limitedJobsToSave.length,
         sources: sourceStats,
         errors: searchErrors.length > 0 ? searchErrors : undefined,
       },

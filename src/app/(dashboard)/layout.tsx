@@ -23,32 +23,29 @@ import {
   Settings,
   LogOut,
   Shield,
+  AlertTriangle,
+  X,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import type { Profile } from "@/lib/supabase/types"
+import type { Profile, AllSubscriptionPlans } from "@/lib/supabase/types"
 import { ChatProvider } from "@/components/chat"
 import { ReportButton } from "@/components/report"
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext"
 import { UpgradeModal } from "@/components/upgrade-modal"
 import { TesterBadge } from "@/components/dashboard/TesterBadge"
+import { getPlanLimits } from "@/lib/stripe/plans"
 
-const navigation = [
-  {
-    name: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    name: "Profile",
-    href: "/profile",
-    icon: User,
-  },
-]
-
-const adminNavigation = {
-  name: "Admin",
-  href: "/admin",
-  icon: Shield,
+// System message types
+interface SystemMessage {
+  id: string
+  type: 'warning' | 'info' | 'error'
+  message: string
+  action?: {
+    label: string
+    href?: string
+    onClick?: () => void
+  }
+  dismissible?: boolean
 }
 
 export default function DashboardLayout({
@@ -60,6 +57,9 @@ export default function DashboardLayout({
   const [userEmail, setUserEmail] = React.useState<string>("")
   const [isAdmin, setIsAdmin] = React.useState<boolean>(false)
   const [isTester, setIsTester] = React.useState<boolean>(false)
+  const [activeJobsCount, setActiveJobsCount] = React.useState<number>(0)
+  const [systemMessages, setSystemMessages] = React.useState<SystemMessage[]>([])
+  const [dismissedMessages, setDismissedMessages] = React.useState<Set<string>>(new Set())
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
@@ -72,6 +72,62 @@ export default function DashboardLayout({
 
   // Track current user ID to detect account switches
   const [currentUserId, setCurrentUserId] = React.useState<string | null>(null)
+
+  // Fetch active jobs count and check against limit
+  const checkJobLimitAndUpdateMessages = React.useCallback(async (userProfile: Profile | null) => {
+    if (!userProfile) return
+
+    try {
+      // Count active jobs (only discovered = NEW MATCHES column)
+      // Jobs in APPLIED or OFFERS don't count toward the limit
+      const { count, error } = await supabase
+        .from('jobs')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userProfile.id)
+        .eq('status', 'discovered')
+
+      if (error) {
+        console.error('Error fetching active jobs count:', error)
+        return
+      }
+
+      const activeCount = count || 0
+      setActiveJobsCount(activeCount)
+
+      // Get plan limits
+      const plan = (userProfile.subscription_plan || 'free') as AllSubscriptionPlans
+      const limits = getPlanLimits(plan)
+      const maxActiveJobs = limits.savedJobs
+
+      // Generate system messages based on job limit
+      const newMessages: SystemMessage[] = []
+
+      if (activeCount >= maxActiveJobs) {
+        newMessages.push({
+          id: 'job-limit-reached',
+          type: 'warning',
+          message: `You have ${maxActiveJobs} jobs in New Matches. Discard or move jobs to Applied to discover new ones.`,
+          action: plan === 'free' ? {
+            label: 'Upgrade to Pro',
+            href: '/pricing',
+          } : undefined,
+          dismissible: false, // Can't dismiss until they take action
+        })
+      } else if (activeCount >= maxActiveJobs * 0.9) {
+        // Warning at 90% capacity
+        newMessages.push({
+          id: 'job-limit-warning',
+          type: 'info',
+          message: `You have ${activeCount} of ${maxActiveJobs} jobs in New Matches. Consider discarding jobs you're not interested in.`,
+          dismissible: true,
+        })
+      }
+
+      setSystemMessages(newMessages)
+    } catch (err) {
+      console.error('Error checking job limit:', err)
+    }
+  }, [supabase])
 
   React.useEffect(() => {
     const fetchProfile = async () => {
@@ -92,6 +148,8 @@ export default function DashboardLayout({
           setIsAdmin(data.is_admin === true)
           // Tester status - testers get premium features but NOT admin access
           setIsTester(data.is_tester === true)
+          // Check job limits
+          checkJobLimitAndUpdateMessages(data)
         }
       }
     }
@@ -118,7 +176,52 @@ export default function DashboardLayout({
     return () => {
       subscription.unsubscribe()
     }
-  }, [supabase, currentUserId])
+  }, [supabase, currentUserId, checkJobLimitAndUpdateMessages])
+
+  // Re-check job limit when returning to dashboard or when jobs might have changed
+  React.useEffect(() => {
+    if (profile && pathname === '/dashboard') {
+      checkJobLimitAndUpdateMessages(profile)
+    }
+  }, [pathname, profile, checkJobLimitAndUpdateMessages])
+
+  // Subscribe to job changes to update count in real-time
+  React.useEffect(() => {
+    if (!profile) return
+
+    const channel = supabase
+      .channel('job-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'jobs',
+          filter: `user_id=eq.${profile.id}`,
+        },
+        () => {
+          // Re-check job limit when jobs change
+          checkJobLimitAndUpdateMessages(profile)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase, profile, checkJobLimitAndUpdateMessages])
+
+  const dismissMessage = (messageId: string) => {
+    setDismissedMessages(prev => {
+      const newSet = new Set(prev)
+      newSet.add(messageId)
+      return newSet
+    })
+  }
+
+  const visibleMessages = systemMessages.filter(
+    msg => !dismissedMessages.has(msg.id)
+  )
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -145,8 +248,8 @@ export default function DashboardLayout({
       {/* Slim, fixed header with blur backdrop - Metallic style */}
       <header className="fixed top-0 z-50 w-full bg-white/80 dark:bg-[#0a0a0b]/80 backdrop-blur-xl border-b border-zinc-200 dark:border-white/[0.04]">
         <div className="flex h-14 items-center justify-between px-4 sm:px-6">
-          {/* Left side - Logo and Navigation */}
-          <div className="flex items-center gap-6">
+          {/* Left side - Logo */}
+          <div className="flex items-center gap-4 shrink-0">
             {/* Logo - doesn't navigate during onboarding */}
             <Link
               href={isInOnboarding ? pathname : "/dashboard"}
@@ -162,46 +265,44 @@ export default function DashboardLayout({
                 priority
               />
             </Link>
+          </div>
 
-            {/* Navigation - hidden during onboarding flow */}
-            {!isInOnboarding && (
-            <nav className="hidden md:flex items-center gap-1">
-              {navigation.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200",
-                      isActive
-                        ? "text-zinc-900 dark:text-white bg-zinc-100 dark:bg-white/[0.08]"
-                        : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/[0.05]"
-                    )}
-                  >
-                    <item.icon className="w-4 h-4" />
-                    {item.name}
-                  </Link>
-                )
-              })}
-              {/* Admin link - only show for admin users */}
-              {isAdmin && (
-                <Link
-                  href={adminNavigation.href}
+          {/* Center - System Messages Banner */}
+          {!isInOnboarding && visibleMessages.length > 0 && (
+            <div className="flex-1 flex items-center justify-center px-4 max-w-2xl mx-auto">
+              {visibleMessages.map((msg) => (
+                <div
+                  key={msg.id}
                   className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200",
-                    (pathname === adminNavigation.href || pathname.startsWith(adminNavigation.href + "/"))
-                      ? "text-zinc-900 dark:text-white bg-zinc-100 dark:bg-white/[0.08]"
-                      : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/[0.05]"
+                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm w-full",
+                    msg.type === 'warning' && "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20",
+                    msg.type === 'info' && "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20",
+                    msg.type === 'error' && "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-500/20"
                   )}
                 >
-                  <adminNavigation.icon className="w-4 h-4" />
-                  {adminNavigation.name}
-                </Link>
-              )}
-            </nav>
-            )}
-          </div>
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span className="flex-1 truncate">{msg.message}</span>
+                  {msg.action && (
+                    <Link
+                      href={msg.action.href || '#'}
+                      onClick={msg.action.onClick}
+                      className="shrink-0 font-medium underline underline-offset-2 hover:no-underline"
+                    >
+                      {msg.action.label}
+                    </Link>
+                  )}
+                  {msg.dismissible && (
+                    <button
+                      onClick={() => dismissMessage(msg.id)}
+                      className="shrink-0 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Right side - Theme toggle and User menu */}
           <div className="flex items-center gap-2">
@@ -282,43 +383,6 @@ export default function DashboardLayout({
           </div>
         </div>
 
-        {/* Mobile Navigation - hidden during onboarding flow */}
-        {!isInOnboarding && (
-          <nav className="flex md:hidden items-center gap-1 px-4 pb-3 border-t border-zinc-200 dark:border-white/[0.04] pt-3">
-            {navigation.map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center justify-center gap-2 flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200",
-                    isActive
-                      ? "text-zinc-900 dark:text-white bg-zinc-100 dark:bg-white/[0.08]"
-                      : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/[0.05]"
-                  )}
-                >
-                  <item.icon className="w-4 h-4" />
-                  {item.name}
-                </Link>
-              )
-            })}
-            {isAdmin && (
-              <Link
-                href={adminNavigation.href}
-                className={cn(
-                  "flex items-center justify-center gap-2 flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200",
-                  (pathname === adminNavigation.href || pathname.startsWith(adminNavigation.href + "/"))
-                    ? "text-zinc-900 dark:text-white bg-zinc-100 dark:bg-white/[0.08]"
-                    : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/[0.05]"
-                )}
-              >
-                <adminNavigation.icon className="w-4 h-4" />
-                {adminNavigation.name}
-              </Link>
-            )}
-          </nav>
-        )}
       </header>
 
       {/* Main content with top padding for fixed header */}
