@@ -11,7 +11,17 @@ import tempfile
 import base64
 import os
 import shutil
+import sys
+import re
 from typing import Any
+
+# Security limits
+MAX_BODY_SIZE = 1024 * 1024  # 1 MB
+MAX_WORK_HISTORY = 20
+MAX_EDUCATION = 10
+MAX_HIGHLIGHTS_PER_ENTRY = 10
+MAX_SKILLS = 50
+ALLOWED_ORIGIN = 'https://jobsilver.com'
 
 
 def build_rendercv_yaml(data: dict[str, Any]) -> dict[str, Any]:
@@ -39,11 +49,13 @@ def build_rendercv_yaml(data: dict[str, Any]) -> dict[str, Any]:
     if experience_summary:
         sections['summary'] = [experience_summary]
 
-    # Experience section
+    # Experience section - filter to only valid entries
     work_history = data.get('work_history', [])
-    if work_history:
+    # Only include entries that have both company and position
+    valid_work_history = [w for w in work_history if w.get('company') and w.get('position')]
+    if valid_work_history:
         experience_items = []
-        for job in work_history:
+        for job in valid_work_history:
             # Parse dates
             start_date = job.get('start_date', '')
             end_date = job.get('end_date')
@@ -66,11 +78,12 @@ def build_rendercv_yaml(data: dict[str, Any]) -> dict[str, Any]:
 
         sections['experience'] = experience_items
 
-    # Education section
+    # Education section - filter to only valid entries
     education = data.get('education', [])
-    if education:
+    valid_education = [e for e in education if e.get('institution') and e.get('degree')]
+    if valid_education:
         education_items = []
-        for edu in education:
+        for edu in valid_education:
             education_entry = {
                 'institution': edu.get('institution', ''),
                 'degree': edu.get('degree', ''),
@@ -109,9 +122,10 @@ def build_rendercv_yaml(data: dict[str, Any]) -> dict[str, Any]:
 
     # Social networks
     if linkedin_url:
-        # Extract username from LinkedIn URL
-        linkedin_username = linkedin_url.rstrip('/').split('/')[-1]
-        if linkedin_username and linkedin_username != 'in':
+        # Extract username from LinkedIn URL - only accept personal profile URLs (/in/username)
+        linkedin_match = re.search(r'linkedin\.com/in/([^/?\s]+)', linkedin_url)
+        if linkedin_match:
+            linkedin_username = linkedin_match.group(1)
             cv['social_networks'] = [
                 {'network': 'LinkedIn', 'username': linkedin_username}
             ]
@@ -132,10 +146,33 @@ def build_rendercv_yaml(data: dict[str, Any]) -> dict[str, Any]:
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
-            # Read request body
-            content_length = int(self.headers.get('Content-Length', 0))
+            # Validate and read request body with size limit
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+            except (ValueError, TypeError):
+                self.send_error_response(400, 'Invalid Content-Length header')
+                return
+
+            if content_length > MAX_BODY_SIZE:
+                self.send_error_response(413, 'Request body too large')
+                return
+
             body = self.rfile.read(content_length)
             data = json.loads(body.decode('utf-8'))
+
+            # Apply array size limits
+            if 'work_history' in data:
+                data['work_history'] = data['work_history'][:MAX_WORK_HISTORY]
+                for job in data['work_history']:
+                    if 'highlights' in job:
+                        job['highlights'] = job['highlights'][:MAX_HIGHLIGHTS_PER_ENTRY]
+            if 'education' in data:
+                data['education'] = data['education'][:MAX_EDUCATION]
+                for edu in data['education']:
+                    if 'highlights' in edu:
+                        edu['highlights'] = edu['highlights'][:MAX_HIGHLIGHTS_PER_ENTRY]
+            if 'skills' in data:
+                data['skills'] = data['skills'][:MAX_SKILLS]
 
             # Validate required fields
             required_fields = ['first_name', 'last_name']
@@ -178,8 +215,10 @@ class handler(BaseHTTPRequestHandler):
                     )
 
                     if result.returncode != 0:
+                        # Log detailed error server-side, return generic message to client
                         error_msg = result.stderr or result.stdout or 'RenderCV failed'
-                        self.send_error_response(500, f'RenderCV error: {error_msg[:500]}')
+                        print(f'RenderCV error: {error_msg}', file=sys.stderr)
+                        self.send_error_response(500, 'PDF generation failed. Please check your CV data and try again.')
                         return
 
                 except subprocess.TimeoutExpired:
@@ -212,10 +251,13 @@ class handler(BaseHTTPRequestHandler):
                     pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
 
                 # Send success response
+                # Sanitize filename to only allow safe characters
+                safe_first = re.sub(r'[^a-zA-Z0-9]', '_', data.get('first_name', 'cv'))
+                safe_last = re.sub(r'[^a-zA-Z0-9]', '_', data.get('last_name', ''))
                 response = {
                     'success': True,
                     'pdf': pdf_base64,
-                    'filename': f"{data.get('first_name', 'cv')}_{data.get('last_name', '')}_CV.pdf".replace(' ', '_')
+                    'filename': f"{safe_first}_{safe_last}_CV.pdf"
                 }
 
                 self.send_response(200)
@@ -226,7 +268,9 @@ class handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             self.send_error_response(400, 'Invalid JSON')
         except Exception as e:
-            self.send_error_response(500, f'Internal error: {str(e)[:200]}')
+            # Log detailed error server-side, return generic message to client
+            print(f'Internal error in CV generation: {str(e)}', file=sys.stderr)
+            self.send_error_response(500, 'An unexpected error occurred. Please try again.')
 
     def send_error_response(self, status: int, message: str):
         self.send_response(status)
@@ -237,7 +281,7 @@ class handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
