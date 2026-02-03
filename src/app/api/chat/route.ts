@@ -301,7 +301,7 @@ Analyze their actual skills vs requirements. Identify transferable skills. Be sp
 ## Navigation Reference
 
 **Dashboard** (\`/dashboard\`)
-Kanban board (Discovered → Applied → Offer), search/filter jobs
+Kanban board (Discovered → Applied → Offer), filter jobs by keywords/location/type
 
 **Profile** (\`/profile\`)
 Upload CV, edit personal info, view screening answers
@@ -448,7 +448,15 @@ export async function POST(request: NextRequest) {
         'answer', 'write', 'draft', 'help me apply', 'job description',
         'salary', 'negotiate', 'prepare', 'question', 'form', 'submit',
         'tailor', 'customize', 'improve', 'review my', 'check my',
-        'suggestion', 'advice', 'recommend', 'analyze', 'match'
+        'suggestion', 'advice', 'recommend', 'analyze', 'match',
+        // Job summarization/analysis keywords
+        'summarize', 'summary', 'summarise', 'overview', 'breakdown',
+        'explain this job', 'explain the job', 'explain this role', 'explain the role',
+        'tell me about this job', 'tell me about the job', 'tell me about this role',
+        'describe this job', 'describe the job', 'describe this role', 'describe the position',
+        'this position', 'this role', 'this job',
+        'responsibilities', 'requirements', 'qualifications',
+        'good fit', 'am i qualified', 'do i qualify', 'skills needed'
       ]
 
       // Check if it's a job assistance request

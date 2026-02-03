@@ -80,6 +80,7 @@ export function QuickActions({ onSelect, jobContext, pendingQuestion, pageContex
     }))
   } else {
     // Default actions for popup chat - website help focused (NOT job-specific help)
+    // Note: Don't mention the Search button which is admin/tester only - users get jobs via daily curation
     actions = [
       {
         icon: HelpCircle,
@@ -87,9 +88,9 @@ export function QuickActions({ onSelect, jobContext, pendingQuestion, pageContex
         prompt: "How do I use JobSilver? What features are available?",
       },
       {
-        icon: Search,
-        label: 'Find jobs',
-        prompt: "How do I search and find jobs on JobSilver?",
+        icon: Lightbulb,
+        label: 'Get more jobs',
+        prompt: "How do I get more job matches on my dashboard?",
       },
       {
         icon: Settings,

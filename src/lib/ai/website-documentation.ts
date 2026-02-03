@@ -15,9 +15,9 @@ export const WEBSITE_HELP = {
         'Drag and drop jobs between columns to update their status',
         'Click any job card to view full details and apply',
         'Use the X button on cards to discard jobs you are not interested in',
-        'Search bar at the top to filter jobs by keywords',
-        'Filter buttons for location, job type, and other criteria',
+        'Filter bar to narrow down jobs by keywords, location, job type, or remote status',
         'Bulk select mode for managing multiple jobs at once',
+        'Jobs are automatically matched daily based on your preferences from Setup',
       ],
       proFeatures: [
         'Favorites filter to see only starred jobs',
@@ -152,7 +152,7 @@ export const WEBSITE_HELP = {
       'Kanban board to track applications',
       'Save up to 50 jobs',
       'Basic job match scores',
-      'Search and filter jobs',
+      'Filter jobs by keyword, location, or type',
       'Manual apply to external job sites',
     ],
     pro: [
