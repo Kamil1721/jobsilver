@@ -26,35 +26,12 @@ export async function sendWelcomeEmail({
       Thanks for joining ${appName}! We're excited to help you land your dream job.
     </p>
 
-    <p>Here's what you can do next:</p>
-
-    <div class="card">
-      <div class="list-item">
-        <strong style="color: #fafafa;">1. Complete your profile</strong>
-        <p style="margin: 8px 0 0 0; color: #71717a; font-size: 14px;">
-          Upload your CV and set your job preferences so we can find the best matches for you.
-        </p>
-      </div>
-      <div class="list-item">
-        <strong style="color: #fafafa;">2. Set up job filters</strong>
-        <p style="margin: 8px 0 0 0; color: #71717a; font-size: 14px;">
-          Tell us what kind of jobs you're looking for - remote, hybrid, full-time, contract, and more.
-        </p>
-      </div>
-      <div class="list-item">
-        <strong style="color: #fafafa;">3. Enable auto-curation</strong>
-        <p style="margin: 8px 0 0 0; color: #71717a; font-size: 14px;">
-          Turn on production mode to receive personalized job matches every day.
-        </p>
-      </div>
-    </div>
-
-    <p style="text-align: center; margin: 32px 0;">
-      <a href="${appUrl}/setup" class="button">Complete Your Setup</a>
+    <p>
+      Your account is all set up and ready to go. Head over to your dashboard to start discovering job opportunities matched to your profile.
     </p>
 
-    <p>
-      If you have any questions, feel free to reply to this email or use the feedback button in the app.
+    <p style="text-align: center; margin: 32px 0;">
+      <a href="${appUrl}/dashboard" class="button">Go to Dashboard</a>
     </p>
 
     <p>
@@ -65,10 +42,10 @@ export async function sendWelcomeEmail({
 
   return sendEmail({
     to,
-    subject: `Welcome to ${appName}! Let's find your dream job`,
+    subject: `Welcome to ${appName}!`,
     html: baseTemplate({
       title: `Welcome to ${appName}`,
-      preheader: `Hi ${escapeHtml(firstName)}, thanks for joining! Here's how to get started...`,
+      preheader: `Hi ${escapeHtml(firstName)}, thanks for joining! Your account is ready.`,
       content,
       showUnsubscribe: false, // Don't show unsubscribe for welcome email
     }),
