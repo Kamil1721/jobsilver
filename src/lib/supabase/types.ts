@@ -1096,7 +1096,9 @@ export type JobStatus = 'discovered' | 'saved' | 'applied' | 'interviewing' | 'o
 // ============================================
 
 // Notification type enum
-export type NotificationType = 'welcome' | 'job_matches' | 'quota_warning'
+// Note: Database schema may include legacy types ('application_status', 'quota_warning')
+// that are no longer used by the application. These were removed in January 2026.
+export type NotificationType = 'welcome' | 'job_matches'
 
 // Notification status enum
 export type NotificationStatus = 'pending' | 'sent' | 'failed'
@@ -1105,7 +1107,6 @@ export type NotificationStatus = 'pending' | 'sent' | 'failed'
 export interface NotificationPreferences {
   welcome?: boolean
   job_matches?: boolean
-  quota_warning?: boolean
 }
 
 // Notification record from database

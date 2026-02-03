@@ -1,14 +1,11 @@
 import { createServiceClient } from '@/lib/supabase/server'
 import { sendWelcomeEmail } from './templates/welcome'
 import { sendJobMatchesEmail, type JobMatch } from './templates/job-matches'
-import { sendQuotaWarningEmail } from './templates/quota-warning'
-import type { SubscriptionPlan } from '@/lib/supabase/types'
 
 // Define notification types
 export type NotificationType =
   | 'welcome'
   | 'job_matches'
-  | 'quota_warning'
 
 export interface NotificationResult {
   success: boolean
@@ -60,13 +57,12 @@ async function getUserForNotification(userId: string): Promise<{
   full_name: string | null
   email_notifications: boolean
   notification_preferences: Record<string, boolean> | null
-  subscription_plan: SubscriptionPlan
 } | null> {
   const supabase = createServiceClient()
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('email, full_name, email_notifications, notification_preferences, subscription_plan')
+    .select('email, full_name, email_notifications, notification_preferences')
     .eq('id', userId)
     .single()
 
@@ -80,7 +76,6 @@ async function getUserForNotification(userId: string): Promise<{
     full_name: data.full_name,
     email_notifications: data.email_notifications ?? true,
     notification_preferences: data.notification_preferences as Record<string, boolean> | null,
-    subscription_plan: data.subscription_plan,
   }
 }
 
@@ -96,13 +91,13 @@ function isNotificationEnabled(
   // Check global email notifications setting
   if (!user.email_notifications) return false
 
-  // Check specific preference if available
-  if (user.notification_preferences && typeof user.notification_preferences[type] === 'boolean') {
-    return user.notification_preferences[type]
+  // Check specific preference - only send if explicitly enabled
+  if (user.notification_preferences && user.notification_preferences[type] === true) {
+    return true
   }
 
-  // Default to enabled
-  return true
+  // Default to disabled - user must opt-in
+  return false
 }
 
 /**
@@ -160,6 +155,24 @@ export async function notifyNewMatches(
     return { success: false, error: 'No matches to notify about' }
   }
 
+  // Check if we already sent a job_matches notification today (prevent duplicates)
+  const supabase = createServiceClient()
+  const today = new Date().toISOString().split('T')[0]
+
+  const { data: existingNotification } = await supabase
+    .from('notifications')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('type', 'job_matches')
+    .eq('status', 'sent')
+    .gte('sent_at', `${today}T00:00:00`)
+    .limit(1)
+    .single()
+
+  if (existingNotification) {
+    return { success: false, error: 'Job match notification already sent today' }
+  }
+
   const result = await sendJobMatchesEmail({
     to: user.email,
     userName: user.full_name || 'there',
@@ -170,57 +183,6 @@ export async function notifyNewMatches(
   const notificationId = await logNotification(
     userId,
     'job_matches',
-    result.success ? 'sent' : 'failed',
-    result.error
-  )
-
-  return {
-    success: result.success,
-    notificationId: notificationId || undefined,
-    error: result.error,
-  }
-}
-
-/**
- * Send quota warning notification
- */
-export async function notifyQuotaWarning(
-  userId: string,
-  remaining: number,
-  limit: number
-): Promise<NotificationResult> {
-  const user = await getUserForNotification(userId)
-
-  if (!user?.email) {
-    return { success: false, error: 'User not found or missing email' }
-  }
-
-  if (!isNotificationEnabled(user, 'quota_warning')) {
-    return { success: false, error: 'Quota warning notifications disabled' }
-  }
-
-  // Only notify at specific thresholds: 20%, 10%, 5%, 0%
-  const percentRemaining = (remaining / limit) * 100
-  const thresholds = [0, 5, 10, 20]
-  const shouldNotify = thresholds.some(
-    (threshold) => percentRemaining <= threshold && percentRemaining + (1 / limit) * 100 > threshold
-  )
-
-  if (!shouldNotify && remaining > 0) {
-    return { success: false, error: 'Not at notification threshold' }
-  }
-
-  const result = await sendQuotaWarningEmail({
-    to: user.email,
-    userName: user.full_name || 'there',
-    remaining,
-    limit,
-    currentPlan: user.subscription_plan,
-  })
-
-  const notificationId = await logNotification(
-    userId,
-    'quota_warning',
     result.success ? 'sent' : 'failed',
     result.error
   )

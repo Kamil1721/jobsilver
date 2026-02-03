@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { createServiceClient } from '@/lib/supabase/server'
 import type { JobFilters, Job, CurationLogStatus, AllSubscriptionPlans } from '@/lib/supabase/types'
 import { notifyNewMatches } from '@/lib/email/triggers'
 import type { JobMatch } from '@/lib/email/templates/job-matches'
 import { getDailyJobLimit } from '@/lib/stripe/plans'
+import { checkRateLimit } from '@/lib/security/rate-limit'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes max for Vercel
@@ -55,6 +57,15 @@ export async function GET(request: NextRequest): Promise<NextResponse<CurationSu
     return NextResponse.json(
       { error: authResult.error! },
       { status: 401 }
+    )
+  }
+
+  // Rate limit cron endpoint to prevent abuse if secret is compromised
+  const rateLimit = checkRateLimit('cron-daily-curation', { maxRequests: 2, windowSeconds: 60, prefix: 'cron' }, 'daily-curation')
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limited - cron can only run twice per minute' },
+      { status: 429 }
     )
   }
 
@@ -153,6 +164,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<CurationS
 }
 
 /**
+ * Constant-time string comparison to prevent timing attacks
+ */
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))
+}
+
+/**
  * Authenticate cron request using CRON_SECRET
  */
 function authenticateCronRequest(request: NextRequest): { success: boolean; error?: string } {
@@ -165,13 +184,14 @@ function authenticateCronRequest(request: NextRequest): { success: boolean; erro
 
   // Check Authorization header (Vercel Cron format)
   const authHeader = request.headers.get('authorization')
-  if (authHeader === `Bearer ${cronSecret}`) {
+  const expectedBearer = `Bearer ${cronSecret}`
+  if (authHeader && authHeader.length === expectedBearer.length && safeCompare(authHeader, expectedBearer)) {
     return { success: true }
   }
 
   // Check X-Cron-Secret header (alternative format)
   const cronHeader = request.headers.get('x-cron-secret')
-  if (cronHeader === cronSecret) {
+  if (cronHeader && cronHeader.length === cronSecret.length && safeCompare(cronHeader, cronSecret)) {
     return { success: true }
   }
 
@@ -424,14 +444,15 @@ async function fetchAndCurateJobs(
         jobsCurated++
         existingIds.add(job.external_id)
 
-        // Track curated job for email notification (top 5)
-        if (curatedJobs.length < 5 && savedJob) {
+        // Track curated job for email notification (top 3)
+        if (curatedJobs.length < 3 && savedJob) {
           curatedJobs.push({
             id: savedJob.id,
             title: savedJob.title,
             company: savedJob.company,
             location: savedJob.location || 'Remote',
             matchScore: savedJob.match_score || undefined,
+            remote: savedJob.remote,
           })
         }
       } catch (err) {
@@ -440,6 +461,9 @@ async function fetchAndCurateJobs(
       }
     }
   }
+
+  // Sort by match score descending so the highest scoring jobs are sent in the email
+  curatedJobs.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0))
 
   return { jobsCurated, jobsFailed, curatedJobs }
 }
@@ -481,6 +505,10 @@ async function fetchJobsFromSearch(
   for (const query of queries) {
     if (jobs.length >= count * 2) break // Fetch extra to account for duplicates
 
+    // Create AbortController with 30 second timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000)
+
     try {
       const response = await fetch(`${appUrl}/api/jobs/search`, {
         method: 'POST',
@@ -496,6 +524,7 @@ async function fetchJobsFromSearch(
           skipQuota: true, // Internal curation doesn't count against quota
           userId, // Pass the user ID for proper context
         }),
+        signal: controller.signal,
       })
 
       if (response.ok) {
@@ -509,7 +538,13 @@ async function fetchJobsFromSearch(
         console.warn(`[Daily Curation] Search API returned ${response.status} for query: ${query}`)
       }
     } catch (err) {
-      console.error(`[Daily Curation] Error fetching jobs for query "${query}":`, err)
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.error(`[Daily Curation] Request timed out for query "${query}"`)
+      } else {
+        console.error(`[Daily Curation] Error fetching jobs for query "${query}":`, err)
+      }
+    } finally {
+      clearTimeout(timeoutId)
     }
   }
 

@@ -1,5 +1,130 @@
 # JobSilver Changelog
 
+## 2026-02-03 - Backend Agent: Email Notification System Remaining Fixes
+
+**Task:** Fix remaining P0 and P2 issues in the email notification system
+
+### Changes Made
+
+#### P0-2: Welcome Email Now Triggered on Signup
+- **File:** `src/app/auth/callback/route.ts`
+- Added import for `notifyWelcome` from `@/lib/email/triggers`
+- After successful session creation, checks if user profile was created in last 5 minutes
+- If new user, triggers welcome email (fire-and-forget, doesn't block redirect)
+- Errors are logged but don't interrupt the authentication flow
+
+#### P2-1: Retry Logic for Failed Email Sends
+- **File:** `src/lib/email/client.ts`
+- Added `sendWithRetry()` helper function with exponential backoff
+- Retries failed email sends up to 3 times with delays of 1s, 2s, 4s
+- Wrapped `resend.emails.send()` call with retry logic
+- Updated error log message to indicate retries were attempted
+
+#### P2-2: Timeout on Internal API Calls in Daily Curation
+- **File:** `src/app/api/cron/daily-curation/route.ts`
+- Added AbortController with 30 second timeout to `fetchJobsFromSearch()`
+- Properly handles timeout errors with specific logging
+- Uses `finally` block to ensure timeout is always cleared
+
+### Files Changed
+- `src/app/auth/callback/route.ts`: Added welcome email trigger for new users
+- `src/lib/email/client.ts`: Added retry logic with exponential backoff
+- `src/app/api/cron/daily-curation/route.ts`: Added 30s timeout on internal API calls
+
+### Breaking Changes
+None
+
+---
+
+## 2026-02-03 - Backend Agent: Email Notification System P3 Fixes
+
+**Task:** Fix remaining P3 issues in email notification system
+
+### Changes Made
+
+#### P3-1: Plain Text Email Loses Formatting
+- **File:** `src/lib/email/client.ts`
+- Improved `stripHtml()` function to preserve formatting in plain text emails
+- Added line breaks after block elements (p, div, h1-h6, li, tr)
+- Added line breaks for br tags and tabs for td elements
+- Added HTML entity decoding (nbsp, amp, lt, gt, quot, #039, bull)
+- Normalized whitespace while preserving intentional line breaks
+- Plain text emails are now readable with proper paragraph separation
+
+#### P3-2: Duplicate Email Prevention
+- **File:** `src/lib/email/triggers.ts`
+- Added check in `notifyNewMatches()` to prevent duplicate job match emails
+- Queries notifications table for existing `job_matches` notification sent today
+- Returns early with error message if notification already sent today
+- Prevents duplicate emails if cron runs multiple times in one day
+
+### Files Changed
+- `src/lib/email/client.ts`: Improved stripHtml() function for better plain text formatting
+- `src/lib/email/triggers.ts`: Added duplicate notification check in notifyNewMatches()
+
+### Breaking Changes
+None
+
+---
+
+## 2026-02-03 - Backend Agent: Email Notification System Security Fixes
+
+**Task:** Fix P0, P1, and P2 issues in the email notification system
+
+### Changes Made
+
+#### P0-1: XSS Vulnerability in Email Templates (CRITICAL)
+- **File:** `src/lib/email/utils.ts` (NEW)
+- Created `escapeHtml()` utility function that escapes HTML special characters
+- Prevents XSS attacks via malicious job titles, company names, or user names
+- **File:** `src/lib/email/templates/job-matches.ts`
+- Added escaping for `job.title`, `job.company`, and `job.location`
+- **File:** `src/lib/email/templates/welcome.ts`
+- Added escaping for `firstName` in both content and preheader
+
+#### P1-1: Timing Attack Vulnerability in Cron Secret
+- **File:** `src/app/api/cron/daily-curation/route.ts`
+- Added `crypto` import and `safeCompare()` function
+- Fixed `authenticateCronRequest()` to use `crypto.timingSafeEqual()` for constant-time comparison
+- Prevents timing attacks that could leak the CRON_SECRET value
+
+#### P1-2: Rate Limiting on Cron Endpoint
+- **File:** `src/app/api/cron/daily-curation/route.ts`
+- Added rate limiting after authentication to prevent abuse if CRON_SECRET is compromised
+- Limit: 2 requests per minute per identifier
+- Returns 429 status code when rate limited
+
+#### P1-4: Database Schema Mismatch Documentation
+- **File:** `src/lib/supabase/types.ts`
+- Added comment explaining that database may contain legacy notification types (`application_status`, `quota_warning`) that are no longer used by the application
+- These types were removed in January 2026 but the database constraint remains
+
+#### P1-5: Missing `remote` Field in Email Job Data
+- **File:** `src/app/api/cron/daily-curation/route.ts`
+- Added `remote: savedJob.remote` when creating the curatedJobs object
+- The remote badge now displays correctly in job match emails
+
+#### P2-3: Jobs Sorted by Match Score
+- **File:** `src/app/api/cron/daily-curation/route.ts`
+- Added sorting of curated jobs by match score (descending) before returning
+- Ensures the top 3 jobs sent in email notifications are the highest scoring matches
+
+### Files Changed
+- `src/lib/email/utils.ts`: NEW - escapeHtml() utility function
+- `src/lib/email/templates/job-matches.ts`: Added XSS escaping for user-supplied data
+- `src/lib/email/templates/welcome.ts`: Added XSS escaping for firstName
+- `src/app/api/cron/daily-curation/route.ts`: Added crypto import, timing-safe comparison, rate limiting, remote field, and match score sorting
+- `src/lib/supabase/types.ts`: Added documentation comment for NotificationType
+
+### Breaking Changes
+None
+
+### Security Notes
+- All user-supplied data in email templates MUST use `escapeHtml()` to prevent XSS attacks
+- Cron endpoint authentication now uses constant-time comparison to prevent timing attacks
+
+---
+
 ## 2026-01-29 - Major Cleanup: Auto-Apply System Removal
 
 **Task:** Complete removal of deprecated auto-apply functionality

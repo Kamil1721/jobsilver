@@ -1,5 +1,6 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { notifyWelcome } from "@/lib/email/triggers"
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
@@ -13,6 +14,29 @@ export async function GET(request: Request) {
     const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error && sessionData.user) {
+      // Check if this is a new user (profile created in last 5 minutes) and send welcome email
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('created_at')
+          .eq('id', sessionData.user.id)
+          .single()
+
+        if (profile) {
+          const createdAt = new Date(profile.created_at)
+          const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+          if (createdAt > fiveMinutesAgo) {
+            // New user - send welcome email (don't await, fire and forget)
+            notifyWelcome(sessionData.user.id).catch(err =>
+              console.error('[Auth Callback] Failed to send welcome email:', err)
+            )
+          }
+        }
+      } catch (welcomeError) {
+        console.error('[Auth Callback] Error checking for new user:', welcomeError)
+        // Continue even if welcome email check fails
+      }
+
       // If coming from /tester page (tester=true), redirect to apply tester status
       // The invite code is stored in localStorage, so we redirect to a client-side page
       // that will call the API with the stored invite code

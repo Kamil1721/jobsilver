@@ -1,5 +1,6 @@
 import { sendEmail, EMAIL_CONFIG, type EmailResult } from '../client'
 import { baseTemplate } from '../base-template'
+import { escapeHtml } from '../utils'
 
 export interface JobMatch {
   id: string
@@ -38,7 +39,7 @@ export async function sendJobMatchesEmail({
   })
 
   const jobsList = topMatches
-    .slice(0, 5)
+    .slice(0, 3)
     .map((job) => {
       // Use emerald for high scores (80+), amber for medium (60-79), zinc for lower
       let matchBadgeClass = 'badge-info'
@@ -59,9 +60,9 @@ export async function sendJobMatchesEmail({
         <div class="list-item">
           <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 8px;">
             <div>
-              <strong style="color: #fafafa;">${job.title}</strong>
+              <strong style="color: #fafafa;">${escapeHtml(job.title)}</strong>
               <p style="margin: 4px 0 0 0; color: #71717a; font-size: 14px;">
-                ${job.company}${job.location ? ` &bull; ${job.location}` : ''}
+                ${escapeHtml(job.company)}${job.location ? ` &bull; ${escapeHtml(job.location)}` : ''}
               </p>
             </div>
             <div style="display: flex; gap: 4px; flex-shrink: 0;">
@@ -91,9 +92,9 @@ export async function sendJobMatchesEmail({
       ${jobsList}
     </div>
 
-    ${matchCount > 5 ? `
+    ${matchCount > 3 ? `
     <p style="color: #71717a; font-size: 14px; text-align: center;">
-      And ${matchCount - 5} more jobs waiting for you...
+      And ${matchCount - 3} more jobs waiting for you...
     </p>
     ` : ''}
 

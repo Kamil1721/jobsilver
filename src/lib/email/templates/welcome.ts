@@ -1,5 +1,6 @@
 import { sendEmail, EMAIL_CONFIG, type EmailResult } from '../client'
 import { baseTemplate } from '../base-template'
+import { escapeHtml } from '../utils'
 
 export interface WelcomeEmailParams {
   to: string
@@ -19,7 +20,7 @@ export async function sendWelcomeEmail({
   const content = `
     <h2>Welcome to ${appName}!</h2>
 
-    <p>Hi ${firstName},</p>
+    <p>Hi ${escapeHtml(firstName)},</p>
 
     <p>
       Thanks for joining ${appName}! We're excited to help you land your dream job.
@@ -67,7 +68,7 @@ export async function sendWelcomeEmail({
     subject: `Welcome to ${appName}! Let's find your dream job`,
     html: baseTemplate({
       title: `Welcome to ${appName}`,
-      preheader: `Hi ${firstName}, thanks for joining! Here's how to get started...`,
+      preheader: `Hi ${escapeHtml(firstName)}, thanks for joining! Here's how to get started...`,
       content,
       showUnsubscribe: false, // Don't show unsubscribe for welcome email
     }),
