@@ -10,9 +10,9 @@ import {
   Clock,
   Brain,
   Send,
-  Globe,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { PublicFooter } from "@/components/public-footer"
 
 // Lazy load the video players to avoid blocking initial render
 const HeroVideoPlayer = lazy(() => import('@/components/video/HeroVideoPlayer'))
@@ -127,6 +127,12 @@ export function LandingPage() {
               className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors duration-300"
             >
               Pricing
+            </a>
+            <a
+              href="/faq"
+              className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors duration-300"
+            >
+              FAQ
             </a>
           </div>
 
@@ -391,32 +397,7 @@ export function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="relative border-t border-white/[0.04] py-12">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <Link href="/" className="flex items-center">
-              <Image
-                src="/logo-dark.svg"
-                alt="JobSilver"
-                width={140}
-                height={28}
-                className="h-6 w-auto opacity-60"
-              />
-            </Link>
-
-            <div className="flex items-center gap-8 text-sm text-zinc-600">
-              <Link href="/pricing" className="hover:text-zinc-400 transition-colors">Pricing</Link>
-              <Link href="/privacy" className="hover:text-zinc-400 transition-colors">Privacy</Link>
-              <Link href="/terms" className="hover:text-zinc-400 transition-colors">Terms</Link>
-              <Link href="/contact" className="hover:text-zinc-400 transition-colors">Contact</Link>
-            </div>
-
-            <p className="text-sm text-zinc-600">
-              © {new Date().getFullYear()} Job Silver
-            </p>
-          </div>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   )
 }

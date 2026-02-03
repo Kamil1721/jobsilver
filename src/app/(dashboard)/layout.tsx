@@ -33,6 +33,7 @@ import { SubscriptionProvider } from "@/contexts/SubscriptionContext"
 import { UpgradeModal } from "@/components/upgrade-modal"
 import { TesterBadge } from "@/components/dashboard/TesterBadge"
 import { getPlanLimits } from "@/lib/stripe/plans"
+import { PublicFooter } from "@/components/public-footer"
 
 // System message types
 interface SystemMessage {
@@ -396,6 +397,9 @@ export default function DashboardLayout({
 
       {/* Global report button - bottom-left, opposite of chat */}
       <ReportButton />
+
+      {/* Footer */}
+      <PublicFooter onboarding={isInOnboarding} />
     </div>
   )
 }

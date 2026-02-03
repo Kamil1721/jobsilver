@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react"
+import { PublicFooter } from "@/components/public-footer"
 
 // Loading fallback for Suspense
 function LoginLoading() {
@@ -611,6 +612,9 @@ function LoginPageContent() {
 
         </div>
       </main>
+
+      {/* Footer */}
+      <PublicFooter />
     </div>
   )
 }

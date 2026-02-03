@@ -18,6 +18,7 @@ import {
   Loader2,
   FlaskConical,
 } from "lucide-react"
+import { PublicFooter } from "@/components/public-footer"
 
 export default function TesterLoginPage() {
   const [isLoading, setIsLoading] = React.useState(false)
@@ -568,6 +569,9 @@ export default function TesterLoginPage() {
           </motion.div>
         </div>
       </main>
+
+      {/* Footer */}
+      <PublicFooter />
     </div>
   )
 }

@@ -17,6 +17,7 @@ import {
   ChevronDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { PublicFooter } from "@/components/public-footer"
 import { createCheckoutSession } from "@/lib/stripe/browser"
 import { useToast } from "@/hooks/use-toast"
 
@@ -253,10 +254,10 @@ function PricingPageContent() {
           </Link>
 
           <div className="hidden md:flex items-center gap-8">
-            {["Features", "How It Works", "Pricing"].map((item) => (
+            {["Features", "How It Works", "Pricing", "FAQ"].map((item) => (
               <Link
                 key={item}
-                href={item === "Pricing" ? "/pricing" : `/#${item.toLowerCase().replace(/ /g, "-")}`}
+                href={item === "Pricing" ? "/pricing" : item === "FAQ" ? "/faq" : `/#${item.toLowerCase().replace(/ /g, "-")}`}
                 className={cn(
                   "text-sm transition-colors duration-300",
                   item === "Pricing"
@@ -465,32 +466,7 @@ function PricingPageContent() {
       </section>
 
       {/* Footer */}
-      <footer className="relative border-t border-white/[0.04] py-12">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <Link href="/" className="flex items-center">
-              <Image
-                src="/logo-dark.svg"
-                alt="JobSilver"
-                width={140}
-                height={28}
-                className="h-6 w-auto opacity-60"
-              />
-            </Link>
-
-            <div className="flex items-center gap-8 text-sm text-zinc-600">
-              <Link href="/" className="hover:text-zinc-400 transition-colors">Home</Link>
-              <Link href="/privacy" className="hover:text-zinc-400 transition-colors">Privacy</Link>
-              <Link href="/terms" className="hover:text-zinc-400 transition-colors">Terms</Link>
-              <Link href="/contact" className="hover:text-zinc-400 transition-colors">Contact</Link>
-            </div>
-
-            <p className="text-sm text-zinc-600">
-              © {new Date().getFullYear()} Job Silver
-            </p>
-          </div>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   )
 }
