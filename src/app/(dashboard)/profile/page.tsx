@@ -306,6 +306,7 @@ function ProfilePageContent() {
           : enabled ? "You'll receive application update notifications" : "Application update notifications disabled",
       })
     } catch (error) {
+      console.error('[Profile] Notification toggle error:', error)
       toast({
         variant: "destructive",
         title: "Error",
