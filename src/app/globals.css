@@ -468,6 +468,28 @@
   }
 }
 
+/* Speech bubble tails for chat welcome */
+.bubble-tail-right::after,
+.bubble-tail-left::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border: 6px solid transparent;
+}
+
+.bubble-tail-right::after {
+  right: -12px;
+  border-left-color: rgb(244 244 245); /* zinc-100 */
+}
+
+.bubble-tail-left::after {
+  left: -12px;
+  border-right-color: rgb(244 244 245); /* zinc-100 */
+}
+
 /* Dragging styles for dnd-kit */
 .dragging {
   @apply opacity-60 scale-[1.02] z-50;
