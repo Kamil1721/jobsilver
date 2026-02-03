@@ -10,7 +10,6 @@ import {
   CreditCard,
   Calendar,
   Clock,
-  ExternalLink,
   Loader2,
   AlertTriangle,
   ArrowUpRight,
@@ -20,7 +19,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import type { SubscriptionPlan, StripeSubscriptionStatus } from "@/lib/supabase/types"
 
@@ -86,9 +84,7 @@ const PLAN_DETAILS: Record<
 export function SubscriptionManagement({ userId }: SubscriptionManagementProps) {
   const [subscription, setSubscription] = React.useState<SubscriptionInfo | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
-  const [isManaging, setIsManaging] = React.useState(false)
   const router = useRouter()
-  const { toast } = useToast()
 
   // Fetch subscription info
   React.useEffect(() => {
@@ -138,31 +134,6 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
 
     fetchSubscription()
   }, [])
-
-  const handleManageBilling = async () => {
-    setIsManaging(true)
-    try {
-      const response = await fetch("/api/stripe/portal", {
-        method: "POST",
-      })
-      const data = await response.json()
-
-      if (response.ok && data.data?.url) {
-        window.location.href = data.data.url
-      } else {
-        throw new Error(data.error?.message || "Failed to open billing portal")
-      }
-    } catch (error) {
-      console.error("Portal error:", error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to open billing portal. Please try again.",
-      })
-    } finally {
-      setIsManaging(false)
-    }
-  }
 
   const handleUpgrade = () => {
     router.push("/choose-plan")
@@ -377,35 +348,19 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-3">
-          {isFreePlan && !subscription.isTester ? (
+          {!subscription.isTester && (
             <Button
               onClick={handleUpgrade}
-              className="flex-1 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white/10 dark:hover:bg-white/20"
+              className={isFreePlan
+                ? "flex-1 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white/10 dark:hover:bg-white/20"
+                : "flex-1"
+              }
+              variant={isFreePlan ? "default" : "outline"}
             >
               <ArrowUpRight className="w-4 h-4 mr-2" />
-              Upgrade Plan
+              {isFreePlan ? "Upgrade Plan" : "Change Plan"}
             </Button>
-          ) : !subscription.isTester ? (
-            <>
-              <Button
-                onClick={handleManageBilling}
-                disabled={isManaging}
-                variant="outline"
-                className="flex-1"
-              >
-                {isManaging ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                )}
-                Manage Billing
-              </Button>
-              <Button onClick={handleUpgrade} variant="outline" className="flex-1">
-                <ArrowUpRight className="w-4 h-4 mr-2" />
-                Change Plan
-              </Button>
-            </>
-          ) : null}
+          )}
         </div>
       </CardContent>
     </Card>
