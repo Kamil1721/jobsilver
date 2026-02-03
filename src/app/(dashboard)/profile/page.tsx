@@ -537,7 +537,13 @@ function ProfilePageContent() {
                       Upload your CV or generate a professional one from your information
                     </CardDescription>
                   </div>
-                  <FeatureGate feature="cv_generator" mode="overlay">
+                  <FeatureGate
+                    feature="cv_generator"
+                    mode="button"
+                    buttonLabel="Generate CV"
+                    buttonVariant="outline"
+                    buttonClassName="gap-2"
+                  >
                     <Button
                       variant="outline"
                       onClick={() => setShowCvGenerator(true)}

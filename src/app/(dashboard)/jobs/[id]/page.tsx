@@ -162,7 +162,14 @@ export default function JobDetailPage() {
                 {job.job_type && <Badge variant="outline" className="text-[9px] h-3.5 px-1">{job.job_type}</Badge>}
               </div>
             </div>
-            <FeatureGate feature="cv_generator" mode="overlay">
+            <FeatureGate
+              feature="cv_generator"
+              mode="button"
+              buttonLabel="Generate CV"
+              buttonVariant="outline"
+              buttonSize="sm"
+              buttonClassName="h-6 text-[10px] px-2"
+            >
               <Button
                 variant="outline"
                 size="sm"

@@ -5,19 +5,28 @@ import { cn } from "@/lib/utils"
 import { useFeatureAccess } from "@/hooks/useFeatureAccess"
 import { formatPlanName, type Feature } from "@/lib/features/config"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Lock } from "lucide-react"
 
 interface FeatureGateProps {
   /** The feature to gate */
   feature: Feature
   /** How to display locked content */
-  mode?: 'overlay' | 'blur' | 'disable' | 'hide'
+  mode?: 'overlay' | 'blur' | 'disable' | 'hide' | 'button'
   /** Children to render (the gated content) */
   children: React.ReactNode
   /** Optional custom fallback for 'hide' mode */
   fallback?: React.ReactNode
   /** Optional className for the wrapper */
   className?: string
+  /** Label for button mode (required when mode='button') */
+  buttonLabel?: string
+  /** Button variant for button mode */
+  buttonVariant?: 'outline' | 'default' | 'secondary' | 'ghost' | 'link' | 'destructive'
+  /** Button size for button mode */
+  buttonSize?: 'sm' | 'default' | 'lg' | 'icon'
+  /** Additional className for the button in button mode */
+  buttonClassName?: string
 }
 
 /**
@@ -29,6 +38,7 @@ interface FeatureGateProps {
  * - `blur` - Blurs content with lock icon overlay
  * - `disable` - Dims content and disables all interactions
  * - `hide` - Completely hides the content
+ * - `button` - Replaces children with a locked button (requires buttonLabel prop)
  */
 export function FeatureGate({
   feature,
@@ -36,6 +46,10 @@ export function FeatureGate({
   children,
   fallback,
   className,
+  buttonLabel,
+  buttonVariant,
+  buttonSize,
+  buttonClassName,
 }: FeatureGateProps) {
   const { hasAccess, requiredPlan, isLoading, showUpgradeModal } = useFeatureAccess(feature)
 
@@ -131,6 +145,25 @@ export function FeatureGate({
             </Badge>
           </div>
         </div>
+      )
+
+    case 'button':
+      return (
+        <Button
+          variant={buttonVariant || 'outline'}
+          size={buttonSize || 'default'}
+          className={cn("gap-1.5", buttonClassName, className)}
+          onClick={showUpgradeModal}
+        >
+          <Lock className="w-3 h-3 opacity-60" />
+          {buttonLabel}
+          <Badge
+            variant="outline"
+            className="ml-1 text-[9px] px-1 py-0 h-4 bg-amber-500/10 text-amber-600 border-amber-500/30"
+          >
+            {formatPlanName(requiredPlan)}
+          </Badge>
+        </Button>
       )
 
     default:
