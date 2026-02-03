@@ -4,10 +4,17 @@
     {
       "path": "/api/cron/daily-curation",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-expired-jobs",
+      "schedule": "0 7 * * *"
     }
   ],
   "functions": {
     "src/app/api/cron/daily-curation/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/cleanup-expired-jobs/route.ts": {
       "maxDuration": 300
     }
   },

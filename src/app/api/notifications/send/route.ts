@@ -3,7 +3,6 @@ import { createClient, createServiceClient } from '@/lib/supabase/server'
 import {
   notifyWelcome,
   notifyNewMatches,
-  notifyQuotaWarning,
   type NotificationType,
 } from '@/lib/email/triggers'
 import { checkRateLimit } from '@/lib/security/rate-limit'
@@ -23,9 +22,6 @@ interface NotificationPayload {
     matchScore?: number
     remote?: boolean
   }>
-  // For quota_warning
-  remaining?: number
-  limit?: number
 }
 
 /**
@@ -125,16 +121,6 @@ async function handleNotification(payload: NotificationPayload) {
         )
       }
       result = await notifyNewMatches(user_id, payload.match_count, payload.top_matches)
-      break
-
-    case 'quota_warning':
-      if (payload.remaining === undefined || payload.limit === undefined) {
-        return NextResponse.json(
-          { error: { code: 'INVALID_REQUEST', message: 'remaining and limit are required for quota_warning notification' } },
-          { status: 400 }
-        )
-      }
-      result = await notifyQuotaWarning(user_id, payload.remaining, payload.limit)
       break
 
     default:
