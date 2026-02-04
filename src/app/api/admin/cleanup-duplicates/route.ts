@@ -6,6 +6,9 @@ export const dynamic = 'force-dynamic'
 /**
  * Cleanup duplicate jobs for a user
  * Keeps the oldest job (first inserted) and deletes newer duplicates
+ * Duplicates are identified by:
+ * 1. Same application_url
+ * 2. Same company + same title (case-insensitive)
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -16,7 +19,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Find all jobs for user grouped by application_url
+    // Find all jobs for user
     const { data: allJobs, error: fetchError } = await supabase
       .from('jobs')
       .select('id, application_url, title, company, created_at')
@@ -28,7 +31,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: fetchError.message }, { status: 500 })
     }
 
-    // Group by application_url
+    const duplicateIds: string[] = []
+    const keptJobs: Array<{ title: string; company: string; reason: string }> = []
+
+    // Track which IDs we've already marked for deletion
+    const markedForDeletion = new Set<string>()
+
+    // 1. Group by application_url
     const urlGroups = new Map<string, typeof allJobs>()
     for (const job of allJobs || []) {
       if (!job.application_url) continue
@@ -38,16 +47,47 @@ export async function POST(request: NextRequest) {
       urlGroups.get(job.application_url)!.push(job)
     }
 
-    // Find duplicates (groups with more than 1 job)
-    const duplicateIds: string[] = []
-    const keptJobs: Array<{ title: string; company: string }> = []
-
-    for (const [url, jobs] of Array.from(urlGroups.entries())) {
+    // Find URL duplicates (groups with more than 1 job)
+    for (const [, jobs] of Array.from(urlGroups.entries())) {
       if (jobs.length > 1) {
         // Keep the first (oldest), delete the rest
         const [keep, ...duplicates] = jobs
-        keptJobs.push({ title: keep.title, company: keep.company || 'Unknown' })
-        duplicateIds.push(...duplicates.map(j => j.id))
+        keptJobs.push({ title: keep.title, company: keep.company || 'Unknown', reason: 'same_url' })
+        for (const dup of duplicates) {
+          if (!markedForDeletion.has(dup.id)) {
+            duplicateIds.push(dup.id)
+            markedForDeletion.add(dup.id)
+          }
+        }
+      }
+    }
+
+    // 2. Group by company + title (case-insensitive)
+    // Only consider jobs NOT already marked for deletion
+    const companyTitleGroups = new Map<string, typeof allJobs>()
+    for (const job of allJobs || []) {
+      if (markedForDeletion.has(job.id)) continue // Skip already marked
+      if (!job.company || !job.title) continue
+
+      const key = `${job.company.toLowerCase().trim()}:${job.title.toLowerCase().trim()}`
+      if (!companyTitleGroups.has(key)) {
+        companyTitleGroups.set(key, [])
+      }
+      companyTitleGroups.get(key)!.push(job)
+    }
+
+    // Find company+title duplicates (groups with more than 1 job)
+    for (const [key, jobs] of Array.from(companyTitleGroups.entries())) {
+      if (jobs.length > 1) {
+        // Keep the first (oldest), delete the rest
+        const [keep, ...duplicates] = jobs
+        keptJobs.push({ title: keep.title, company: keep.company || 'Unknown', reason: 'same_company_title' })
+        for (const dup of duplicates) {
+          if (!markedForDeletion.has(dup.id)) {
+            duplicateIds.push(dup.id)
+            markedForDeletion.add(dup.id)
+          }
+        }
       }
     }
 
@@ -68,9 +108,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: deleteError.message }, { status: 500 })
     }
 
+    // Count by reason
+    const byUrl = keptJobs.filter(j => j.reason === 'same_url').length
+    const byCompanyTitle = keptJobs.filter(j => j.reason === 'same_company_title').length
+
     return NextResponse.json({
       message: `Removed ${duplicateIds.length} duplicate jobs`,
       duplicatesRemoved: duplicateIds.length,
+      breakdown: {
+        by_url: byUrl,
+        by_company_title: byCompanyTitle,
+      },
       keptJobs: keptJobs.slice(0, 10), // Show first 10 kept jobs
     })
   } catch (error) {

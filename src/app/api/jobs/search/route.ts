@@ -1618,12 +1618,14 @@ export async function POST(request: NextRequest) {
     // Use separate queries to avoid SQL injection via string interpolation
     const existingJobMap = new Map<string, string>()
     const existingUrlMap = new Map<string, string>()
+    // Track company+title combos to prevent duplicates (same company, same title = duplicate)
+    const existingCompanyTitleMap = new Map<string, string>()
 
     // Query by external_ids (using Supabase's .in() which properly escapes values)
     if (allExternalIds.length > 0) {
       const { data: existingByExternalId } = await supabase
         .from('jobs')
-        .select('external_id, source, status, application_url')
+        .select('external_id, source, status, application_url, company, title')
         .eq('user_id', effectiveUserId)
         .in('external_id', allExternalIds)
 
@@ -1632,6 +1634,11 @@ export async function POST(request: NextRequest) {
         if (j.application_url) {
           existingUrlMap.set(j.application_url, j.status)
         }
+        // Track company+title combo
+        if (j.company && j.title) {
+          const companyTitleKey = `${j.company.toLowerCase().trim()}:${j.title.toLowerCase().trim()}`
+          existingCompanyTitleMap.set(companyTitleKey, j.status)
+        }
       }
     }
 
@@ -1639,7 +1646,7 @@ export async function POST(request: NextRequest) {
     if (allApplicationUrls.length > 0) {
       const { data: existingByUrl } = await supabase
         .from('jobs')
-        .select('external_id, source, status, application_url')
+        .select('external_id, source, status, application_url, company, title')
         .eq('user_id', effectiveUserId)
         .in('application_url', allApplicationUrls)
 
@@ -1650,17 +1657,57 @@ export async function POST(request: NextRequest) {
         if (j.application_url && !existingUrlMap.has(j.application_url)) {
           existingUrlMap.set(j.application_url, j.status)
         }
+        // Track company+title combo
+        if (j.company && j.title) {
+          const companyTitleKey = `${j.company.toLowerCase().trim()}:${j.title.toLowerCase().trim()}`
+          if (!existingCompanyTitleMap.has(companyTitleKey)) {
+            existingCompanyTitleMap.set(companyTitleKey, j.status)
+          }
+        }
       }
     }
 
-    console.log(`Duplicate check: found ${existingJobMap.size} existing jobs (${existingUrlMap.size} unique URLs)`)
+    // Also query for existing company+title combos not caught by external_id or URL
+    // This catches cases where same job is posted with different external IDs
+    const companyTitlePairs = limitedJobsToSave
+      .filter(job => job.company && job.title)
+      .map(job => ({
+        company: (job.company as string).toLowerCase().trim(),
+        title: (job.title as string).toLowerCase().trim(),
+      }))
+
+    if (companyTitlePairs.length > 0) {
+      // Query existing jobs for this user to check company+title combos
+      // We need to get all user's jobs and check manually since Supabase doesn't support
+      // composite OR conditions easily
+      const { data: existingByCompany } = await supabase
+        .from('jobs')
+        .select('company, title, status')
+        .eq('user_id', effectiveUserId)
+        // Include discarded - if user discards a job, block same company+title until 60-day cleanup
+
+      for (const j of existingByCompany || []) {
+        if (j.company && j.title) {
+          const companyTitleKey = `${j.company.toLowerCase().trim()}:${j.title.toLowerCase().trim()}`
+          if (!existingCompanyTitleMap.has(companyTitleKey)) {
+            existingCompanyTitleMap.set(companyTitleKey, j.status)
+          }
+        }
+      }
+    }
+
+    console.log(`Duplicate check: found ${existingJobMap.size} existing jobs (${existingUrlMap.size} unique URLs, ${existingCompanyTitleMap.size} company+title combos)`)
 
     for (const job of limitedJobsToSave) {
       const source = job.source as string
       const externalId = job.external_id as string
       const applicationUrl = job.application_url as string
+      const company = (job.company as string || '').toLowerCase().trim()
+      const title = (job.title as string || '').toLowerCase().trim()
+      const companyTitleKey = company && title ? `${company}:${title}` : ''
       const mapKey = `${source}:${externalId}`
       const existingStatus = existingJobMap.get(mapKey) || existingUrlMap.get(applicationUrl)
+      const existingCompanyTitleStatus = companyTitleKey ? existingCompanyTitleMap.get(companyTitleKey) : undefined
 
       // Skip jobs that user has already applied to or discarded - never re-add these
       if (existingStatus === 'applied' || existingStatus === 'discarded') {
@@ -1671,6 +1718,13 @@ export async function POST(request: NextRequest) {
       // Also skip if we already have a job with this URL (stronger duplicate prevention)
       if (applicationUrl && existingUrlMap.has(applicationUrl)) {
         console.log(`Skipping duplicate job (same URL exists): ${job.title}`)
+        continue
+      }
+
+      // Skip if we already have a job from the same company with the exact same title
+      // This prevents duplicates like multiple Mindrift jobs with same title
+      if (companyTitleKey && existingCompanyTitleStatus) {
+        console.log(`Skipping duplicate job (same company+title exists): ${job.company} - ${job.title}`)
         continue
       }
 
@@ -1702,6 +1756,14 @@ export async function POST(request: NextRequest) {
 
         if (insertError) {
           console.error('Insert error:', insertError)
+        } else {
+          // Track this job to prevent duplicates within the same batch
+          if (companyTitleKey) {
+            existingCompanyTitleMap.set(companyTitleKey, 'discovered')
+          }
+          if (applicationUrl) {
+            existingUrlMap.set(applicationUrl, 'discovered')
+          }
         }
       } else if (existingStatus === 'discovered') {
         const { error: updateError } = await supabase

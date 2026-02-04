@@ -184,6 +184,19 @@ async function curateJobsForUser(
   let jobsFailed = 0
   let attempts = 0
 
+  // Get existing company+title combos to prevent duplicates during curation
+  // Include discarded - if user discards a job, block same company+title until 60-day cleanup
+  const { data: existingJobs } = await supabase
+    .from('jobs')
+    .select('company, title')
+    .eq('user_id', userId)
+
+  const curatedCompanyTitles = new Set(
+    (existingJobs || [])
+      .filter(j => j.company && j.title)
+      .map(j => `${j.company.toLowerCase().trim()}:${j.title.toLowerCase().trim()}`)
+  )
+
   while (jobsCurated < targetCount && attempts < MAX_FETCH_ATTEMPTS) {
     attempts++
 
@@ -197,6 +210,16 @@ async function curateJobsForUser(
 
     for (const job of jobs) {
       if (jobsCurated >= targetCount) break
+
+      // Check for company+title duplicate before inserting
+      const company = (job.company || '').toLowerCase().trim()
+      const title = (job.title || '').toLowerCase().trim()
+      const companyTitleKey = company && title ? `${company}:${title}` : ''
+
+      if (companyTitleKey && curatedCompanyTitles.has(companyTitleKey)) {
+        console.log(`Skipping duplicate job during curation (same company+title): ${job.company} - ${job.title}`)
+        continue
+      }
 
       try {
         // Save job to database
@@ -234,6 +257,11 @@ async function curateJobsForUser(
           continue
         }
 
+        // Track this job's company+title to prevent duplicates within the batch
+        if (companyTitleKey) {
+          curatedCompanyTitles.add(companyTitleKey)
+        }
+
         jobsCurated++
       } catch (err) {
         console.error('Error processing job:', err)
@@ -258,13 +286,20 @@ async function fetchPersonalizedJobs(
   filters: JobFilters,
   count: number
 ): Promise<Partial<Job>[]> {
-  // Get existing job external IDs to avoid duplicates
+  // Get existing job external IDs and company+title combos to avoid duplicates
+  // Include all statuses - discarded jobs block same company+title until 60-day cleanup
   const { data: existingJobs } = await supabase
     .from('jobs')
-    .select('external_id')
+    .select('external_id, company, title')
     .eq('user_id', userId)
 
   const existingIds = new Set(existingJobs?.map(j => j.external_id) || [])
+  // Track company+title combos to prevent duplicates (same company + same title = duplicate)
+  const existingCompanyTitles = new Set(
+    (existingJobs || [])
+      .filter(j => j.company && j.title)
+      .map(j => `${j.company.toLowerCase().trim()}:${j.title.toLowerCase().trim()}`)
+  )
 
   // Build search queries from filters
   const searchQueries = buildSearchQueries(filters)
@@ -294,11 +329,27 @@ async function fetchPersonalizedJobs(
 
       if (response.ok) {
         const data = await response.json()
-        const newJobs = (data.jobs || []).filter(
-          (j: Job) => !existingIds.has(j.external_id)
-        )
+        const newJobs = (data.jobs || []).filter((j: Job) => {
+          // Skip if we already have this external_id
+          if (existingIds.has(j.external_id)) return false
+          // Skip if we already have a job from the same company with the exact same title
+          if (j.company && j.title) {
+            const companyTitleKey = `${j.company.toLowerCase().trim()}:${j.title.toLowerCase().trim()}`
+            if (existingCompanyTitles.has(companyTitleKey)) {
+              console.log(`Skipping duplicate job (same company+title): ${j.company} - ${j.title}`)
+              return false
+            }
+          }
+          return true
+        })
         jobs.push(...newJobs)
-        newJobs.forEach((j: Job) => existingIds.add(j.external_id))
+        newJobs.forEach((j: Job) => {
+          existingIds.add(j.external_id)
+          // Also track company+title for this batch
+          if (j.company && j.title) {
+            existingCompanyTitles.add(`${j.company.toLowerCase().trim()}:${j.title.toLowerCase().trim()}`)
+          }
+        })
       }
     } catch (err) {
       console.error('Error fetching jobs for query:', query, err)
