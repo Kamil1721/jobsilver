@@ -1,19 +1,160 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { generateCV, generateTailoredCV, type CVData } from '@/lib/cv/pdf-generator'
 import { checkRateLimit } from '@/lib/security/rate-limit'
-import type { ScreeningAnswers } from '@/lib/supabase/types'
+import { mapParsedCVToScreeningAnswers, type ParsedCV } from '@/lib/cv/data-mapper'
+import { tailorCVForJob, shouldUseAITailoring } from '@/lib/cv/ai-tailor'
+import type { ScreeningAnswers, Json } from '@/lib/supabase/types'
 
 export const dynamic = 'force-dynamic'
 
+// Check if we're running on Vercel (production)
+const IS_PRODUCTION = !!process.env.VERCEL
+
+interface JobContext {
+  id: string
+  title: string
+  company: string
+  description?: string
+}
+
 interface GenerateRequest {
-  screeningAnswers: ScreeningAnswers
-  jobContext?: {
-    id: string
-    title: string
+  screeningAnswers?: ScreeningAnswers
+  jobContext?: JobContext
+  // Quick generate mode - use existing CV data from profile
+  quickGenerate?: boolean
+  // Enable AI tailoring (default true when job context is provided)
+  aiTailor?: boolean
+}
+
+interface QuickGenerateResponse {
+  success: false
+  needsDialog: true
+  missingFields: string[]
+  message: string
+}
+
+interface ServerlessCVData {
+  first_name: string
+  last_name: string
+  email: string
+  phone?: string
+  location?: string
+  linkedin_url?: string
+  experience_summary?: string
+  work_history: {
     company: string
-    description?: string
+    position: string
+    start_date: string
+    end_date: string | null
+    location?: string
+    highlights: string[]
+  }[]
+  education: {
+    institution: string
+    degree: string
+    area: string
+    graduation_year: string
+    location?: string
+    highlights?: string[]
+  }[]
+  skills: string[]
+}
+
+// Timeout for serverless function calls (60 seconds - allows for cold start)
+const SERVERLESS_TIMEOUT_MS = 60000
+
+/**
+ * Call the Python serverless function to generate CV PDF
+ * Used in production on Vercel
+ */
+async function generateCVViaServerless(
+  cvData: ServerlessCVData,
+  baseUrl: string
+): Promise<Uint8Array> {
+  const serverlessUrl = `${baseUrl}/api/generate-cv`
+
+  // Create abort controller for timeout
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), SERVERLESS_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(serverlessUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(cvData),
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }))
+      throw new Error(error.error || `Serverless function failed: ${response.status}`)
+    }
+
+    const result = await response.json()
+
+    if (!result.success || !result.pdf) {
+      throw new Error(result.error || 'No PDF returned from serverless function')
+    }
+
+    // Decode base64 PDF
+    const pdfBase64 = result.pdf
+    const binaryString = atob(pdfBase64)
+    const bytes = new Uint8Array(binaryString.length)
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i)
+    }
+
+    return bytes
+  } catch (error) {
+    clearTimeout(timeoutId)
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('CV generation timed out. Please try again.')
+    }
+    throw error
   }
+}
+
+/**
+ * Fallback: Generate CV using pdf-lib (for local development)
+ */
+async function generateCVLocally(
+  cvData: ServerlessCVData,
+  jobContext?: JobContext,
+  aiTailor?: boolean
+): Promise<Uint8Array> {
+  // Dynamic import to avoid loading pdf-lib in production
+  const { generateCV, generateTailoredCV } = await import('@/lib/cv/pdf-generator')
+
+  const pdfLibData = {
+    first_name: cvData.first_name,
+    last_name: cvData.last_name,
+    email: cvData.email,
+    phone: cvData.phone,
+    location: cvData.location,
+    linkedin_url: cvData.linkedin_url,
+    experience_summary: cvData.experience_summary,
+    work_history: cvData.work_history,
+    education: cvData.education,
+    skills: cvData.skills,
+  }
+
+  if (jobContext) {
+    let tailoredContent
+    if (aiTailor && shouldUseAITailoring(jobContext)) {
+      try {
+        tailoredContent = await tailorCVForJob(pdfLibData, jobContext)
+      } catch (tailorError) {
+        console.error('AI tailoring failed, using basic tailoring:', tailorError)
+      }
+    }
+    return generateTailoredCV(pdfLibData, jobContext, tailoredContent)
+  }
+
+  return generateCV(pdfLibData)
 }
 
 export async function POST(request: NextRequest) {
@@ -36,7 +177,60 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json() as GenerateRequest
-    const { screeningAnswers, jobContext } = body
+    let { screeningAnswers, jobContext, quickGenerate, aiTailor } = body
+
+    // Default aiTailor to true when job context is provided
+    if (aiTailor === undefined && jobContext) {
+      aiTailor = true
+    }
+
+    // Quick generate mode - automatically retrieve CV data from profile
+    if (quickGenerate) {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('screening_answers, cv_parsed_data, full_name, phone, location')
+        .eq('id', user.id)
+        .single()
+
+      if (profileError) {
+        console.error('Profile fetch error:', profileError)
+        return NextResponse.json(
+          { error: 'Failed to fetch profile data' },
+          { status: 500 }
+        )
+      }
+
+      // Try screening_answers first, then cv_parsed_data
+      if (profile.screening_answers) {
+        screeningAnswers = profile.screening_answers as ScreeningAnswers
+      } else if (profile.cv_parsed_data) {
+        // Map parsed CV to screening answers format
+        const parsedCV = profile.cv_parsed_data as unknown as ParsedCV
+        const mappingResult = mapParsedCVToScreeningAnswers(parsedCV)
+
+        if (!mappingResult.isComplete) {
+          // Not enough data for quick generation
+          const response: QuickGenerateResponse = {
+            success: false,
+            needsDialog: true,
+            missingFields: mappingResult.missingFields,
+            message: 'Please fill in the missing information to generate your CV.',
+          }
+          return NextResponse.json(response)
+        }
+
+        screeningAnswers = mappingResult.screeningAnswers as ScreeningAnswers
+      } else {
+        // No CV data available at all
+        const response: QuickGenerateResponse = {
+          success: false,
+          needsDialog: true,
+          missingFields: ['cv_data'],
+          message: 'Please upload a CV or fill in your information first.',
+        }
+        return NextResponse.json(response)
+      }
+    }
 
     if (!screeningAnswers) {
       return NextResponse.json(
@@ -53,8 +247,23 @@ export async function POST(request: NextRequest) {
       (w) => w.company && w.position && w.start_date
     )
     const hasValidEducation = education.some(
-      (e) => e.institution && e.degree && e.area && e.graduation_year
+      (e) => e.institution && e.degree && e.graduation_year
     )
+
+    // For quick generate, return needsDialog response instead of error
+    if (quickGenerate && (!hasValidWork || !hasValidEducation)) {
+      const missingFields: string[] = []
+      if (!hasValidWork) missingFields.push('work_history')
+      if (!hasValidEducation) missingFields.push('education')
+
+      const response: QuickGenerateResponse = {
+        success: false,
+        needsDialog: true,
+        missingFields,
+        message: 'Some required information is missing. Please complete the form.',
+      }
+      return NextResponse.json(response)
+    }
 
     if (!hasValidWork) {
       return NextResponse.json(
@@ -83,8 +292,8 @@ export async function POST(request: NextRequest) {
     ].filter(Boolean)
     const location = locationParts.join(', ')
 
-    // Prepare CV data
-    const cvData: CVData = {
+    // Prepare CV data for serverless function
+    const cvData: ServerlessCVData = {
       first_name: screeningAnswers.first_name || '',
       last_name: screeningAnswers.last_name || '',
       email: user.email || '',
@@ -97,13 +306,41 @@ export async function POST(request: NextRequest) {
       skills: screeningAnswers.skills || [],
     }
 
+    // Apply AI tailoring to the data before sending to serverless
+    if (IS_PRODUCTION && jobContext && aiTailor && shouldUseAITailoring(jobContext)) {
+      try {
+        const tailoredContent = await tailorCVForJob(cvData, jobContext)
+        // Apply tailored content to cvData
+        if (tailoredContent.summary) {
+          cvData.experience_summary = tailoredContent.summary
+        }
+        if (tailoredContent.skills && tailoredContent.skills.length > 0) {
+          cvData.skills = tailoredContent.skills
+        }
+        if (tailoredContent.enhancedHighlights && cvData.work_history.length > 0) {
+          const enhanced = tailoredContent.enhancedHighlights.get(0)
+          if (enhanced && enhanced.length > 0) {
+            cvData.work_history[0] = { ...cvData.work_history[0], highlights: enhanced }
+          }
+        }
+      } catch (tailorError) {
+        console.error('AI tailoring failed, continuing without:', tailorError)
+      }
+    }
+
     // Generate PDF
     let pdfBytes: Uint8Array
     try {
-      if (jobContext) {
-        pdfBytes = await generateTailoredCV(cvData, jobContext)
+      if (IS_PRODUCTION) {
+        // Use Python serverless function in production
+        const baseUrl = process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : 'https://jobsilver.com'
+        pdfBytes = await generateCVViaServerless(cvData, baseUrl)
       } else {
-        pdfBytes = await generateCV(cvData)
+        // Use pdf-lib locally
+        console.log('Using local pdf-lib for CV generation (development mode)')
+        pdfBytes = await generateCVLocally(cvData, jobContext, aiTailor)
       }
     } catch (genError) {
       console.error('PDF generation error:', genError)
@@ -159,6 +396,43 @@ export async function POST(request: NextRequest) {
     const { data: signedUrlData } = await supabase.storage
       .from('cvs')
       .createSignedUrl(uploadData.path, 3600) // 1 hour expiry
+
+    // Save work_history, education, and skills to screening_answers for persistence
+    // This ensures user data is pre-filled next time they open the CV generator
+    try {
+      const { data: currentProfile } = await supabase
+        .from('profiles')
+        .select('screening_answers')
+        .eq('id', user.id)
+        .single()
+
+      const existingAnswers = (currentProfile?.screening_answers || {}) as Record<string, unknown>
+      const updatedScreeningAnswers = {
+        ...existingAnswers,
+        // KEY FIELDS - these are what populate the form next time
+        work_history: screeningAnswers.work_history,
+        education: screeningAnswers.education,
+        skills: screeningAnswers.skills,
+        // Personal info (preserve existing if not provided in this request)
+        first_name: screeningAnswers.first_name || existingAnswers.first_name,
+        last_name: screeningAnswers.last_name || existingAnswers.last_name,
+        city: screeningAnswers.city || existingAnswers.city,
+        country: screeningAnswers.country || existingAnswers.country,
+        state_region: screeningAnswers.state_region || existingAnswers.state_region,
+        phone_country_code: screeningAnswers.phone_country_code || existingAnswers.phone_country_code,
+        phone_number: screeningAnswers.phone_number || existingAnswers.phone_number,
+        linkedin_url: screeningAnswers.linkedin_url || existingAnswers.linkedin_url,
+        experience_summary: screeningAnswers.experience_summary || existingAnswers.experience_summary,
+      }
+
+      await supabase
+        .from('profiles')
+        .update({ screening_answers: updatedScreeningAnswers as Json })
+        .eq('id', user.id)
+    } catch (saveError) {
+      // Log but don't fail the request - CV was generated successfully
+      console.error('Failed to save screening answers:', saveError)
+    }
 
     return NextResponse.json({
       success: true,

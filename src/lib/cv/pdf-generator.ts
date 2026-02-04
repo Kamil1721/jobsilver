@@ -42,6 +42,13 @@ interface JobContext {
   description?: string
 }
 
+// Tailored content from AI tailor service
+export interface TailoredCVContent {
+  summary?: string
+  skills?: string[]
+  enhancedHighlights?: Map<number, string[]>
+}
+
 // Constants for layout
 const PAGE_WIDTH = 612 // Letter width
 const PAGE_HEIGHT = 792 // Letter height
@@ -55,6 +62,33 @@ const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT
 const PRIMARY_COLOR = rgb(0.1, 0.1, 0.1) // Dark gray for text
 const ACCENT_COLOR = rgb(0.2, 0.4, 0.6) // Blue for headers
 const LIGHT_GRAY = rgb(0.4, 0.4, 0.4) // Light gray for secondary text
+
+/**
+ * Sanitize text for PDF generation
+ * Replaces special characters that can cause zlib compression errors
+ */
+function sanitizeText(text: string): string {
+  if (!text) return ''
+  return text
+    // Smart quotes to regular quotes
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    // Dashes
+    .replace(/[\u2013\u2014\u2015]/g, '-')
+    // Ellipsis
+    .replace(/\u2026/g, '...')
+    // Bullet points
+    .replace(/[\u2022\u2023\u2043]/g, '-')
+    // Other common problematic characters
+    .replace(/\u00A0/g, ' ') // Non-breaking space
+    .replace(/[\u2002\u2003\u2009]/g, ' ') // Various spaces
+    // Remove any remaining non-ASCII that might cause issues
+    .replace(/[^\x00-\x7F]/g, (char) => {
+      // Try to keep accented letters by normalizing
+      const normalized = char.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      return normalized || ''
+    })
+}
 
 class PDFHelper {
   private page: PDFPage
@@ -101,8 +135,11 @@ class PDFHelper {
       maxWidth = CONTENT_WIDTH,
     } = options
 
+    // Sanitize text to prevent compression errors
+    const safeText = sanitizeText(text)
+
     // Simple word wrap
-    const words = text.split(' ')
+    const words = safeText.split(' ')
     let line = ''
     const lines: string[] = []
 
@@ -335,19 +372,43 @@ export async function generateCV(data: CVData): Promise<Uint8Array> {
 
 /**
  * Generate a CV tailored for a specific job
- * This can prioritize relevant skills and experience based on the job context
+ * Accepts optional AI-generated tailored content to customize the CV
  */
-export async function generateTailoredCV(data: CVData, job: JobContext): Promise<Uint8Array> {
-  // For now, generate a standard CV
-  // In the future, this could use AI to:
-  // 1. Reorder skills to prioritize job-relevant ones
-  // 2. Adjust experience highlights to emphasize relevant achievements
-  // 3. Customize the summary for the specific role
-
-  // Add job context to summary if not already present
+export async function generateTailoredCV(
+  data: CVData,
+  job: JobContext,
+  tailoredContent?: TailoredCVContent
+): Promise<Uint8Array> {
+  // Create a copy of data to modify
   const tailoredData = { ...data }
-  if (!tailoredData.experience_summary && job.title) {
-    tailoredData.experience_summary = `Experienced professional seeking ${job.title} position${job.company ? ` at ${job.company}` : ''}.`
+
+  // Apply tailored content if provided
+  if (tailoredContent) {
+    // Use AI-generated summary
+    if (tailoredContent.summary) {
+      tailoredData.experience_summary = tailoredContent.summary
+    }
+
+    // Use reordered skills
+    if (tailoredContent.skills && tailoredContent.skills.length > 0) {
+      tailoredData.skills = tailoredContent.skills
+    }
+
+    // Apply enhanced highlights to work history
+    if (tailoredContent.enhancedHighlights && tailoredData.work_history) {
+      tailoredData.work_history = tailoredData.work_history.map((work, index) => {
+        const enhanced = tailoredContent.enhancedHighlights?.get(index)
+        if (enhanced && enhanced.length > 0) {
+          return { ...work, highlights: enhanced }
+        }
+        return work
+      })
+    }
+  } else {
+    // Fall back to basic tailoring if no AI content provided
+    if (!tailoredData.experience_summary && job.title) {
+      tailoredData.experience_summary = `Experienced professional seeking ${job.title} position${job.company ? ` at ${job.company}` : ''}.`
+    }
   }
 
   return generateCV(tailoredData)

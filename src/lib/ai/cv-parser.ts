@@ -12,6 +12,8 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 import AdmZip from 'adm-zip'
+// @ts-expect-error - pdf-parse doesn't have types
+import pdfParse from 'pdf-parse'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -212,28 +214,28 @@ export async function extractTextFromPDFAdobe(pdfBuffer: Buffer): Promise<string
   } catch (error) {
     console.error('Adobe PDF extraction error:', error)
     console.log('Falling back to basic extraction')
-    return extractTextFromPDFBasic(pdfBuffer)
+    return await extractTextFromPDFBasic(pdfBuffer)
   }
 }
 
 /**
- * Basic text extraction from PDF (fallback method)
+ * Basic text extraction from PDF using pdf-parse (fallback method)
  */
-export function extractTextFromPDFBasic(pdfBuffer: Buffer): string {
-  // Simple text extraction attempt (works for text-based PDFs)
-  const text = pdfBuffer.toString('utf-8')
-
-  // Try to extract readable text
-  const cleanText = text
-    .replace(/[^\x20-\x7E\n\r]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-  if (cleanText.length > 100) {
-    return cleanText
+export async function extractTextFromPDFBasic(pdfBuffer: Buffer): Promise<string> {
+  try {
+    const data = await pdfParse(pdfBuffer)
+    const text = data.text || ''
+    console.log('pdf-parse extraction successful, extracted', text.length, 'characters')
+    return text.trim()
+  } catch (error) {
+    console.error('pdf-parse extraction failed:', error)
+    // Ultimate fallback - try raw text extraction
+    const rawText = pdfBuffer.toString('utf-8')
+      .replace(/[^\x20-\x7E\n\r]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    return rawText.length > 100 ? rawText : ''
   }
-
-  return ''
 }
 
 /**
@@ -249,7 +251,7 @@ export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
   }
 
   // Fallback to basic extraction
-  return extractTextFromPDFBasic(pdfBuffer)
+  return await extractTextFromPDFBasic(pdfBuffer)
 }
 
 /**

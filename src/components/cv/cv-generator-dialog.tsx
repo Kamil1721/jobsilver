@@ -22,8 +22,11 @@ import {
   FileText,
   ExternalLink,
   CheckCircle2,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react"
 import type { ScreeningAnswers, Job } from "@/lib/supabase/types"
+import { mapParsedCVToScreeningAnswers, type ParsedCV } from "@/lib/cv/data-mapper"
 
 interface WorkHistoryEntry {
   company: string
@@ -64,6 +67,11 @@ export function CVGeneratorDialog({
   const [generatedUrl, setGeneratedUrl] = React.useState<string | null>(null)
   const [isLoadingAISkills, setIsLoadingAISkills] = React.useState(false)
   const [aiSkillSuggestions, setAiSkillSuggestions] = React.useState<string[]>([])
+  const [isReparsing, setIsReparsing] = React.useState(false)
+  const [showReparseOption, setShowReparseOption] = React.useState(false)
+  // Achievement suggestions state - track per work entry index
+  const [loadingAchievements, setLoadingAchievements] = React.useState<number | null>(null)
+  const [achievementSuggestions, setAchievementSuggestions] = React.useState<{ index: number; suggestions: string[] } | null>(null)
 
   // Form state
   const [screeningAnswers, setScreeningAnswers] = React.useState<Partial<ScreeningAnswers>>({
@@ -116,27 +124,108 @@ export function CVGeneratorDialog({
 
         const { data: profile } = await supabase
           .from("profiles")
-          .select("screening_answers, full_name, location, phone")
+          .select("screening_answers, cv_parsed_data, full_name, location, phone")
           .eq("id", user.id)
           .single()
 
+        let baseData: Partial<ScreeningAnswers> = {
+          first_name: "",
+          last_name: "",
+          experience_summary: "",
+          linkedin_url: "",
+          city: "",
+          country: "",
+          phone_country_code: "+1",
+          phone_number: "",
+          work_history: [],
+          education: [],
+          skills: [],
+        }
+
+        // Start with screening_answers if available
         if (profile?.screening_answers) {
           const saved = profile.screening_answers as ScreeningAnswers
-          setScreeningAnswers({
-            ...saved,
-            work_history: saved.work_history?.length ? saved.work_history : [createEmptyWorkEntry()],
-            education: saved.education?.length ? saved.education : [createEmptyEducationEntry()],
-            skills: saved.skills || [],
-          })
-        } else if (profile) {
-          // Try to populate from profile data
-          const nameParts = (profile.full_name || "").split(" ")
-          setScreeningAnswers(prev => ({
-            ...prev,
-            first_name: nameParts[0] || "",
-            last_name: nameParts.slice(1).join(" ") || "",
-          }))
+          baseData = { ...baseData, ...saved }
         }
+
+        // If work_history or education are empty, try to fill from cv_parsed_data
+        const hasWorkHistory = baseData.work_history && baseData.work_history.length > 0 &&
+          baseData.work_history.some(w => w.company && w.position)
+        const hasEducation = baseData.education && baseData.education.length > 0 &&
+          baseData.education.some(e => e.institution && e.degree)
+
+        if (profile?.cv_parsed_data && (!hasWorkHistory || !hasEducation)) {
+          const parsedCV = profile.cv_parsed_data as unknown as ParsedCV
+          const { screeningAnswers: mapped } = mapParsedCVToScreeningAnswers(parsedCV)
+
+          // Check if parsed CV actually has the data we need
+          const parsedHasWork = mapped.work_history && mapped.work_history.length > 0 &&
+            mapped.work_history.some(w => w.company && w.position)
+          const parsedHasEdu = mapped.education && mapped.education.length > 0 &&
+            mapped.education.some(e => e.institution && e.degree)
+
+          // Fill in missing work history from parsed CV
+          if (!hasWorkHistory && parsedHasWork) {
+            baseData.work_history = mapped.work_history
+          }
+
+          // Fill in missing education from parsed CV
+          if (!hasEducation && parsedHasEdu) {
+            baseData.education = mapped.education
+          }
+
+          // Fill in missing skills from parsed CV
+          if ((!baseData.skills || baseData.skills.length === 0) && mapped.skills && mapped.skills.length > 0) {
+            baseData.skills = mapped.skills
+          }
+
+          // Fill in missing personal info from parsed CV
+          if (!baseData.first_name && mapped.first_name) baseData.first_name = mapped.first_name
+          if (!baseData.last_name && mapped.last_name) baseData.last_name = mapped.last_name
+          if (!baseData.city && mapped.city) baseData.city = mapped.city
+          if (!baseData.country && mapped.country) baseData.country = mapped.country
+          if (!baseData.experience_summary && mapped.experience_summary) {
+            baseData.experience_summary = mapped.experience_summary
+          }
+
+          // Show appropriate toast based on what data was loaded
+          if (parsedHasWork || parsedHasEdu) {
+            toast({
+              title: "Data loaded from your CV",
+              description: "We've added work experience and education from your uploaded CV.",
+            })
+            setShowReparseOption(false)
+          } else if (!hasWorkHistory || !hasEducation) {
+            // CV was parsed but didn't extract work/education - show re-parse option
+            setShowReparseOption(true)
+          }
+        } else if (!hasWorkHistory || !hasEducation) {
+          // No cv_parsed_data at all - check if there's a CV to re-parse
+          const { data: cvCheck } = await supabase
+            .from("profiles")
+            .select("cv_url")
+            .eq("id", user.id)
+            .single()
+
+          if (cvCheck?.cv_url) {
+            setShowReparseOption(true)
+          }
+        }
+
+        // Fallback to profile name if still empty
+        if (!baseData.first_name && !baseData.last_name && profile?.full_name) {
+          const nameParts = profile.full_name.split(" ")
+          baseData.first_name = nameParts[0] || ""
+          baseData.last_name = nameParts.slice(1).join(" ") || ""
+        }
+
+        // Ensure at least one empty entry for work/education forms
+        setScreeningAnswers({
+          ...baseData,
+          work_history: baseData.work_history?.length ? baseData.work_history : [createEmptyWorkEntry()],
+          education: baseData.education?.length ? baseData.education : [createEmptyEducationEntry()],
+          skills: baseData.skills || [],
+        })
       } catch (error) {
         console.error("Error loading data:", error)
       } finally {
@@ -145,7 +234,7 @@ export function CVGeneratorDialog({
     }
 
     loadData()
-  }, [open, supabase])
+  }, [open, supabase, toast])
 
   const updateWorkHistory = (index: number, updates: Partial<WorkHistoryEntry>) => {
     setScreeningAnswers(prev => {
@@ -246,6 +335,124 @@ export function CVGeneratorDialog({
     }
   }
 
+  const handleAISuggestAchievements = async (workIndex: number) => {
+    const work = screeningAnswers.work_history?.[workIndex]
+    if (!work?.company || !work?.position) {
+      toast({
+        variant: "destructive",
+        title: "Missing information",
+        description: "Please enter company and position first",
+      })
+      return
+    }
+
+    setLoadingAchievements(workIndex)
+    setAchievementSuggestions(null)
+    try {
+      const response = await fetch('/api/ai/suggest-achievements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: work.company,
+          position: work.position,
+          jobTitle: job?.title,
+          jobDescription: job?.description,
+          skills: screeningAnswers.skills,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to get suggestions')
+      }
+
+      setAchievementSuggestions({
+        index: workIndex,
+        suggestions: result.achievements || [],
+      })
+      toast({
+        title: "AI suggestions ready!",
+        description: `Found ${result.achievements?.length || 0} achievement ideas`,
+      })
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Couldn't get AI suggestions",
+        description: error instanceof Error ? error.message : "Please try again",
+      })
+    } finally {
+      setLoadingAchievements(null)
+    }
+  }
+
+  const handleReparse = async () => {
+    setIsReparsing(true)
+    try {
+      const response = await fetch('/api/cv/reparse', {
+        method: 'POST',
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Re-parse failed')
+      }
+
+      // Successfully re-parsed - reload the form with new data
+      const parsedData = result.parsed_data as ParsedCV
+      const { screeningAnswers: mapped } = mapParsedCVToScreeningAnswers(parsedData)
+
+      // Update form with the newly parsed data
+      setScreeningAnswers(prev => {
+        const updated = { ...prev }
+
+        // Update work history if we got new data
+        if (mapped.work_history && mapped.work_history.length > 0 &&
+            mapped.work_history.some(w => w.company && w.position)) {
+          updated.work_history = mapped.work_history
+        }
+
+        // Update education if we got new data
+        if (mapped.education && mapped.education.length > 0 &&
+            mapped.education.some(e => e.institution && e.degree)) {
+          updated.education = mapped.education
+        }
+
+        // Update skills if we got new data
+        if (mapped.skills && mapped.skills.length > 0) {
+          updated.skills = mapped.skills
+        }
+
+        // Fill other fields if empty
+        if (!updated.first_name && mapped.first_name) updated.first_name = mapped.first_name
+        if (!updated.last_name && mapped.last_name) updated.last_name = mapped.last_name
+        if (!updated.city && mapped.city) updated.city = mapped.city
+        if (!updated.country && mapped.country) updated.country = mapped.country
+        if (!updated.experience_summary && mapped.experience_summary) {
+          updated.experience_summary = mapped.experience_summary
+        }
+
+        return updated
+      })
+
+      setShowReparseOption(false)
+
+      toast({
+        title: "CV re-parsed successfully",
+        description: result.message || `Found ${result.extracted?.experience || 0} work experiences and ${result.extracted?.education || 0} education entries.`,
+      })
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Re-parse failed",
+        description: error instanceof Error ? error.message : "Failed to re-parse CV. Please try again.",
+      })
+    } finally {
+      setIsReparsing(false)
+    }
+  }
+
   const handleGenerate = async () => {
     // Validate
     const workHistory = screeningAnswers.work_history || []
@@ -329,6 +536,39 @@ export function CVGeneratorDialog({
             }
           </DialogDescription>
         </DialogHeader>
+
+        {/* Re-parse CV Banner */}
+        {showReparseOption && !isLoading && !generatedUrl && (
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50">
+            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-2">
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                Your uploaded CV didn&apos;t include work history or education details.
+                Try re-parsing it, or fill in the information manually below.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleReparse}
+                disabled={isReparsing}
+                className="gap-1.5 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50"
+              >
+                {isReparsing ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Re-parsing CV...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Re-parse My CV
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
@@ -486,12 +726,58 @@ export function CVGeneratorDialog({
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Key Achievement</Label>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Key Achievement</Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleAISuggestAchievements(index)}
+                        disabled={loadingAchievements === index || !work.company || !work.position}
+                        className="h-6 px-2 text-xs gap-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/50"
+                      >
+                        {loadingAchievements === index ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Thinking...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3 h-3" />
+                            AI Suggest
+                          </>
+                        )}
+                      </Button>
+                    </div>
                     <Input
                       value={work.highlights[0] || ""}
                       onChange={(e) => updateWorkHistory(index, { highlights: [e.target.value] })}
                       placeholder="e.g., Increased sales by 25%"
                     />
+                    {/* AI Achievement Suggestions */}
+                    {achievementSuggestions?.index === index && achievementSuggestions.suggestions.length > 0 && (
+                      <div className="mt-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 space-y-2">
+                        <p className="text-xs font-medium text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                          <Sparkles className="w-3 h-3" />
+                          AI-suggested achievements (click to use):
+                        </p>
+                        <div className="space-y-1.5">
+                          {achievementSuggestions.suggestions.map((achievement, achIdx) => (
+                            <button
+                              key={achIdx}
+                              type="button"
+                              onClick={() => {
+                                updateWorkHistory(index, { highlights: [achievement] })
+                                setAchievementSuggestions(null)
+                              }}
+                              className="w-full text-left px-2.5 py-1.5 rounded text-xs border border-blue-300 dark:border-blue-700 bg-white dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-800/50 transition-colors"
+                            >
+                              {achievement}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
