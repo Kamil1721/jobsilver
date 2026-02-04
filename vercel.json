@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/cleanup-expired-jobs",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/check-expired-subscriptions",
+      "schedule": "0 6 * * *"
     }
   ],
   "functions": {
@@ -16,6 +20,9 @@
     },
     "src/app/api/cron/cleanup-expired-jobs/route.ts": {
       "maxDuration": 300
+    },
+    "src/app/api/cron/check-expired-subscriptions/route.ts": {
+      "maxDuration": 60
     }
   },
   "rewrites": [

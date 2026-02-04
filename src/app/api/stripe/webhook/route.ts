@@ -376,6 +376,14 @@ async function handleInvoicePaymentSucceeded(
 /**
  * Handle invoice.payment_failed event
  * Updates subscription status
+ *
+ * Behavior follows the same logic as cancellation:
+ * - Trial conversion fails: Access ends when trial ends (user never paid)
+ * - Renewal fails: Access continues until current paid period ends (user has paid)
+ *
+ * The actual downgrade happens via:
+ * 1. Stripe eventually cancels/updates the subscription after retries
+ * 2. Our check-expired-subscriptions cron as a safety net
  */
 async function handleInvoicePaymentFailed(
   supabase: ReturnType<typeof createServiceClient>,
@@ -387,14 +395,48 @@ async function handleInvoicePaymentFailed(
 
   console.log('Processing payment failed for subscription:', subscriptionId)
 
-  // Update subscription status
+  // Get the billing reason to distinguish trial conversion vs renewal
+  // billing_reason values: subscription_create, subscription_cycle, subscription_update, etc.
+  const billingReason = (invoice as unknown as Record<string, unknown>).billing_reason as string | undefined
+
+  // First charge (trial conversion) vs renewal
+  const isFirstCharge = billingReason === 'subscription_create'
+
+  // Find user by subscription for logging
+  const { data: subRecord } = await supabase
+    .from('subscriptions')
+    .select('user_id, current_period_end, trial_end')
+    .eq('stripe_subscription_id', subscriptionId)
+    .single()
+
+  if (!subRecord?.user_id) {
+    console.error('Cannot find user for failed payment:', subscriptionId)
+  }
+
+  // Update subscription status to past_due
   await supabase
     .from('subscriptions')
     .update({ status: 'past_due' })
     .eq('stripe_subscription_id', subscriptionId)
 
-  // Optionally downgrade user immediately or give grace period
-  // For now, we keep their plan but mark subscription as past_due
+  if (isFirstCharge) {
+    // TRIAL CONVERSION FAILED: User never paid, access ends when trial ends
+    // getActivePlan returns plan for 'past_due', but Stripe will update
+    // subscription status when trial ends and payment hasn't succeeded.
+    // The check-expired-subscriptions cron provides a safety net.
+    console.log(
+      `First charge failed for user ${subRecord?.user_id || 'unknown'} - ` +
+      `access will end when trial ends (${subRecord?.trial_end || 'unknown'})`
+    )
+  } else {
+    // RENEWAL FAILED: User has paid for current period
+    // Keep their access until current_period_end (getActivePlan returns plan for past_due)
+    // After period ends, check-expired-subscriptions cron will downgrade if Stripe hasn't
+    console.log(
+      `Renewal failed for user ${subRecord?.user_id || 'unknown'} - ` +
+      `keeping access until period ends (${subRecord?.current_period_end || 'unknown'})`
+    )
+  }
 }
 
 /**
