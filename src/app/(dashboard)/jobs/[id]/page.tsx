@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { MapPin, Calendar, ExternalLink, ArrowLeft, Trash2, Flag, Sparkles, Check, MessageSquare, Briefcase, FileText } from "lucide-react"
+import { MapPin, Calendar, ExternalLink, ArrowLeft, Trash2, Flag, Sparkles, Check, MessageSquare, Briefcase, FileText, Loader2 } from "lucide-react"
 import type { Job, Profile } from "@/lib/supabase/types"
 import { ReportProblemDialog } from "@/components/report"
 import { dispatchSetJobContext } from "@/lib/events/chat-events"
@@ -29,6 +29,7 @@ export default function JobDetailPage() {
   const [isLoading, setIsLoading] = React.useState(true)
   const [showReportDialog, setShowReportDialog] = React.useState(false)
   const [showCvGenerator, setShowCvGenerator] = React.useState(false)
+  const [isGeneratingCV, setIsGeneratingCV] = React.useState(false)
   const [isFavorited, setIsFavorited] = React.useState(false)
   const [preferenceReasons, setPreferenceReasons] = React.useState<string[]>([])
   const { plan, isTester } = useSubscription()
@@ -102,6 +103,59 @@ export default function JobDetailPage() {
 
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
 
+  // Quick generate CV handler - tries to generate directly, falls back to dialog if data missing
+  const handleQuickGenerateCV = async () => {
+    if (!job) return
+
+    setIsGeneratingCV(true)
+    try {
+      const response = await fetch('/api/cv/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quickGenerate: true,
+          jobContext: {
+            id: job.id,
+            title: job.title,
+            company: job.company || 'Unknown',
+            description: job.description,
+          },
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.needsDialog) {
+        // Not enough data for quick generation, show dialog
+        setShowCvGenerator(true)
+        toast({
+          title: "Additional information needed",
+          description: result.message || "Please complete the form to generate your CV.",
+        })
+      } else if (result.success && result.signed_url) {
+        // Success - open the generated CV
+        window.open(result.signed_url, '_blank')
+        toast({
+          title: "CV Generated!",
+          description: `Your CV tailored for ${job.company || 'this role'} is ready.`,
+        })
+      } else if (result.error) {
+        throw new Error(result.error)
+      }
+    } catch (error) {
+      console.error('Quick generate error:', error)
+      toast({
+        variant: "destructive",
+        title: "Generation failed",
+        description: error instanceof Error ? error.message : "Failed to generate CV. Please try again.",
+      })
+      // Fall back to showing dialog on error
+      setShowCvGenerator(true)
+    } finally {
+      setIsGeneratingCV(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-[calc(100vh-3.5rem)] bg-background p-3">
@@ -174,9 +228,18 @@ export default function JobDetailPage() {
                 variant="outline"
                 size="sm"
                 className="h-6 text-[10px] px-2"
-                onClick={() => setShowCvGenerator(true)}
+                onClick={handleQuickGenerateCV}
+                disabled={isGeneratingCV}
               >
-                <FileText className="w-3 h-3 mr-0.5" />Generate CV
+                {isGeneratingCV ? (
+                  <>
+                    <Loader2 className="w-3 h-3 mr-0.5 animate-spin" />Generating...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-3 h-3 mr-0.5" />Generate CV
+                  </>
+                )}
               </Button>
             </FeatureGate>
             <Button

@@ -473,9 +473,9 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
           placeholder="Brief summary of your professional experience..."
           value={data.experience_summary}
           onChange={(e) => {
-            if (e.target.value.length <= 500) {
-              onUpdate({ experience_summary: e.target.value })
-            }
+            // Allow the change but truncate to 500 chars if needed
+            const value = e.target.value.slice(0, 500)
+            onUpdate({ experience_summary: value })
           }}
           className="min-h-[120px] resize-none"
         />
