@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit } from '@/lib/security/rate-limit'
 import { mapParsedCVToScreeningAnswers, type ParsedCV } from '@/lib/cv/data-mapper'
-import { tailorCVForJob, shouldUseAITailoring } from '@/lib/cv/ai-tailor'
+import { tailorCVForJob, shouldUseAITailoring, sanitizeAIOutput } from '@/lib/cv/ai-tailor'
 import type { ScreeningAnswers, Json } from '@/lib/supabase/types'
 
 export const dynamic = 'force-dynamic'
@@ -328,6 +328,34 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Sanitize all string fields before sending to serverless (for YAML/LaTeX compatibility)
+    // This is critical when AI tailoring has been applied, as AI may produce Unicode characters
+    const sanitizedCVData: ServerlessCVData = {
+      first_name: sanitizeAIOutput(cvData.first_name),
+      last_name: sanitizeAIOutput(cvData.last_name),
+      email: cvData.email, // Keep email as-is
+      phone: cvData.phone ? sanitizeAIOutput(cvData.phone) : undefined,
+      location: cvData.location ? sanitizeAIOutput(cvData.location) : undefined,
+      linkedin_url: cvData.linkedin_url, // Keep URL as-is
+      experience_summary: cvData.experience_summary ? sanitizeAIOutput(cvData.experience_summary) : undefined,
+      work_history: cvData.work_history.map(w => ({
+        ...w,
+        company: sanitizeAIOutput(w.company),
+        position: sanitizeAIOutput(w.position),
+        location: w.location ? sanitizeAIOutput(w.location) : undefined,
+        highlights: w.highlights.map(h => sanitizeAIOutput(h)).filter(Boolean),
+      })),
+      education: cvData.education.map(e => ({
+        ...e,
+        institution: sanitizeAIOutput(e.institution),
+        degree: sanitizeAIOutput(e.degree),
+        area: sanitizeAIOutput(e.area),
+        location: e.location ? sanitizeAIOutput(e.location) : undefined,
+        highlights: e.highlights?.map(h => sanitizeAIOutput(h)).filter(Boolean),
+      })),
+      skills: cvData.skills.map(s => sanitizeAIOutput(s)).filter(Boolean),
+    }
+
     // Generate PDF
     let pdfBytes: Uint8Array
     try {
@@ -336,7 +364,7 @@ export async function POST(request: NextRequest) {
         const baseUrl = process.env.VERCEL_URL
           ? `https://${process.env.VERCEL_URL}`
           : 'https://jobsilver.com'
-        pdfBytes = await generateCVViaServerless(cvData, baseUrl)
+        pdfBytes = await generateCVViaServerless(sanitizedCVData, baseUrl)
       } else {
         // Use pdf-lib locally
         console.log('Using local pdf-lib for CV generation (development mode)')

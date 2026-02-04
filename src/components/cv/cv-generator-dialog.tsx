@@ -725,9 +725,9 @@ export function CVGeneratorDialog({
                       />
                     </div>
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs">Key Achievement</Label>
+                      <Label className="text-xs">Key Achievements</Label>
                       <Button
                         type="button"
                         variant="ghost"
@@ -749,17 +749,56 @@ export function CVGeneratorDialog({
                         )}
                       </Button>
                     </div>
-                    <Input
-                      value={work.highlights[0] || ""}
-                      onChange={(e) => updateWorkHistory(index, { highlights: [e.target.value] })}
-                      placeholder="e.g., Increased sales by 25%"
-                    />
+                    {/* Multiple achievements list */}
+                    <div className="space-y-2">
+                      {work.highlights.map((highlight, hIdx) => (
+                        <div key={hIdx} className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">•</span>
+                          <Input
+                            value={highlight}
+                            onChange={(e) => {
+                              const newHighlights = [...work.highlights]
+                              newHighlights[hIdx] = e.target.value
+                              updateWorkHistory(index, { highlights: newHighlights })
+                            }}
+                            placeholder="e.g., Increased sales by 25%"
+                            className="flex-1"
+                          />
+                          {work.highlights.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-zinc-400 hover:text-red-500"
+                              onClick={() => {
+                                const newHighlights = work.highlights.filter((_, i) => i !== hIdx)
+                                updateWorkHistory(index, { highlights: newHighlights })
+                              }}
+                            >
+                              ×
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          updateWorkHistory(index, { highlights: [...work.highlights, ""] })
+                        }}
+                        className="h-7 px-2 text-xs gap-1 text-zinc-500 hover:text-zinc-700"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add Achievement
+                      </Button>
+                    </div>
                     {/* AI Achievement Suggestions */}
                     {achievementSuggestions?.index === index && achievementSuggestions.suggestions.length > 0 && (
                       <div className="mt-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 space-y-2">
                         <p className="text-xs font-medium text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
                           <Sparkles className="w-3 h-3" />
-                          AI-suggested achievements (click to use):
+                          AI-suggested achievements (click to add):
                         </p>
                         <div className="space-y-1.5">
                           {achievementSuggestions.suggestions.map((achievement, achIdx) => (
@@ -767,12 +806,19 @@ export function CVGeneratorDialog({
                               key={achIdx}
                               type="button"
                               onClick={() => {
-                                updateWorkHistory(index, { highlights: [achievement] })
-                                setAchievementSuggestions(null)
+                                // Add to existing highlights instead of replacing
+                                const currentHighlights = work.highlights.filter(h => h.trim() !== "")
+                                updateWorkHistory(index, { highlights: [...currentHighlights, achievement] })
+                                // Remove the used suggestion
+                                setAchievementSuggestions(prev => prev ? {
+                                  ...prev,
+                                  suggestions: prev.suggestions.filter((_, i) => i !== achIdx)
+                                } : null)
                               }}
-                              className="w-full text-left px-2.5 py-1.5 rounded text-xs border border-blue-300 dark:border-blue-700 bg-white dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-800/50 transition-colors"
+                              className="w-full text-left px-2.5 py-1.5 rounded text-xs border border-blue-300 dark:border-blue-700 bg-white dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-800/50 transition-colors flex items-center gap-2"
                             >
-                              {achievement}
+                              <Plus className="w-3 h-3 flex-shrink-0" />
+                              <span>{achievement}</span>
                             </button>
                           ))}
                         </div>

@@ -48,6 +48,38 @@ function sanitizeForPrompt(input: string, maxLength: number): string {
 }
 
 /**
+ * Sanitize AI output for YAML/LaTeX compatibility
+ * Converts Unicode characters that break Python YAML parsing or LaTeX rendering
+ */
+export function sanitizeAIOutput(text: string): string {
+  if (!text) return ''
+  return text
+    // Smart single quotes → straight quote
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    // Smart double quotes → straight quote
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    // Em-dashes, en-dashes → hyphen
+    .replace(/[\u2013\u2014\u2015]/g, '-')
+    // Ellipsis → three dots
+    .replace(/\u2026/g, '...')
+    // Bullet points → hyphen
+    .replace(/[\u2022\u2023\u2043]/g, '-')
+    // Non-breaking space → regular space
+    .replace(/\u00A0/g, ' ')
+    // LaTeX special characters → space (safer than escaping)
+    .replace(/[&%$#_{}~^\\]/g, ' ')
+    // Other non-ASCII → attempt NFD normalization or remove
+    .replace(/[^\x00-\x7F]/g, char => {
+      const normalized = char.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      // If normalization produces ASCII, use it; otherwise remove
+      return /^[\x00-\x7F]*$/.test(normalized) ? normalized : ''
+    })
+    // Collapse multiple spaces
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
  * Generate AI-tailored CV content for a specific job
  * Uses gpt-4o-mini for cost efficiency (~$0.0006 per generation)
  */
@@ -136,11 +168,11 @@ Guidelines:
       topRoleHighlights?: string[]
     }
 
-    // Validate and sanitize the response
+    // Validate and sanitize the response (including Unicode cleanup for YAML/LaTeX)
     const tailoredContent: TailoredContent = {
-      summary: (result.summary || `Experienced professional seeking ${safeTitle} position at ${safeCompany}.`).slice(0, 1000),
+      summary: sanitizeAIOutput(result.summary || `Experienced professional seeking ${safeTitle} position at ${safeCompany}.`).slice(0, 1000),
       skills: result.skills?.length > 0
-        ? result.skills.map(s => String(s).slice(0, 100)).filter(Boolean)
+        ? result.skills.map(s => sanitizeAIOutput(String(s)).slice(0, 100)).filter(Boolean)
         : cvData.skills,
     }
 
@@ -151,7 +183,7 @@ Guidelines:
         0,
         result.topRoleHighlights
           .filter(h => typeof h === 'string' && h.length > 0)
-          .map(h => h.slice(0, 500))
+          .map(h => sanitizeAIOutput(h).slice(0, 500))
           .slice(0, 5)
       )
     }
