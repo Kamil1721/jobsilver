@@ -118,6 +118,7 @@ export function CVGeneratorDialog({
     const loadData = async () => {
       setIsLoading(true)
       setGeneratedUrl(null)
+      setShowReparseOption(false) // Reset on each load
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
@@ -154,6 +155,7 @@ export function CVGeneratorDialog({
         const hasEducation = baseData.education && baseData.education.length > 0 &&
           baseData.education.some(e => e.institution && e.degree)
 
+        // If work_history or education are empty, try to fill from cv_parsed_data
         if (profile?.cv_parsed_data && (!hasWorkHistory || !hasEducation)) {
           const parsedCV = profile.cv_parsed_data as unknown as ParsedCV
           const { screeningAnswers: mapped } = mapParsedCVToScreeningAnswers(parsedCV)
@@ -188,19 +190,23 @@ export function CVGeneratorDialog({
             baseData.experience_summary = mapped.experience_summary
           }
 
-          // Show appropriate toast based on what data was loaded
+          // Show toast if we loaded new data from parsed CV
           if (parsedHasWork || parsedHasEdu) {
             toast({
               title: "Data loaded from your CV",
               description: "We've added work experience and education from your uploaded CV.",
             })
-            setShowReparseOption(false)
-          } else if (!hasWorkHistory || !hasEducation) {
-            // CV was parsed but didn't extract work/education - show re-parse option
-            setShowReparseOption(true)
           }
-        } else if (!hasWorkHistory || !hasEducation) {
-          // No cv_parsed_data at all - check if there's a CV to re-parse
+        }
+
+        // Re-check final state after all loading attempts
+        const finalHasWork = baseData.work_history && baseData.work_history.length > 0 &&
+          baseData.work_history.some(w => w.company && w.position)
+        const finalHasEdu = baseData.education && baseData.education.length > 0 &&
+          baseData.education.some(e => e.institution && e.degree)
+
+        // Only show reparse option if data is STILL missing and there's a CV file
+        if (!finalHasWork || !finalHasEdu) {
           const { data: cvCheck } = await supabase
             .from("profiles")
             .select("cv_url")

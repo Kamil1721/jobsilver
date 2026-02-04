@@ -90,8 +90,22 @@ async function generateCVViaServerless(
     clearTimeout(timeoutId)
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }))
-      throw new Error(error.error || `Serverless function failed: ${response.status}`)
+      // Try to get error details - first as text, then parse
+      const responseText = await response.text().catch(() => '')
+      let errorMessage = `Serverless function failed: ${response.status}`
+
+      try {
+        const errorJson = JSON.parse(responseText)
+        errorMessage = errorJson.error || errorMessage
+      } catch {
+        // If not JSON, use the raw text (truncated)
+        if (responseText) {
+          console.error('Serverless non-JSON response:', responseText.slice(0, 500))
+          errorMessage = 'CV generation service error. Please try again.'
+        }
+      }
+
+      throw new Error(errorMessage)
     }
 
     const result = await response.json()
