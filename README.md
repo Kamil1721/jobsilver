@@ -8,7 +8,7 @@ A modern job search management application that helps users discover, track, and
 - **Kanban Board** - Visual job tracking with customizable columns (Discovered, Saved, Applied, Interviewing, Offer, Discarded)
 - **AI Assistant** - Get help crafting application answers, writing cover letters, and analyzing job fit
 - **CV Management** - Upload, parse, and generate optimized CVs
-- **Subscription Plans** - Free, Starter, Pro, and Mega tiers with different AI usage quotas
+- **Subscription Plans** - Free and Pro tiers with AI usage quotas
 
 ## Tech Stack
 
