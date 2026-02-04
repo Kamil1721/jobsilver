@@ -12,8 +12,8 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 import AdmZip from 'adm-zip'
-// @ts-expect-error - pdf-parse doesn't have types
-import pdfParse from 'pdf-parse'
+// pdf-parse v2+ uses named export
+import { PDFParse } from 'pdf-parse'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -223,8 +223,11 @@ export async function extractTextFromPDFAdobe(pdfBuffer: Buffer): Promise<string
  */
 export async function extractTextFromPDFBasic(pdfBuffer: Buffer): Promise<string> {
   try {
-    const data = await pdfParse(pdfBuffer)
-    const text = data.text || ''
+    // pdf-parse v2 uses class-based API
+    const parser = new PDFParse({ data: new Uint8Array(pdfBuffer) })
+    const result = await parser.getText()
+    const text = result.text || ''
+    parser.destroy()
     console.log('pdf-parse extraction successful, extracted', text.length, 'characters')
     return text.trim()
   } catch (error) {
