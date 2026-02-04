@@ -165,6 +165,20 @@ function toast({ ...props }: Toast) {
   }
 }
 
+/**
+ * Clear all toast state - call this on user sign out to prevent
+ * any possibility of toast messages leaking between users on shared devices
+ */
+function clearToastState() {
+  // Clear all pending timeouts
+  toastTimeouts.forEach((timeout) => clearTimeout(timeout))
+  toastTimeouts.clear()
+
+  // Reset state and notify listeners
+  memoryState = { toasts: [] }
+  listeners.forEach((listener) => listener(memoryState))
+}
+
 function useToast() {
   const [state, setState] = React.useState<State>(memoryState)
 
@@ -185,4 +199,4 @@ function useToast() {
   }
 }
 
-export { useToast, toast }
+export { useToast, toast, clearToastState }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,10 +18,25 @@ export const dynamic = 'force-dynamic'
  *
  * Schedule: Daily at 6 AM (runs alongside daily-curation)
  */
+/**
+ * Timing-safe string comparison to prevent timing attacks
+ */
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))
+}
+
 export async function GET(request: Request) {
-  // Verify cron secret (Vercel cron sends this automatically)
+  // Verify cron secret using timing-safe comparison
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret) {
+    console.error('Expired subscriptions cron: CRON_SECRET not configured')
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
+  }
+
   const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const expectedBearer = `Bearer ${cronSecret}`
+  if (!authHeader || authHeader.length !== expectedBearer.length || !safeCompare(authHeader, expectedBearer)) {
     console.error('Expired subscriptions cron: Unauthorized request')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

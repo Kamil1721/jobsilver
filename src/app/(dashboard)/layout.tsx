@@ -28,6 +28,8 @@ import {
 import { ThemeToggle } from "@/components/theme-toggle"
 import type { Profile, AllSubscriptionPlans } from "@/lib/supabase/types"
 import { ChatProvider } from "@/components/chat"
+import { clearChatState } from "@/hooks/use-chat"
+import { clearToastState } from "@/hooks/use-toast"
 import { ReportButton } from "@/components/report"
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext"
 import { UpgradeModal } from "@/components/upgrade-modal"
@@ -164,7 +166,9 @@ export default function DashboardLayout({
           window.location.reload()
         }
       } else if (event === 'SIGNED_OUT') {
-        // On sign out, redirect and refresh to clear state
+        // On sign out, clear all user-specific state to prevent data leakage
+        clearChatState() // Clear chat messages, job context, pending questions
+        clearToastState() // Clear any pending toast notifications
         setCurrentUserId(null)
         setProfile(null)
         setUserEmail("")

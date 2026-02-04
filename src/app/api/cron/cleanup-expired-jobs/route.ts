@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes max for Vercel
@@ -117,6 +118,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<CleanupSu
 }
 
 /**
+ * Timing-safe string comparison to prevent timing attacks
+ */
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))
+}
+
+/**
  * Authenticate cron request using CRON_SECRET
  */
 function authenticateCronRequest(request: NextRequest): { success: boolean; error?: string } {
@@ -129,13 +138,14 @@ function authenticateCronRequest(request: NextRequest): { success: boolean; erro
 
   // Check Authorization header (Vercel Cron format)
   const authHeader = request.headers.get('authorization')
-  if (authHeader === `Bearer ${cronSecret}`) {
+  const expectedBearer = `Bearer ${cronSecret}`
+  if (authHeader && authHeader.length === expectedBearer.length && safeCompare(authHeader, expectedBearer)) {
     return { success: true }
   }
 
   // Check X-Cron-Secret header (alternative format)
   const cronHeader = request.headers.get('x-cron-secret')
-  if (cronHeader === cronSecret) {
+  if (cronHeader && cronHeader.length === cronSecret.length && safeCompare(cronHeader, cronSecret)) {
     return { success: true }
   }
 

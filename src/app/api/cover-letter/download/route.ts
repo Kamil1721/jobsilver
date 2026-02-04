@@ -1,8 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Document, Packer, Paragraph, TextRun } from 'docx'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/security/rate-limit'
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit by IP to prevent abuse (no auth required for this endpoint)
+    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || request.headers.get('x-real-ip')
+      || 'anonymous'
+
+    const rateLimit = checkRateLimit(clientIp, RATE_LIMITS.standard, 'cover-letter-download')
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': rateLimit.limit.toString(),
+            'X-RateLimit-Remaining': rateLimit.remaining.toString(),
+            'X-RateLimit-Reset': rateLimit.resetAt.toString(),
+          }
+        }
+      )
+    }
+
     const { coverLetter, jobTitle, company } = await request.json()
 
     if (!coverLetter) {

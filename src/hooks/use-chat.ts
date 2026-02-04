@@ -194,6 +194,23 @@ export function clearMessages() {
   dispatch({ type: "CLEAR_MESSAGES" })
 }
 
+/**
+ * Clear all chat state - call this on user sign out to prevent
+ * any possibility of data leaking between users on shared devices
+ */
+export function clearChatState() {
+  memoryState = {
+    isOpen: false,
+    messages: [],
+    isStreaming: false,
+    jobContext: null,
+    position: 'bottom-right',
+    pendingQuestion: null,
+    applicationQuestions: null,
+  }
+  listeners.forEach((listener) => listener(memoryState))
+}
+
 export function setApplicationQuestions(questions: ApplicationQuestion[] | null) {
   dispatch({ type: "SET_APPLICATION_QUESTIONS", questions })
 }
