@@ -22,8 +22,6 @@ import {
   FileText,
   ExternalLink,
   CheckCircle2,
-  RefreshCw,
-  AlertCircle,
 } from "lucide-react"
 import type { ScreeningAnswers, Job } from "@/lib/supabase/types"
 import { mapParsedCVToScreeningAnswers, type ParsedCV } from "@/lib/cv/data-mapper"
@@ -67,8 +65,6 @@ export function CVGeneratorDialog({
   const [generatedUrl, setGeneratedUrl] = React.useState<string | null>(null)
   const [isLoadingAISkills, setIsLoadingAISkills] = React.useState(false)
   const [aiSkillSuggestions, setAiSkillSuggestions] = React.useState<string[]>([])
-  const [isReparsing, setIsReparsing] = React.useState(false)
-  const [showReparseOption, setShowReparseOption] = React.useState(false)
   // Achievement suggestions state - track per work entry index
   const [loadingAchievements, setLoadingAchievements] = React.useState<number | null>(null)
   const [achievementSuggestions, setAchievementSuggestions] = React.useState<{ index: number; suggestions: string[] } | null>(null)
@@ -118,7 +114,6 @@ export function CVGeneratorDialog({
     const loadData = async () => {
       setIsLoading(true)
       setGeneratedUrl(null)
-      setShowReparseOption(false) // Reset on each load
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
@@ -146,7 +141,14 @@ export function CVGeneratorDialog({
         // Start with screening_answers if available
         if (profile?.screening_answers) {
           const saved = profile.screening_answers as ScreeningAnswers
+          console.log('Loaded screening_answers:', {
+            hasWorkHistory: saved.work_history?.length,
+            hasEducation: saved.education?.length,
+            hasSkills: saved.skills?.length,
+          })
           baseData = { ...baseData, ...saved }
+        } else {
+          console.log('No screening_answers found in profile')
         }
 
         // If work_history or education are empty, try to fill from cv_parsed_data
@@ -196,25 +198,6 @@ export function CVGeneratorDialog({
               title: "Data loaded from your CV",
               description: "We've added work experience and education from your uploaded CV.",
             })
-          }
-        }
-
-        // Re-check final state after all loading attempts
-        const finalHasWork = baseData.work_history && baseData.work_history.length > 0 &&
-          baseData.work_history.some(w => w.company && w.position)
-        const finalHasEdu = baseData.education && baseData.education.length > 0 &&
-          baseData.education.some(e => e.institution && e.degree)
-
-        // Only show reparse option if data is STILL missing and there's a CV file
-        if (!finalHasWork || !finalHasEdu) {
-          const { data: cvCheck } = await supabase
-            .from("profiles")
-            .select("cv_url")
-            .eq("id", user.id)
-            .single()
-
-          if (cvCheck?.cv_url) {
-            setShowReparseOption(true)
           }
         }
 
@@ -392,73 +375,6 @@ export function CVGeneratorDialog({
     }
   }
 
-  const handleReparse = async () => {
-    setIsReparsing(true)
-    try {
-      const response = await fetch('/api/cv/reparse', {
-        method: 'POST',
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Re-parse failed')
-      }
-
-      // Successfully re-parsed - reload the form with new data
-      const parsedData = result.parsed_data as ParsedCV
-      const { screeningAnswers: mapped } = mapParsedCVToScreeningAnswers(parsedData)
-
-      // Update form with the newly parsed data
-      setScreeningAnswers(prev => {
-        const updated = { ...prev }
-
-        // Update work history if we got new data
-        if (mapped.work_history && mapped.work_history.length > 0 &&
-            mapped.work_history.some(w => w.company && w.position)) {
-          updated.work_history = mapped.work_history
-        }
-
-        // Update education if we got new data
-        if (mapped.education && mapped.education.length > 0 &&
-            mapped.education.some(e => e.institution && e.degree)) {
-          updated.education = mapped.education
-        }
-
-        // Update skills if we got new data
-        if (mapped.skills && mapped.skills.length > 0) {
-          updated.skills = mapped.skills
-        }
-
-        // Fill other fields if empty
-        if (!updated.first_name && mapped.first_name) updated.first_name = mapped.first_name
-        if (!updated.last_name && mapped.last_name) updated.last_name = mapped.last_name
-        if (!updated.city && mapped.city) updated.city = mapped.city
-        if (!updated.country && mapped.country) updated.country = mapped.country
-        if (!updated.experience_summary && mapped.experience_summary) {
-          updated.experience_summary = mapped.experience_summary
-        }
-
-        return updated
-      })
-
-      setShowReparseOption(false)
-
-      toast({
-        title: "CV re-parsed successfully",
-        description: result.message || `Found ${result.extracted?.experience || 0} work experiences and ${result.extracted?.education || 0} education entries.`,
-      })
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Re-parse failed",
-        description: error instanceof Error ? error.message : "Failed to re-parse CV. Please try again.",
-      })
-    } finally {
-      setIsReparsing(false)
-    }
-  }
-
   const handleGenerate = async () => {
     // Validate
     const workHistory = screeningAnswers.work_history || []
@@ -543,39 +459,6 @@ export function CVGeneratorDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Re-parse CV Banner */}
-        {showReparseOption && !isLoading && !generatedUrl && (
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50">
-            <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-            <div className="flex-1 space-y-2">
-              <p className="text-sm text-amber-800 dark:text-amber-200">
-                Your uploaded CV didn&apos;t include work history or education details.
-                Try re-parsing it, or fill in the information manually below.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleReparse}
-                disabled={isReparsing}
-                className="gap-1.5 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50"
-              >
-                {isReparsing ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Re-parsing CV...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Re-parse My CV
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        )}
-
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
@@ -613,6 +496,13 @@ export function CVGeneratorDialog({
           </div>
         ) : (
           <div className="space-y-6 py-4">
+            {/* Info banner */}
+            <div className="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/50 p-4">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                <strong>First time?</strong> Fill out your work experience and education below. Your information will be saved and pre-filled for future CV generations.
+              </p>
+            </div>
+
             {/* Personal Info */}
             <div className="space-y-4">
               <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Personal Information</h3>
