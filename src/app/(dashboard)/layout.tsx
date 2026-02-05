@@ -34,6 +34,7 @@ import { ReportButton } from "@/components/report"
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext"
 import { UpgradeModal } from "@/components/upgrade-modal"
 import { TesterBadge } from "@/components/dashboard/TesterBadge"
+import { AnnouncementBanner } from "@/components/dashboard/announcement-banner"
 import { getPlanLimits } from "@/lib/stripe/plans"
 import { PublicFooter } from "@/components/public-footer"
 
@@ -271,40 +272,46 @@ export default function DashboardLayout({
             </Link>
           </div>
 
-          {/* Center - System Messages Banner */}
-          {!isInOnboarding && visibleMessages.length > 0 && (
+          {/* Center - System Messages Banner or Announcement Banner */}
+          {!isInOnboarding && (
             <div className="flex-1 flex items-center justify-center px-4 max-w-2xl mx-auto">
-              {visibleMessages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm w-full",
-                    msg.type === 'warning' && "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20",
-                    msg.type === 'info' && "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20",
-                    msg.type === 'error' && "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-500/20"
-                  )}
-                >
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span className="flex-1 truncate">{msg.message}</span>
-                  {msg.action && (
-                    <Link
-                      href={msg.action.href || '#'}
-                      onClick={msg.action.onClick}
-                      className="shrink-0 font-medium underline underline-offset-2 hover:no-underline"
-                    >
-                      {msg.action.label}
-                    </Link>
-                  )}
-                  {msg.dismissible && (
-                    <button
-                      onClick={() => dismissMessage(msg.id)}
-                      className="shrink-0 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              ))}
+              {visibleMessages.length > 0 ? (
+                // System messages take priority
+                visibleMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm w-full",
+                      msg.type === 'warning' && "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20",
+                      msg.type === 'info' && "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20",
+                      msg.type === 'error' && "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-500/20"
+                    )}
+                  >
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span className="flex-1 truncate">{msg.message}</span>
+                    {msg.action && (
+                      <Link
+                        href={msg.action.href || '#'}
+                        onClick={msg.action.onClick}
+                        className="shrink-0 font-medium underline underline-offset-2 hover:no-underline"
+                      >
+                        {msg.action.label}
+                      </Link>
+                    )}
+                    {msg.dismissible && (
+                      <button
+                        onClick={() => dismissMessage(msg.id)}
+                        className="shrink-0 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))
+              ) : (
+                // Show announcement banner when no system messages
+                <AnnouncementBanner plan={(profile?.subscription_plan || 'free') as 'free' | 'pro'} />
+              )}
             </div>
           )}
 
@@ -360,7 +367,7 @@ export default function DashboardLayout({
                     </DropdownMenuItem>
                     {isAdmin && (
                       <DropdownMenuItem asChild className="cursor-pointer">
-                        <Link href="/admin" className="flex items-center">
+                        <Link href="/control-k7x9m2p4" className="flex items-center">
                           <Shield className="mr-2 h-4 w-4" />
                           Admin
                         </Link>

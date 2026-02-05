@@ -505,3 +505,29 @@
     display: none !important;
   }
 }
+
+/* ============================================
+   ANNOUNCEMENT BANNER MARQUEE
+   ============================================ */
+
+/* Marquee animation for scrolling announcements */
+@keyframes marquee {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 20s linear infinite; /* Slow scroll - 20 seconds per cycle */
+}
+
+/* Respect user's reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee {
+    animation: none;
+    transform: none;
+  }
+}

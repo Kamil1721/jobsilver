@@ -276,3 +276,49 @@ export function createAuditContext(request: Request): {
     requestId: generateRequestId(),
   }
 }
+
+// ============================================
+// DATABASE AUDIT LOGGING
+// ============================================
+
+import type { AuditLogAction, AuditLogTargetType } from '@/lib/supabase/types'
+
+/**
+ * Log an admin action to the database for persistent audit trail.
+ * This is in addition to the console logging above.
+ *
+ * @param supabase - Supabase client (server-side)
+ * @param options - Audit log options
+ */
+export async function logAdminActionToDb(
+  supabase: { from: (table: string) => { insert: (data: Record<string, unknown>) => PromiseLike<{ error: unknown | null }> } },
+  options: {
+    adminId: string
+    adminEmail: string
+    action: AuditLogAction
+    targetType?: AuditLogTargetType
+    targetId?: string
+    details?: Record<string, unknown>
+    ipAddress?: string
+  }
+): Promise<void> {
+  try {
+    const result = await supabase.from('admin_audit_logs').insert({
+      admin_id: options.adminId,
+      admin_email: options.adminEmail,
+      action: options.action,
+      target_type: options.targetType || null,
+      target_id: options.targetId || null,
+      details: options.details ? redactSensitiveData(options.details) : null,
+      ip_address: options.ipAddress || null,
+    })
+
+    if (result?.error) {
+      // Don't fail the main operation if audit logging fails
+      // but do log the error for monitoring
+      console.error('[AUDIT:ERROR] Failed to write audit log to database:', result.error)
+    }
+  } catch (err) {
+    console.error('[AUDIT:ERROR] Exception writing audit log:', err)
+  }
+}

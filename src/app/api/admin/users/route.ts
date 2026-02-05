@@ -17,7 +17,7 @@ import {
   getRateLimitHeaders,
   RATE_LIMITS,
 } from '@/lib/security/rate-limit'
-import { logAdminAction, createAuditContext } from '@/lib/security/audit-log'
+import { logAdminAction, createAuditContext, logAdminActionToDb } from '@/lib/security/audit-log'
 
 export const dynamic = 'force-dynamic'
 
@@ -187,22 +187,15 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json(bodyValidation.error, { status: 400 })
     }
 
-    const { user_id, subscription_plan, is_admin, is_tester } = bodyValidation.data
+    const { user_id, is_tester } = bodyValidation.data
 
     const supabase = await createClient()
 
-    // UUID is already validated by Zod schema
+    // SECURITY: Only is_tester can be modified through admin UI
+    // - subscription_plan changes ONLY via Stripe webhooks (prevents billing bypass)
+    // - is_admin changes ONLY via ADMIN_EMAILS env var (prevents privilege escalation)
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
-    }
-
-    if (subscription_plan !== undefined) {
-      updateData.subscription_plan = subscription_plan
-      updateData.subscription_started_at = new Date().toISOString()
-    }
-
-    if (is_admin !== undefined) {
-      updateData.is_admin = is_admin
     }
 
     if (is_tester !== undefined) {
@@ -211,6 +204,13 @@ export async function PATCH(request: NextRequest) {
         updateData.tester_invite_code = 'ADMIN_GRANTED'
       }
     }
+
+    // Get target user email for audit log
+    const { data: targetUser } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('id', user_id)
+      .single()
 
     const { error } = await supabase
       .from('profiles')
@@ -221,6 +221,36 @@ export async function PATCH(request: NextRequest) {
       console.error('Error updating user:', error)
       return NextResponse.json({ error: 'Failed to update user' }, { status: 500 })
     }
+
+    // P2 FIX: Add audit logging for user PATCH operations
+    const auditContext = createAuditContext(request)
+
+    // Console audit log
+    logAdminAction('admin.user_updated', {
+      adminUserId: adminAuth.user?.id || 'unknown',
+      targetUserId: user_id,
+      ip: auditContext.ip,
+      action: is_tester ? 'grant_tester' : 'revoke_tester',
+      details: {
+        targetEmail: targetUser?.email,
+        is_tester,
+        updatedAt: new Date().toISOString(),
+      },
+    })
+
+    // Database audit log
+    await logAdminActionToDb(supabase, {
+      adminId: adminAuth.user?.id || 'unknown',
+      adminEmail: adminAuth.user?.email || 'unknown',
+      action: is_tester ? 'tester_granted' : 'tester_revoked',
+      targetType: 'user',
+      targetId: user_id,
+      details: {
+        targetEmail: targetUser?.email,
+        is_tester,
+      },
+      ipAddress: auditContext.ip,
+    })
 
     return NextResponse.json(
       { success: true, user_id },

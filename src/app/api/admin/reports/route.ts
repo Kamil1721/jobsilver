@@ -14,6 +14,7 @@ import {
   getRateLimitHeaders,
   RATE_LIMITS,
 } from '@/lib/security/rate-limit'
+import { logAdminAction, createAuditContext, logAdminActionToDb } from '@/lib/security/audit-log'
 
 export const dynamic = 'force-dynamic'
 
@@ -297,6 +298,35 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to update report' }, { status: 500 })
     }
 
+    // P2 FIX: Add audit logging for report PATCH operations
+    const auditContext = createAuditContext(request)
+
+    // Console audit log
+    logAdminAction('admin.settings_changed', {
+      adminUserId: adminAuth.user?.id || 'unknown',
+      ip: auditContext.ip,
+      action: 'update_report',
+      details: {
+        reportId: report_id,
+        newStatus: status,
+        updatedAt: new Date().toISOString(),
+      },
+    })
+
+    // Database audit log
+    await logAdminActionToDb(supabase, {
+      adminId: adminAuth.user?.id || 'unknown',
+      adminEmail: adminAuth.user?.email || 'unknown',
+      action: 'report_status_changed',
+      targetType: 'report',
+      targetId: report_id,
+      details: {
+        newStatus: status,
+        adminNotes: admin_notes ? '[REDACTED]' : undefined,
+      },
+      ipAddress: auditContext.ip,
+    })
+
     return NextResponse.json(
       { success: true, report },
       { headers: getRateLimitHeaders(rateLimit) }
@@ -360,6 +390,35 @@ export async function DELETE(request: NextRequest) {
       console.error('Error deleting reports:', error)
       return NextResponse.json({ error: 'Failed to delete reports' }, { status: 500 })
     }
+
+    // P2 FIX: Add audit logging for report DELETE operations
+    const auditContext = createAuditContext(request)
+
+    // Console audit log
+    logAdminAction('admin.settings_changed', {
+      adminUserId: adminAuth.user?.id || 'unknown',
+      ip: auditContext.ip,
+      action: 'delete_reports',
+      details: {
+        reportIds: report_ids,
+        deletedCount: count || report_ids.length,
+        deletedAt: new Date().toISOString(),
+      },
+    })
+
+    // Database audit log
+    await logAdminActionToDb(supabase, {
+      adminId: adminAuth.user?.id || 'unknown',
+      adminEmail: adminAuth.user?.email || 'unknown',
+      action: 'report_deleted',
+      targetType: 'report',
+      targetId: report_ids.join(','),
+      details: {
+        reportCount: report_ids.length,
+        deletedCount: count || report_ids.length,
+      },
+      ipAddress: auditContext.ip,
+    })
 
     return NextResponse.json(
       { success: true, deleted: count || report_ids.length },

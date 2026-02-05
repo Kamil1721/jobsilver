@@ -1733,6 +1733,7 @@ export interface ActiveAnnouncement {
   message: string
   type: AnnouncementType
   priority: number
+  updated_at: string // Used to track if announcement was restarted/updated
 }
 
 // ============================================
@@ -1746,6 +1747,7 @@ export type AuditLogAction =
   | 'invite_generated'
   | 'invite_revoked'
   | 'report_updated'
+  | 'report_status_changed'
   | 'report_deleted'
   | 'user_deleted'
   | 'announcement_created'

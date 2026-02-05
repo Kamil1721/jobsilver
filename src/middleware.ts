@@ -127,18 +127,18 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Protect admin routes - check both email list and is_admin flag
-  if (request.nextUrl.pathname.startsWith('/admin')) {
+  // Protect admin routes - secret URL for security
+  // SECURITY: Return 404 for non-admins to hide admin panel existence
+  if (request.nextUrl.pathname.startsWith('/control-k7x9m2p4')) {
     if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url))
+      // Return 404 to hide admin panel existence from unauthenticated users
+      return new NextResponse(null, { status: 404 })
     }
 
     // Check if user email is in admin list
     const emailIsAdmin = isAdminEmail(user.email)
 
     // If not in email list, check the database is_admin flag
-    // Note: For middleware performance, we first check the fast email check
-    // The API routes will do the full database check as well
     if (!emailIsAdmin) {
       // Fetch is_admin from database
       const { data: profile } = await supabase
@@ -150,10 +150,15 @@ export async function middleware(request: NextRequest) {
       const dbIsAdmin = profile?.is_admin === true
 
       if (!dbIsAdmin) {
-        // Redirect non-admin users to dashboard
-        return NextResponse.redirect(new URL('/dashboard', request.url))
+        // Return 404 to hide admin panel existence from non-admin users
+        return new NextResponse(null, { status: 404 })
       }
     }
+  }
+
+  // Legacy /admin path - return 404 to prevent discovery
+  if (request.nextUrl.pathname.startsWith('/admin')) {
+    return new NextResponse(null, { status: 404 })
   }
 
   // Redirect logged-in users from login page

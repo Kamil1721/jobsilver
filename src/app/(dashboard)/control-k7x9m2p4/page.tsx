@@ -66,8 +66,16 @@ import {
   Copy,
   UserMinus,
   Ticket,
+  Megaphone,
+  ClipboardList,
+  Plus,
+  Edit,
+  Power,
+  Clock,
 } from "lucide-react"
-import type { SubscriptionPlan, ReportType, ReportStatus } from "@/lib/supabase/types"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import type { SubscriptionPlan, ReportType, ReportStatus, AdminAnnouncement, AnnouncementType, AdminAuditLog } from "@/lib/supabase/types"
 
 // Admin access is now determined by is_admin flag in database
 // which is set based on ADMIN_EMAILS environment variable
@@ -197,6 +205,20 @@ export default function AdminPage() {
   const [testerToRemove, setTesterToRemove] = React.useState<Tester | null>(null)
   const [inviteToRevoke, setInviteToRevoke] = React.useState<TesterInvite | null>(null)
   const [copiedInviteId, setCopiedInviteId] = React.useState<string | null>(null)
+  // Announcements state
+  const [announcements, setAnnouncements] = React.useState<AdminAnnouncement[]>([])
+  const [selectedAnnouncement, setSelectedAnnouncement] = React.useState<AdminAnnouncement | null>(null)
+  const [isCreatingAnnouncement, setIsCreatingAnnouncement] = React.useState(false)
+  const [announcementForm, setAnnouncementForm] = React.useState({
+    message: '',
+    type: 'info' as AnnouncementType,
+    priority: 0,
+    target_plans: null as string[] | null,
+    is_active: true,
+  })
+  // Activity log state
+  const [auditLogs, setAuditLogs] = React.useState<AdminAuditLog[]>([])
+  const [auditLogsLoading, setAuditLogsLoading] = React.useState(false)
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
@@ -238,6 +260,8 @@ export default function AdminPage() {
       fetchUsers()
       fetchReports()
       fetchTesters()
+      fetchAnnouncements()
+      fetchAuditLogs()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Only fetch once when isAdmin becomes true
   }, [isAdmin])
@@ -354,6 +378,47 @@ export default function AdminPage() {
     }
   }
 
+  const fetchAnnouncements = async () => {
+    try {
+      const res = await fetch("/api/admin/announcements")
+      if (!res.ok) throw new Error("Failed to fetch announcements")
+      const data = await res.json()
+      setAnnouncements(data.announcements || [])
+    } catch (error) {
+      console.error("Error fetching announcements:", error)
+    }
+  }
+
+  const fetchAuditLogs = async () => {
+    setAuditLogsLoading(true)
+    try {
+      // For now, fetch from the database directly through supabase client
+      // A proper API endpoint would be better for pagination
+      const { data, error } = await supabase
+        .from('admin_audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100)
+
+      if (error) {
+        // P0 FIX: Gracefully handle missing table (migration not run)
+        const errorMessage = error.message || ''
+        const errorCode = (error as { code?: string }).code
+        if (errorCode === '42P01' || errorMessage.includes('does not exist') || errorMessage.includes('relation')) {
+          console.warn('[Audit Logs] Table admin_audit_logs does not exist. Run migration 20260205_admin_improvements.sql')
+          setAuditLogs([])
+          return
+        }
+        throw error
+      }
+      setAuditLogs(data || [])
+    } catch (error) {
+      console.error("Error fetching audit logs:", error)
+    } finally {
+      setAuditLogsLoading(false)
+    }
+  }
+
   const generateInviteCode = async () => {
     setIsGeneratingInvite(true)
     try {
@@ -425,6 +490,70 @@ export default function AdminPage() {
     setTimeout(() => setCopiedInviteId(null), 2000)
   }
 
+  // Announcement management functions
+  const createAnnouncement = async () => {
+    try {
+      const res = await fetch("/api/admin/announcements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(announcementForm),
+      })
+      if (!res.ok) throw new Error("Failed to create announcement")
+      toast({ title: "Success", description: "Announcement created" })
+      fetchAnnouncements()
+      setIsCreatingAnnouncement(false)
+      setAnnouncementForm({ message: '', type: 'info', priority: 0, target_plans: null, is_active: true })
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to create announcement", variant: "destructive" })
+    }
+  }
+
+  const updateAnnouncement = async (id: string, updates: Partial<AdminAnnouncement>) => {
+    try {
+      const res = await fetch("/api/admin/announcements", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...updates }),
+      })
+      if (!res.ok) throw new Error("Failed to update announcement")
+      toast({ title: "Success", description: "Announcement updated" })
+      fetchAnnouncements()
+      setSelectedAnnouncement(null)
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to update announcement", variant: "destructive" })
+    }
+  }
+
+  const deleteAnnouncement = async (id: string) => {
+    try {
+      const res = await fetch("/api/admin/announcements", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+      if (!res.ok) throw new Error("Failed to delete announcement")
+      toast({ title: "Success", description: "Announcement deleted" })
+      fetchAnnouncements()
+      setSelectedAnnouncement(null)
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to delete announcement", variant: "destructive" })
+    }
+  }
+
+  const getAnnouncementTypeBadgeColor = (type: AnnouncementType) => {
+    switch (type) {
+      case "info": return "bg-blue-500/20 text-blue-400"
+      case "warning": return "bg-amber-500/20 text-amber-400"
+      case "promo": return "bg-purple-500/20 text-purple-400"
+      case "maintenance": return "bg-red-500/20 text-red-400"
+      default: return "bg-gray-500/20 text-gray-400"
+    }
+  }
+
+  const formatAuditAction = (action: string) => {
+    return action.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
+  }
+
   const getInviteStatusBadgeColor = (status: TesterInviteStatus) => {
     switch (status) {
       case "active": return "bg-emerald-500/20 text-emerald-400"
@@ -471,22 +600,7 @@ export default function AdminPage() {
     }
   }
 
-  const updateUserPlan = async (userId: string, plan: SubscriptionPlan) => {
-    try {
-      const res = await fetch("/api/admin/users", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, subscription_plan: plan }),
-      })
-      if (!res.ok) throw new Error("Failed to update user")
-      toast({ title: "Success", description: "User plan updated successfully" })
-      fetchUsers()
-      fetchTesters()
-      setSelectedUser(null)
-    } catch (error) {
-      toast({ title: "Error", description: "Failed to update user", variant: "destructive" })
-    }
-  }
+  // SECURITY: updateUserPlan removed - subscription changes ONLY via Stripe webhooks
 
   const toggleTesterStatus = async (userId: string, currentStatus: boolean) => {
     try {
@@ -615,7 +729,7 @@ export default function AdminPage() {
             Manage users, review reports, and monitor API usage
           </p>
         </div>
-        <Button onClick={() => { fetchUsers(); fetchReports(); fetchTesters() }} variant="outline" className="gap-2">
+        <Button onClick={() => { fetchUsers(); fetchReports(); fetchTesters(); fetchAnnouncements(); fetchAuditLogs() }} variant="outline" className="gap-2">
           <RefreshCw className="w-4 h-4" />
           Refresh All
         </Button>
@@ -683,6 +797,14 @@ export default function AdminPage() {
           <TabsTrigger value="testers" className="gap-2">
             <FlaskConical className="w-4 h-4" />
             Testers ({testerStats.total_testers})
+          </TabsTrigger>
+          <TabsTrigger value="announcements" className="gap-2">
+            <Megaphone className="w-4 h-4" />
+            Announcements ({announcements.length})
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="gap-2">
+            <ClipboardList className="w-4 h-4" />
+            Activity Log
           </TabsTrigger>
         </TabsList>
 
@@ -1206,6 +1328,206 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Announcements Tab */}
+        <TabsContent value="announcements" className="space-y-6">
+          <Card className="bg-card/50 border-border">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Megaphone className="w-5 h-5 text-purple-500" />
+                    Banner Announcements
+                  </CardTitle>
+                  <CardDescription>Manage scrolling announcements shown in the dashboard header</CardDescription>
+                </div>
+                <Button
+                  onClick={() => setIsCreatingAnnouncement(true)}
+                  className="gap-2 bg-purple-600 hover:bg-purple-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  Create Announcement
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Message</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead>Target</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {announcements.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        No announcements yet. Click &quot;Create Announcement&quot; to add one.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    announcements.map((ann) => (
+                      <TableRow key={ann.id}>
+                        <TableCell>
+                          <p className="max-w-xs truncate">{ann.message}</p>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getAnnouncementTypeBadgeColor(ann.type)}>
+                            {ann.type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{ann.priority}</TableCell>
+                        <TableCell>
+                          {ann.target_plans ? (
+                            <span className="text-xs">{ann.target_plans.join(', ')}</span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">All plans</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={ann.is_active ? "default" : "secondary"}>
+                            {ann.is_active ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setSelectedAnnouncement(ann)}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => updateAnnouncement(ann.id, { is_active: !ann.is_active })}
+                            >
+                              <Power className={`w-4 h-4 ${ann.is_active ? 'text-green-400' : 'text-red-400'}`} />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-400"
+                              onClick={() => deleteAnnouncement(ann.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          {/* Preview Card */}
+          <Card className="bg-card/50 border-border">
+            <CardHeader>
+              <CardTitle className="text-sm">Preview</CardTitle>
+              <CardDescription>How announcements appear in the dashboard header</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 overflow-hidden">
+                <div className="flex-1 overflow-hidden">
+                  <span className="inline-block whitespace-nowrap animate-marquee motion-reduce:animate-none">
+                    {announcements.find(a => a.is_active)?.message || "Your announcement message will scroll here..."}
+                  </span>
+                </div>
+                <button className="shrink-0 p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10">
+                  <XCircle className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Activity Log Tab */}
+        <TabsContent value="activity" className="space-y-6">
+          <Card className="bg-card/50 border-border">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <ClipboardList className="w-5 h-5 text-zinc-500" />
+                    Activity Log
+                  </CardTitle>
+                  <CardDescription>Audit trail of all admin actions</CardDescription>
+                </div>
+                <Button
+                  onClick={fetchAuditLogs}
+                  variant="outline"
+                  className="gap-2"
+                  disabled={auditLogsLoading}
+                >
+                  <RefreshCw className={`w-4 h-4 ${auditLogsLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Admin</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Target</TableHead>
+                    <TableHead>Details</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {auditLogs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        {auditLogsLoading ? "Loading..." : "No activity recorded yet"}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    auditLogs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {formatDate(log.created_at)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">{log.admin_email}</span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {formatAuditAction(log.action)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {log.target_type && (
+                            <span className="text-xs">
+                              {log.target_type}: {log.target_id?.substring(0, 8)}...
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {log.details && (
+                            <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                              {JSON.stringify(log.details).substring(0, 50)}...
+                            </code>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* User Edit Dialog */}
@@ -1218,20 +1540,17 @@ export default function AdminPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div>
-              <label className="text-sm font-medium">Subscription Plan</label>
-              <Select
-                value={selectedUser?.subscription_plan || "free"}
-                onValueChange={(v) => selectedUser && updateUserPlan(selectedUser.id, v as SubscriptionPlan)}
-              >
-                <SelectTrigger className="mt-2">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="free">Free (3 jobs/day, no AI)</SelectItem>
-                  <SelectItem value="pro">Pro (50 jobs/day, unlimited AI)</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* Current Plan Display (read-only) */}
+            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+              <div>
+                <p className="text-sm font-medium">Subscription Plan</p>
+                <p className="text-xs text-muted-foreground">
+                  Plan changes only via Stripe billing
+                </p>
+              </div>
+              <Badge className={getPlanBadgeColor(selectedUser?.subscription_plan || "free")}>
+                {selectedUser?.subscription_plan || "free"}
+              </Badge>
             </div>
 
             {/* Tester Status Toggle */}
@@ -1551,6 +1870,202 @@ ${selectedReport.description}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create Announcement Dialog */}
+      <Dialog open={isCreatingAnnouncement} onOpenChange={setIsCreatingAnnouncement}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Announcement</DialogTitle>
+            <DialogDescription>
+              Create a new banner announcement for dashboard users
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="message">Message</Label>
+              <Textarea
+                id="message"
+                value={announcementForm.message}
+                onChange={(e) => setAnnouncementForm(f => ({ ...f, message: e.target.value }))}
+                placeholder="Your announcement message..."
+                className="mt-2"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="type">Type</Label>
+                <Select
+                  value={announcementForm.type}
+                  onValueChange={(v) => setAnnouncementForm(f => ({ ...f, type: v as AnnouncementType }))}
+                >
+                  <SelectTrigger className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="info">Info (Blue)</SelectItem>
+                    <SelectItem value="warning">Warning (Amber)</SelectItem>
+                    <SelectItem value="promo">Promo (Purple)</SelectItem>
+                    <SelectItem value="maintenance">Maintenance (Red)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="priority">Priority</Label>
+                <Input
+                  id="priority"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={announcementForm.priority}
+                  onChange={(e) => setAnnouncementForm(f => ({ ...f, priority: parseInt(e.target.value) || 0 }))}
+                  className="mt-2"
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Target Plans</Label>
+              <div className="flex gap-4 mt-2">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={announcementForm.target_plans === null}
+                    onCheckedChange={(checked) => setAnnouncementForm(f => ({
+                      ...f,
+                      target_plans: checked ? null : ['free']
+                    }))}
+                  />
+                  <span className="text-sm">All plans</span>
+                </div>
+                {announcementForm.target_plans !== null && (
+                  <div className="flex gap-2">
+                    <Badge
+                      variant={announcementForm.target_plans.includes('free') ? 'default' : 'outline'}
+                      className="cursor-pointer"
+                      onClick={() => setAnnouncementForm(f => ({
+                        ...f,
+                        target_plans: f.target_plans?.includes('free')
+                          ? f.target_plans.filter(p => p !== 'free')
+                          : [...(f.target_plans || []), 'free']
+                      }))}
+                    >
+                      Free
+                    </Badge>
+                    <Badge
+                      variant={announcementForm.target_plans.includes('pro') ? 'default' : 'outline'}
+                      className="cursor-pointer"
+                      onClick={() => setAnnouncementForm(f => ({
+                        ...f,
+                        target_plans: f.target_plans?.includes('pro')
+                          ? f.target_plans.filter(p => p !== 'pro')
+                          : [...(f.target_plans || []), 'pro']
+                      }))}
+                    >
+                      Pro
+                    </Badge>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={announcementForm.is_active}
+                onCheckedChange={(checked) => setAnnouncementForm(f => ({ ...f, is_active: checked }))}
+              />
+              <Label>Active immediately</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreatingAnnouncement(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={createAnnouncement}
+              disabled={!announcementForm.message.trim()}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Announcement Dialog */}
+      <Dialog open={!!selectedAnnouncement} onOpenChange={() => setSelectedAnnouncement(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Announcement</DialogTitle>
+            <DialogDescription>
+              Update the announcement details
+            </DialogDescription>
+          </DialogHeader>
+          {selectedAnnouncement && (
+            <div className="space-y-4 py-4">
+              <div>
+                <Label htmlFor="edit-message">Message</Label>
+                <Textarea
+                  id="edit-message"
+                  defaultValue={selectedAnnouncement.message}
+                  onChange={(e) => setSelectedAnnouncement(a => a ? { ...a, message: e.target.value } : null)}
+                  className="mt-2"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-type">Type</Label>
+                  <Select
+                    value={selectedAnnouncement.type}
+                    onValueChange={(v) => setSelectedAnnouncement(a => a ? { ...a, type: v as AnnouncementType } : null)}
+                  >
+                    <SelectTrigger className="mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="info">Info (Blue)</SelectItem>
+                      <SelectItem value="warning">Warning (Amber)</SelectItem>
+                      <SelectItem value="promo">Promo (Purple)</SelectItem>
+                      <SelectItem value="maintenance">Maintenance (Red)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="edit-priority">Priority</Label>
+                  <Input
+                    id="edit-priority"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={selectedAnnouncement.priority}
+                    onChange={(e) => setSelectedAnnouncement(a => a ? { ...a, priority: parseInt(e.target.value) || 0 } : null)}
+                    className="mt-2"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={selectedAnnouncement.is_active}
+                  onCheckedChange={(checked) => setSelectedAnnouncement(a => a ? { ...a, is_active: checked } : null)}
+                />
+                <Label>Active</Label>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedAnnouncement(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => selectedAnnouncement && updateAnnouncement(selectedAnnouncement.id, {
+                message: selectedAnnouncement.message,
+                type: selectedAnnouncement.type,
+                priority: selectedAnnouncement.priority,
+                is_active: selectedAnnouncement.is_active,
+              })}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   )
 }
