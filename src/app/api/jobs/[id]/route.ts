@@ -15,6 +15,9 @@ const MAX_ANSWER_KEY_LENGTH = 200
 const MAX_ANSWER_VALUE_LENGTH = 10000  // 10KB per answer
 const MAX_ANSWER_ENTRIES = 50
 
+// Maximum size for notes
+const MAX_NOTES_LENGTH = 50000
+
 // Validation schema for application_answers
 const applicationAnswersSchema = z.record(
   z.string().max(MAX_ANSWER_KEY_LENGTH, `Question key must be under ${MAX_ANSWER_KEY_LENGTH} characters`),
@@ -118,7 +121,7 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { status, application_answers } = body
+    const { status, application_answers, notes } = body
 
     const updateData: Record<string, unknown> = {}
 
@@ -150,6 +153,16 @@ export async function PATCH(
         )
       }
       updateData.application_answers = application_answers
+    }
+
+    if (notes !== undefined) {
+      if (notes !== null && typeof notes !== 'string') {
+        return NextResponse.json({ error: 'Notes must be a string or null' }, { status: 400 })
+      }
+      if (notes && notes.length > MAX_NOTES_LENGTH) {
+        return NextResponse.json({ error: `Notes must be under ${MAX_NOTES_LENGTH} characters` }, { status: 400 })
+      }
+      updateData.notes = notes
     }
 
     const { data: job, error } = await supabase

@@ -185,6 +185,8 @@ export interface Database {
           failure_reviewed: boolean
           failure_reviewed_at: string | null
           failure_notes: string | null
+          // User notes
+          notes: string | null
         }
         Insert: {
           id?: string
@@ -225,6 +227,8 @@ export interface Database {
           failure_reviewed?: boolean
           failure_reviewed_at?: string | null
           failure_notes?: string | null
+          // User notes
+          notes?: string | null
         }
         Update: {
           id?: string
@@ -265,6 +269,8 @@ export interface Database {
           failure_reviewed?: boolean
           failure_reviewed_at?: string | null
           failure_notes?: string | null
+          // User notes
+          notes?: string | null
         }
       }
       user_job_quotas: {
@@ -1697,6 +1703,74 @@ export interface TesterInviteWithCreator extends TesterInvite {
     email: string | null
     full_name: string | null
   }
+}
+
+// ============================================
+// ADMIN ANNOUNCEMENT TYPES
+// ============================================
+
+// Announcement type enum
+export type AnnouncementType = 'info' | 'warning' | 'promo' | 'maintenance'
+
+// Announcement record from database
+export interface AdminAnnouncement {
+  id: string
+  message: string
+  type: AnnouncementType
+  priority: number
+  target_plans: string[] | null // null = all plans
+  starts_at: string
+  ends_at: string | null
+  is_active: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+// Announcement for display (subset of fields)
+export interface ActiveAnnouncement {
+  id: string
+  message: string
+  type: AnnouncementType
+  priority: number
+}
+
+// ============================================
+// ADMIN AUDIT LOG TYPES
+// ============================================
+
+// Audit log action types
+export type AuditLogAction =
+  | 'tester_granted'
+  | 'tester_revoked'
+  | 'invite_generated'
+  | 'invite_revoked'
+  | 'report_updated'
+  | 'report_deleted'
+  | 'user_deleted'
+  | 'announcement_created'
+  | 'announcement_updated'
+  | 'announcement_deleted'
+
+// Audit log target types
+export type AuditLogTargetType = 'user' | 'report' | 'tester' | 'announcement' | 'invite'
+
+// Audit log record from database
+export interface AdminAuditLog {
+  id: string
+  admin_id: string
+  admin_email: string
+  action: AuditLogAction
+  target_type: AuditLogTargetType | null
+  target_id: string | null
+  details: Record<string, unknown> | null
+  ip_address: string | null
+  created_at: string
+}
+
+// Audit log with enriched admin info for display
+export interface AdminAuditLogWithAdmin extends AdminAuditLog {
+  admin_name?: string | null
 }
 
 // ============================================

@@ -17,6 +17,7 @@ import { useSubscription } from "@/contexts/SubscriptionContext"
 import { JobAIChat } from "@/components/ai-assistant"
 import { CVGeneratorDialog } from "@/components/cv"
 import { FeatureGate } from "@/components/ui/feature-gate"
+import { JobNotes } from "@/components/job-notes"
 
 export default function JobDetailPage() {
   const params = useParams()
@@ -34,6 +35,10 @@ export default function JobDetailPage() {
   const [preferenceReasons, setPreferenceReasons] = React.useState<string[]>([])
   const { plan, isTester } = useSubscription()
   const isPremium = plan === "pro" || plan === "mega" || isTester
+
+  const handleNotesChange = React.useCallback((notes: string) => {
+    setJob(prev => prev ? { ...prev, notes } : null)
+  }, [])
 
   React.useEffect(() => {
     const fetchData = async () => {
@@ -228,18 +233,9 @@ export default function JobDetailPage() {
                 variant="outline"
                 size="sm"
                 className="h-6 text-[10px] px-2"
-                onClick={handleQuickGenerateCV}
-                disabled={isGeneratingCV}
+                onClick={() => setShowCvGenerator(true)}
               >
-                {isGeneratingCV ? (
-                  <>
-                    <Loader2 className="w-3 h-3 mr-0.5 animate-spin" />Generating...
-                  </>
-                ) : (
-                  <>
-                    <FileText className="w-3 h-3 mr-0.5" />Generate CV
-                  </>
-                )}
+                <FileText className="w-3 h-3 mr-0.5" />Generate CV
               </Button>
             </FeatureGate>
             <Button
@@ -333,6 +329,13 @@ export default function JobDetailPage() {
               )}
             </div>
             <JobAIChat job={job} profile={profile} />
+
+            {/* Notes Section */}
+            <JobNotes
+              jobId={job.id}
+              initialNotes={job.notes}
+              onNotesChange={handleNotesChange}
+            />
           </div>
         </div>
       </div>
