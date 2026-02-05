@@ -750,6 +750,9 @@ export interface Database {
           canceled_at: string | null
           trial_start: string | null
           trial_end: string | null
+          // Scheduled downgrade fields (for Ultra→Pro auto-transition)
+          scheduled_downgrade_to: string | null
+          scheduled_downgrade_date: string | null
           created_at: string
           updated_at: string
         }
@@ -767,6 +770,8 @@ export interface Database {
           canceled_at?: string | null
           trial_start?: string | null
           trial_end?: string | null
+          scheduled_downgrade_to?: string | null
+          scheduled_downgrade_date?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -784,6 +789,8 @@ export interface Database {
           canceled_at?: string | null
           trial_start?: string | null
           trial_end?: string | null
+          scheduled_downgrade_to?: string | null
+          scheduled_downgrade_date?: string | null
           created_at?: string
           updated_at?: string
         }

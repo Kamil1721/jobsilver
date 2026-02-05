@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
-import { stripe } from '@/lib/stripe/client'
+import { stripe, getStripeClient, getPriceId, type BillingCycle } from '@/lib/stripe/client'
 import { checkRateLimit } from '@/lib/security/rate-limit'
 import { isDowngrade } from '@/lib/features/config'
 import type { SubscriptionPlan } from '@/lib/supabase/types'
@@ -42,11 +42,11 @@ function getStripeErrorMessage(code: string | undefined): string {
  * Handles subscription downgrades with reason tracking
  *
  * For downgrade to 'free': Cancels subscription at period end
- * For downgrade to 'pro': Schedules cancellation at period end, user will need to resubscribe to Pro
+ * For downgrade to 'pro' (from Ultra): Uses Stripe Subscription Schedules to automatically
+ *   transition to Pro pricing at period end - no user action required
  *
- * Note: We use cancel_at_period_end for ALL downgrades to ensure users keep their current
- * plan access until the period ends. The actual plan change happens via Stripe webhook
- * when the subscription period ends.
+ * Note: We use cancel_at_period_end for free downgrades and subscription schedules for
+ * plan downgrades to ensure users keep their current plan access until the period ends.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -183,55 +183,104 @@ export async function POST(request: NextRequest) {
       console.error('Failed to record downgrade reason:', insertError)
     }
 
-    // P0-1 FIX: For ALL downgrades (including Ultra->Pro), we cancel at period end
-    // The user keeps their current plan access until period ends
-    // They can then choose to subscribe to Pro if that's their target
-    //
-    // This is simpler and more correct than trying to schedule a plan change:
-    // 1. User keeps full access to current plan until period ends
-    // 2. Clear messaging: "Your subscription will end on [date]"
-    // 3. For Ultra->Pro users, we can prompt them to subscribe to Pro after cancellation
-
     // Set up Stripe API options with idempotency key if provided
     const stripeOptions: Stripe.RequestOptions = {}
     if (idempotencyKey) {
       stripeOptions.idempotencyKey = `downgrade-${user.id}-${idempotencyKey}`
     }
 
-    // Cancel subscription at period end
-    const updatedStripeSubscription = await stripe.subscriptions.update(
-      subscription.stripe_subscription_id,
-      { cancel_at_period_end: true },
-      stripeOptions
-    )
+    let message: string
 
-    // Get the actual period end from Stripe
-    const periodEnd = (updatedStripeSubscription as unknown as Record<string, unknown>).current_period_end as number | undefined
-    if (periodEnd) {
-      periodEndDate = new Date(periodEnd * 1000).toISOString()
+    if (targetPlan === 'free') {
+      // For downgrade to free: Cancel subscription at period end
+      const updatedStripeSubscription = await stripe.subscriptions.update(
+        subscription.stripe_subscription_id,
+        { cancel_at_period_end: true },
+        stripeOptions
+      )
+
+      // Get the actual period end from Stripe
+      const periodEnd = (updatedStripeSubscription as unknown as Record<string, unknown>).current_period_end as number | undefined
+      if (periodEnd) {
+        periodEndDate = new Date(periodEnd * 1000).toISOString()
+      }
+
+      // Update local subscription record
+      await serviceClient
+        .from('subscriptions')
+        .update({
+          cancel_at_period_end: true,
+          canceled_at: new Date().toISOString(),
+        })
+        .eq('stripe_subscription_id', subscription.stripe_subscription_id)
+
+      message = 'Your subscription will be canceled at the end of your billing period.'
+    } else {
+      // For Ultra→Pro: Use Subscription Schedules to auto-transition
+      // First, get the current subscription from Stripe to determine billing cycle
+      const stripeSubscription = await stripe.subscriptions.retrieve(subscription.stripe_subscription_id)
+
+      // Determine billing cycle from current subscription
+      const currentItem = stripeSubscription.items.data[0]
+      const interval = currentItem?.price?.recurring?.interval
+      const billingCycle: BillingCycle = interval === 'week' ? 'weekly' : 'monthly'
+
+      // Get current_period_end - handle different Stripe SDK versions
+      const currentPeriodEnd = (stripeSubscription as unknown as Record<string, unknown>).current_period_end as number
+
+      // Get the Pro price ID for the same billing cycle
+      const proPriceId = getPriceId('pro', billingCycle)
+      if (!proPriceId) {
+        return NextResponse.json(
+          { error: { code: 'PRICE_NOT_CONFIGURED', message: 'Pro plan pricing not configured for this billing cycle' } },
+          { status: 500 }
+        )
+      }
+
+      // Create a subscription schedule from the existing subscription
+      // This will automatically transition to Pro at the end of the current period
+      const stripeClient = getStripeClient()
+      const schedule = await stripeClient.subscriptionSchedules.create({
+        from_subscription: subscription.stripe_subscription_id,
+      }, stripeOptions)
+
+      // Update the schedule to transition to Pro at next period
+      await stripeClient.subscriptionSchedules.update(schedule.id, {
+        end_behavior: 'release', // Continue as regular subscription after schedule completes
+        phases: [
+          {
+            // Current phase (Ultra) - keep until period end
+            items: [{ price: currentItem.price.id, quantity: 1 }],
+            start_date: schedule.phases[0]?.start_date || Math.floor(Date.now() / 1000),
+            end_date: currentPeriodEnd,
+          },
+          {
+            // Next phase (Pro) - starts at period end, continues indefinitely
+            items: [{ price: proPriceId, quantity: 1 }],
+            start_date: currentPeriodEnd,
+          },
+        ],
+      }, stripeOptions)
+
+      periodEndDate = new Date(currentPeriodEnd * 1000).toISOString()
+
+      // Update local subscription record to indicate scheduled downgrade
+      await serviceClient
+        .from('subscriptions')
+        .update({
+          scheduled_downgrade_to: 'pro',
+          scheduled_downgrade_date: periodEndDate,
+        })
+        .eq('stripe_subscription_id', subscription.stripe_subscription_id)
+
+      message = `Your plan will automatically change to Pro on ${new Date(periodEndDate).toLocaleDateString()}. You'll keep Ultra access until then.`
     }
-
-    // Update local subscription record
-    await serviceClient
-      .from('subscriptions')
-      .update({
-        cancel_at_period_end: true,
-        canceled_at: new Date().toISOString(),
-      })
-      .eq('stripe_subscription_id', subscription.stripe_subscription_id)
-
-    // Determine the appropriate success message
-    const message = targetPlan === 'free'
-      ? 'Your subscription will be canceled at the end of your billing period.'
-      : 'Your subscription will be canceled at the end of your billing period. You can subscribe to Pro afterwards if you wish.'
 
     return NextResponse.json({
       data: {
         success: true,
         targetPlan,
         periodEndDate,
-        // Return the actual behavior - subscription cancels at period end
-        // User keeps current plan access until then
         currentPlanUntil: periodEndDate,
         message,
       },

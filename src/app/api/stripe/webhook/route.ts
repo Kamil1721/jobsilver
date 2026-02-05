@@ -126,6 +126,14 @@ export async function POST(request: NextRequest) {
         break
       }
 
+      case 'subscription_schedule.released': {
+        // When a subscription schedule completes and releases, the subscription
+        // continues as a regular subscription. This happens after Ultra→Pro transitions.
+        const schedule = event.data.object as Stripe.SubscriptionSchedule
+        await handleSubscriptionScheduleReleased(supabase, schedule)
+        break
+      }
+
       default:
         console.log(`Unhandled webhook event: ${event.type}`)
     }
@@ -222,6 +230,16 @@ async function handleSubscriptionUpdated(
   const periodStart = (subscription as unknown as Record<string, unknown>).current_period_start as number | undefined
   const periodEnd = (subscription as unknown as Record<string, unknown>).current_period_end as number | undefined
 
+  // Check if there was a scheduled downgrade that's now complete
+  const { data: existingSub } = await supabase
+    .from('subscriptions')
+    .select('scheduled_downgrade_to')
+    .eq('user_id', userId)
+    .single()
+
+  // Clear scheduled downgrade fields if the plan transition has happened
+  const shouldClearSchedule = existingSub?.scheduled_downgrade_to === plan
+
   // Upsert subscription record
   const { error: subError } = await supabase.from('subscriptions').upsert({
     user_id: userId,
@@ -242,6 +260,11 @@ async function handleSubscriptionUpdated(
     trial_end: subscription.trial_end
       ? new Date(subscription.trial_end * 1000).toISOString()
       : null,
+    // Clear scheduled downgrade if the transition has happened
+    ...(shouldClearSchedule && {
+      scheduled_downgrade_to: null,
+      scheduled_downgrade_date: null,
+    }),
   }, {
     onConflict: 'user_id',
   })
@@ -482,4 +505,39 @@ function getActivePlan(status: string, plan: SubscriptionPlan): SubscriptionPlan
 
   // All other statuses revert to free (including 'canceled')
   return 'free'
+}
+
+/**
+ * Handle subscription_schedule.released event
+ * This fires when a subscription schedule completes all phases and releases
+ * the subscription back to a regular subscription (e.g., after Ultra→Pro transition)
+ */
+async function handleSubscriptionScheduleReleased(
+  supabase: ReturnType<typeof createServiceClient>,
+  schedule: Stripe.SubscriptionSchedule
+) {
+  console.log('Processing subscription schedule released:', schedule.id)
+
+  // Get the released subscription ID
+  const subscriptionId = schedule.released_subscription
+  if (!subscriptionId) {
+    console.log('No released subscription ID, skipping')
+    return
+  }
+
+  // Clear scheduled downgrade fields for this subscription
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({
+      scheduled_downgrade_to: null,
+      scheduled_downgrade_date: null,
+    })
+    .eq('stripe_subscription_id', subscriptionId)
+
+  if (error) {
+    console.error('Error clearing scheduled downgrade fields:', error)
+    return
+  }
+
+  console.log(`Cleared scheduled downgrade for subscription ${subscriptionId}`)
 }
