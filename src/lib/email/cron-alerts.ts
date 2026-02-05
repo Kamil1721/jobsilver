@@ -1,7 +1,19 @@
 import { Resend } from 'resend'
 import { escapeHtml } from './utils'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+// Lazy-loaded Resend client (prevents build-time errors when env vars aren't set)
+let _resend: Resend | null = null
+
+function getResendClient(): Resend {
+  if (!_resend) {
+    const apiKey = process.env.RESEND_API_KEY
+    if (!apiKey) {
+      throw new Error('RESEND_API_KEY environment variable is not configured')
+    }
+    _resend = new Resend(apiKey)
+  }
+  return _resend
+}
 
 interface CronAlertParams {
   cronName: string
@@ -40,7 +52,7 @@ export async function sendCronFailureAlert({
       ? `<pre style="background: #f5f5f5; padding: 12px; border-radius: 4px; overflow-x: auto;">${escapeHtml(JSON.stringify(details, null, 2))}</pre>`
       : ''
 
-    await resend.emails.send({
+    await getResendClient().emails.send({
       from: fromEmail,
       to: adminEmail,
       subject: `🚨 Cron Job Failed: ${safeCronName}`,
@@ -119,7 +131,7 @@ export async function sendCurationSummary({
     : `✅ Daily Curation: ${totalJobsCurated} jobs curated`
 
   try {
-    await resend.emails.send({
+    await getResendClient().emails.send({
       from: fromEmail,
       to: adminEmail,
       subject,
