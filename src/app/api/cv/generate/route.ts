@@ -119,17 +119,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if this is first-time setup (user hasn't generated a CV yet)
+    // First CV generation is free for all users to complete onboarding
+    const { data: profileForSetup } = await supabase
+      .from('profiles')
+      .select('cv_is_generated')
+      .eq('id', user.id)
+      .single()
+
+    const isFirstTimeSetup = !profileForSetup?.cv_is_generated
+
     // Check plan-based CV generation limit
     // In 3-tier model: Free=0/day, Pro=3/day, Ultra=unlimited
-    const cvAccessCheck = await canUseAI(user.id, supabase as unknown as Parameters<typeof canUseAI>[1], 'cv_generations')
-    if (!cvAccessCheck.allowed) {
-      return NextResponse.json(
-        {
-          error: cvAccessCheck.message || 'CV generation limit reached',
-          suggestUpgrade: cvAccessCheck.suggestUpgrade,
-        },
-        { status: 403 }
-      )
+    // EXCEPTION: First CV generation during setup is always free
+    if (!isFirstTimeSetup) {
+      const cvAccessCheck = await canUseAI(user.id, supabase as unknown as Parameters<typeof canUseAI>[1], 'cv_generations')
+      if (!cvAccessCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: cvAccessCheck.message || 'CV generation limit reached',
+            suggestUpgrade: cvAccessCheck.suggestUpgrade,
+          },
+          { status: 403 }
+        )
+      }
     }
 
     const body = await request.json() as GenerateRequest
@@ -442,12 +455,14 @@ export async function POST(request: NextRequest) {
       dataSaveWarning = 'Your data may not be saved for next time'
     }
 
-    // Increment CV generation usage
-    try {
-      await incrementUsage(user.id, 'cv_generations', supabase as unknown as Parameters<typeof incrementUsage>[2])
-    } catch (usageError) {
-      console.error('Failed to increment CV generation usage:', usageError)
-      // Don't fail the request if usage tracking fails
+    // Increment CV generation usage (skip for free first-time setup generation)
+    if (!isFirstTimeSetup) {
+      try {
+        await incrementUsage(user.id, 'cv_generations', supabase as unknown as Parameters<typeof incrementUsage>[2])
+      } catch (usageError) {
+        console.error('Failed to increment CV generation usage:', usageError)
+        // Don't fail the request if usage tracking fails
+      }
     }
 
     return NextResponse.json({

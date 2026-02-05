@@ -146,24 +146,37 @@ export function SetupWizard() {
         if (data) {
           const savedScreening = data.screening_answers as ScreeningAnswers | null
           // Check if user already has job filters (not first-time setup)
-          if (data.job_filters && Object.keys(data.job_filters).length > 0) {
+          const isReturningUser = data.job_filters && Object.keys(data.job_filters).length > 0
+          if (isReturningUser) {
             setIsFirstTimeSetup(false)
           }
           // Set subscription plan
           if (data.subscription_plan) {
             setSubscriptionPlan(data.subscription_plan as SubscriptionPlan)
           }
+
+          // Build screening answers, but clear cv_generation_mode for returning users
+          // who already have a CV - they should see their existing CV, not be in generate mode
+          const cvUrl = data.cv_url || savedScreening?.cv_url || null
+          const screeningAnswers = savedScreening
+            ? { ...DEFAULT_SCREENING_ANSWERS, ...savedScreening, cv_url: cvUrl }
+            : {
+                ...DEFAULT_SCREENING_ANSWERS,
+                cv_url: cvUrl,
+                phone_number: data.phone || "",
+              }
+
+          // Clear cv_generation_mode for returning users with existing CV
+          // so they see the "existing CV" view instead of generate form
+          if (isReturningUser && cvUrl) {
+            screeningAnswers.cv_generation_mode = undefined
+          }
+
           setWizardData({
             jobFilters: data.job_filters
               ? { ...DEFAULT_JOB_FILTERS, ...data.job_filters }
               : DEFAULT_JOB_FILTERS,
-            screeningAnswers: savedScreening
-              ? { ...DEFAULT_SCREENING_ANSWERS, ...savedScreening, cv_url: data.cv_url || savedScreening.cv_url }
-              : {
-                  ...DEFAULT_SCREENING_ANSWERS,
-                  cv_url: data.cv_url || null,
-                  phone_number: data.phone || "",
-                },
+            screeningAnswers,
           })
         }
       } catch (err) {
@@ -701,6 +714,8 @@ export function SetupWizard() {
               data={wizardData.screeningAnswers}
               onUpdate={updateScreeningAnswers}
               jobFilters={wizardData.jobFilters}
+              isFirstTimeSetup={isFirstTimeSetup}
+              subscriptionPlan={subscriptionPlan}
             />
           )}
           {currentStep === 5 && (

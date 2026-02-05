@@ -15,16 +15,19 @@ import {
   Trash2,
   ExternalLink,
 } from "lucide-react"
-import type { ScreeningAnswers, JobFilters } from "@/lib/supabase/types"
+import type { ScreeningAnswers, JobFilters, SubscriptionPlan } from "@/lib/supabase/types"
 import { WorkHistorySection, EducationSection, SkillsSection } from "./cv-sections"
+import { Lock } from "lucide-react"
 
 interface StepCVProps {
   data: ScreeningAnswers
   onUpdate: (updates: Partial<ScreeningAnswers>) => void
   jobFilters?: JobFilters
+  isFirstTimeSetup?: boolean
+  subscriptionPlan?: SubscriptionPlan
 }
 
-export function StepCV({ data, onUpdate, jobFilters }: StepCVProps) {
+export function StepCV({ data, onUpdate, jobFilters, isFirstTimeSetup = true, subscriptionPlan = 'free' }: StepCVProps) {
   const [isUploading, setIsUploading] = React.useState(false)
   const [isDragging, setIsDragging] = React.useState(false)
   const [isDeleting, setIsDeleting] = React.useState(false)
@@ -35,6 +38,24 @@ export function StepCV({ data, onUpdate, jobFilters }: StepCVProps) {
 
   const mode = data.cv_generation_mode
   const hasExistingCV = !!data.cv_url
+
+  // Free users can only generate CV once (first-time setup)
+  // After that, they need Pro/Ultra to generate new CVs
+  const canGenerateNewCV = isFirstTimeSetup || subscriptionPlan === 'pro' || subscriptionPlan === 'ultra'
+
+  // Show upgrade modal for CV generation
+  const showUpgradeModalForCV = () => {
+    window.dispatchEvent(
+      new CustomEvent('show-upgrade-modal', {
+        detail: {
+          feature: 'cv_generation',
+          requiredPlan: 'pro',
+          featureName: 'CV Generation',
+          featureDescription: "You've already generated your free CV. Upgrade to Pro to generate additional professional CVs tailored for different jobs.",
+        },
+      })
+    )
+  }
 
   // Fetch CV signed URL for viewing
   const fetchCvUrl = React.useCallback(async () => {
@@ -241,6 +262,10 @@ export function StepCV({ data, onUpdate, jobFilters }: StepCVProps) {
           {/* Generate Option */}
           <button
             onClick={() => {
+              if (!canGenerateNewCV) {
+                showUpgradeModalForCV()
+                return
+              }
               onUpdate({
                 cv_generation_mode: "generate",
                 work_history: data.work_history || [
@@ -267,19 +292,40 @@ export function StepCV({ data, onUpdate, jobFilters }: StepCVProps) {
               })
             }}
             className={cn(
-              "group p-6 rounded-2xl border-2 transition-all text-left",
+              "group p-6 rounded-2xl border-2 transition-all text-left relative",
               "border-zinc-200 dark:border-zinc-700",
-              "hover:border-zinc-400 hover:shadow-lg hover:shadow-zinc-200/50 dark:hover:shadow-none"
+              canGenerateNewCV
+                ? "hover:border-zinc-400 hover:shadow-lg hover:shadow-zinc-200/50 dark:hover:shadow-none"
+                : "opacity-75"
             )}
           >
             <div className="space-y-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-zinc-400 via-zinc-500 to-zinc-600 flex items-center justify-center">
-                <Sparkles className="w-6 h-6 text-white" />
+              <div className={cn(
+                "w-12 h-12 rounded-xl flex items-center justify-center",
+                canGenerateNewCV
+                  ? "bg-gradient-to-br from-zinc-400 via-zinc-500 to-zinc-600"
+                  : "bg-zinc-200 dark:bg-zinc-700"
+              )}>
+                {canGenerateNewCV ? (
+                  <Sparkles className="w-6 h-6 text-white" />
+                ) : (
+                  <Lock className="w-6 h-6 text-zinc-500" />
+                )}
               </div>
               <div>
-                <h3 className="font-semibold text-lg">Generate CV</h3>
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  Generate CV
+                  {!canGenerateNewCV && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-medium">
+                      Pro
+                    </span>
+                  )}
+                </h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Create a professional CV from your information
+                  {canGenerateNewCV
+                    ? "Create a professional CV from your information"
+                    : "Upgrade to Pro to generate additional CVs"
+                  }
                 </p>
               </div>
             </div>
@@ -327,6 +373,10 @@ export function StepCV({ data, onUpdate, jobFilters }: StepCVProps) {
                     variant="outline"
                     size="sm"
                     onClick={() => {
+                      if (!canGenerateNewCV) {
+                        showUpgradeModalForCV()
+                        return
+                      }
                       onUpdate({
                         cv_generation_mode: "generate",
                         work_history: data.work_history || [
@@ -353,8 +403,15 @@ export function StepCV({ data, onUpdate, jobFilters }: StepCVProps) {
                       })
                     }}
                   >
-                    <Sparkles className="w-4 h-4 mr-2" />
+                    {canGenerateNewCV ? (
+                      <Sparkles className="w-4 h-4 mr-2" />
+                    ) : (
+                      <Lock className="w-4 h-4 mr-2" />
+                    )}
                     Generate New
+                    {!canGenerateNewCV && (
+                      <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">Pro</span>
+                    )}
                   </Button>
                 </div>
               </div>

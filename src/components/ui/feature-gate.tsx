@@ -71,8 +71,13 @@ export function FeatureGate({
     case 'overlay':
       return (
         <div className={cn("relative", className)}>
+          {/* Render children with pointer-events disabled to prevent interactions */}
+          <div className="pointer-events-none">
+            {children}
+          </div>
+          {/* Invisible overlay to capture clicks and show upgrade modal */}
           <div
-            className="cursor-pointer"
+            className="absolute inset-0 cursor-pointer z-[5]"
             onClick={showUpgradeModal}
             role="button"
             tabIndex={0}
@@ -81,9 +86,7 @@ export function FeatureGate({
                 showUpgradeModal()
               }
             }}
-          >
-            {children}
-          </div>
+          />
           {/* Overlay badge */}
           <div className="absolute top-2 right-2 z-10">
             <Badge

@@ -129,11 +129,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Get job counts for each user - use service client to bypass RLS
+    // Exclude discarded jobs to match what users see on their dashboard
     const userIds = users?.map(u => u.id) || []
     const { data: jobCounts } = await serviceClient
       .from('jobs')
       .select('user_id')
       .in('user_id', userIds)
+      .neq('status', 'discarded')
 
     const jobCountByUser: Record<string, number> = {}
     if (jobCounts) {
