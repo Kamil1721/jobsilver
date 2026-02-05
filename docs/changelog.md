@@ -36,6 +36,52 @@
 
 ## 2026-02 - February
 
+### 2026-02-05 - CV Generator Improvements & Security Fixes
+
+**Major CV Generator Dialog Enhancements:**
+
+#### UI Improvements
+- **Info banner** - Added blue info banner explaining that work/education data is saved and pre-filled for future generations
+- **Phone number fields** - Added phone country code and number inputs with auto-detection from user's country (40+ country codes supported)
+- **Work location field** - Added location input for each work history entry
+- **Education highlights** - Added editable achievements/highlights section to education entries
+- **Array limits** - Max 10 work entries, 5 education entries with toast warnings
+
+#### Security Fixes (P0-P1)
+- **Job ownership verification** - CV tailoring now verifies user owns the job before applying AI enhancements
+- **Rate limit race condition** - Fixed non-atomic check-and-increment in in-memory rate limiter
+- **Sanitized data usage** - PDF generation now uses properly sanitized CV data
+- **Enhanced highlights iteration** - AI highlights now apply to all work entries, not just the first
+
+#### Code Quality (P2-P3)
+- **Consolidated sanitization** - Created shared `sanitizeForPrompt()` and `sanitizeAIOutput()` in `validation.ts`
+- **Zod validation schemas** - Added comprehensive schemas for CV generation request validation
+- **Education filter alignment** - Filter now requires `area` field matching validation
+- **Defensive coding** - Added null checks for highlights arrays
+- **Save warning** - API returns warning when profile data save fails
+- **Skills duplicate check** - Prevents duplicate skills when clicking AI suggestions
+- **State reset** - AI suggestion states reset when dialog reopens
+- **Empty area handling** - PDF shows degree correctly when field of study is empty
+
+#### Admin & Feature Access
+- **Admin full access** - Admin users now bypass all feature gates
+- **isAdmin in context** - Added `isAdmin` to SubscriptionContext from profile
+
+**Files Changed:**
+- `src/components/cv/cv-generator-dialog.tsx` - UI improvements, limits, phone auto-detect
+- `src/app/api/cv/generate/route.ts` - Security fixes, job ownership, sanitization
+- `src/lib/cv/ai-tailor.ts` - Uses shared sanitization functions
+- `src/lib/cv/pdf-generator.ts` - Empty area handling
+- `src/lib/security/rate-limit.ts` - Atomic rate limiting
+- `src/lib/security/validation.ts` - Shared sanitization, Zod schemas
+- `src/app/api/stripe/subscription/route.ts` - Returns isAdmin
+- `src/contexts/SubscriptionContext.tsx` - Added isAdmin
+- `src/hooks/useFeatureAccess.ts` - Admin bypass for feature gates
+- `src/app/api/ai/suggest-skills/route.ts` - Uses shared sanitization
+- `src/app/api/ai/suggest-achievements/route.ts` - Uses shared sanitization
+
+---
+
 ### 2026-02-03 - Email System Remaining Fixes
 
 **Task:** Fix remaining P0 and P2 issues in the email notification system
