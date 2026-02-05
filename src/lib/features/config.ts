@@ -12,28 +12,35 @@ export type Feature =
   | 'dedicated_support'
   | 'ai_learning'
   | 'cv_generator'
+  | 'unlimited_ai'
+  | 'daily_emails'
+  | 'favorites'
 
 /**
  * Minimum plan required to access each feature
- * 2-tier model: free or pro
- * - AI features require pro plan
- * - Free users get job discovery only (no AI)
+ * 3-tier model: free, pro, or ultra
+ * - Pro: Basic AI features with limits, weekly emails, favorites
+ * - Ultra: Unlimited AI, daily emails, priority support
  */
 export const FEATURE_REQUIREMENTS: Record<Feature, SubscriptionPlan> = {
   ai_assistant: 'pro',
-  email_alerts: 'pro',
+  email_alerts: 'pro', // Weekly for Pro, Daily for Ultra
   ai_cover_letters: 'pro',
   advanced_filters: 'pro',
-  priority_support: 'pro',
-  dedicated_support: 'pro',
   ai_learning: 'pro',
   cv_generator: 'pro',
+  favorites: 'pro',
+  // Ultra-only features
+  priority_support: 'ultra',
+  dedicated_support: 'ultra',
+  unlimited_ai: 'ultra',
+  daily_emails: 'ultra',
 }
 
 /**
- * Tester equivalent plan - testers get pro-level access
+ * Tester equivalent plan - testers get ultra-level access
  */
-export const TESTER_EQUIVALENT_PLAN: SubscriptionPlan = 'pro'
+export const TESTER_EQUIVALENT_PLAN: SubscriptionPlan = 'ultra'
 
 /**
  * Feature display information for upgrade prompts
@@ -71,13 +78,50 @@ export const FEATURE_INFO: Record<Feature, { name: string; description: string }
     name: 'CV Generator',
     description: 'Generate professional CVs tailored to specific jobs',
   },
+  unlimited_ai: {
+    name: 'Unlimited AI',
+    description: 'No daily limits on AI responses, cover letters, or CV generations',
+  },
+  daily_emails: {
+    name: 'Daily Email Alerts',
+    description: 'Receive daily job match notifications instead of weekly',
+  },
+  favorites: {
+    name: 'Favorite Jobs',
+    description: 'Save jobs to your favorites for quick access',
+  },
 }
 
 /**
- * Plan hierarchy for comparison (2-tier model)
- * Legacy plans are mapped: starter/basic -> free, ultra/mega -> pro
+ * Plan hierarchy for comparison (3-tier model)
+ * Legacy plans are mapped: starter/basic -> free, mega -> ultra
  */
 const PLAN_HIERARCHY: AllSubscriptionPlans[] = ['free', 'starter', 'basic', 'pro', 'ultra', 'mega']
+
+/**
+ * Current subscription plan hierarchy (excludes legacy plans)
+ * Used for subscription upgrades/downgrades
+ * Exported for use by subscription APIs and UI components
+ */
+export const SUBSCRIPTION_PLAN_HIERARCHY: SubscriptionPlan[] = ['free', 'pro', 'ultra']
+
+/**
+ * Check if changing from currentPlan to targetPlan is a downgrade
+ * Uses the 3-tier model: free < pro < ultra
+ *
+ * @param currentPlan - User's current subscription plan
+ * @param targetPlan - The plan user wants to change to
+ * @returns true if this is a downgrade, false otherwise
+ */
+export function isDowngrade(currentPlan: string, targetPlan: string): boolean {
+  const currentIndex = SUBSCRIPTION_PLAN_HIERARCHY.indexOf(currentPlan as SubscriptionPlan)
+  const targetIndex = SUBSCRIPTION_PLAN_HIERARCHY.indexOf(targetPlan as SubscriptionPlan)
+
+  // If either plan not found, not a downgrade
+  if (currentIndex === -1 || targetIndex === -1) return false
+
+  return targetIndex < currentIndex
+}
 
 /**
  * Check if a plan can access a feature
@@ -92,7 +136,7 @@ export function canAccessFeature(
   feature: Feature,
   isTester?: boolean
 ): boolean {
-  // Testers get pro-level access to all features
+  // Testers get ultra-level access to all features
   // (but NOT admin access - that's separate)
   const effectivePlan = isTester ? TESTER_EQUIVALENT_PLAN : plan
 
@@ -101,14 +145,15 @@ export function canAccessFeature(
   const requiredIndex = PLAN_HIERARCHY.indexOf(requiredPlan)
 
   // If plan not found in hierarchy, deny access (fail-safe)
+  // Note: Don't log the actual plan value to avoid echoing potentially untrusted input
   if (planIndex === -1) {
-    console.warn(`Unknown plan "${effectivePlan}" in canAccessFeature - denying access`)
+    console.warn('Unknown plan in canAccessFeature - denying access')
     return false
   }
 
   // If required plan not found (shouldn't happen), deny access
   if (requiredIndex === -1) {
-    console.warn(`Unknown required plan "${requiredPlan}" for feature "${feature}" - denying access`)
+    console.warn('Unknown required plan for feature in canAccessFeature - denying access')
     return false
   }
 

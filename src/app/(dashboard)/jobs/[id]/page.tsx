@@ -34,7 +34,7 @@ export default function JobDetailPage() {
   const [isFavorited, setIsFavorited] = React.useState(false)
   const [preferenceReasons, setPreferenceReasons] = React.useState<string[]>([])
   const { plan, isTester } = useSubscription()
-  const isPremium = plan === "pro" || plan === "mega" || isTester
+  const isPremium = plan === "pro" || plan === "ultra" || plan === "mega" || isTester
 
   const handleNotesChange = React.useCallback((notes: string) => {
     setJob(prev => prev ? { ...prev, notes } : null)
@@ -59,8 +59,8 @@ export default function JobDetailPage() {
         const { data: profileData } = await supabase.from("profiles").select("*").eq("id", user.id).single()
         if (profileData) setProfile(profileData)
 
-        // Fetch favorite status and preference reasons for Pro users and testers
-        if (profileData?.subscription_plan === 'pro' || profileData?.subscription_plan === 'mega' || profileData?.is_tester) {
+        // Fetch favorite status and preference reasons for Pro/Ultra users and testers
+        if (profileData?.subscription_plan === 'pro' || profileData?.subscription_plan === 'ultra' || profileData?.subscription_plan === 'mega' || profileData?.is_tester) {
           try {
             const favResponse = await fetch(`/api/jobs/${params.id}/favorite`)
             if (favResponse.ok) {

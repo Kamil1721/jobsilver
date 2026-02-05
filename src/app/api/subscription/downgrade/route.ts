@@ -1,0 +1,264 @@
+import { NextRequest, NextResponse } from 'next/server'
+import Stripe from 'stripe'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { stripe } from '@/lib/stripe/client'
+import { checkRateLimit } from '@/lib/security/rate-limit'
+import { isDowngrade } from '@/lib/features/config'
+import type { SubscriptionPlan } from '@/lib/supabase/types'
+
+export const dynamic = 'force-dynamic'
+
+// Note: PLAN_HIERARCHY and isDowngrade are now exported from @/lib/features/config
+// Import from there instead of this route for shared plan hierarchy logic
+
+// Valid downgrade reasons
+const VALID_REASONS = [
+  'too_expensive',
+  'not_using',
+  'found_alternative',
+  'missing_features',
+  'temporary_break',
+  'other',
+] as const
+
+type DowngradeReason = (typeof VALID_REASONS)[number]
+
+/**
+ * Get user-friendly error message for Stripe error codes
+ */
+function getStripeErrorMessage(code: string | undefined): string {
+  switch (code) {
+    case 'resource_missing':
+      return 'Subscription not found. It may have been canceled.'
+    case 'subscription_payment_intent_requires_action':
+      return 'Payment requires additional verification. Please update your payment method.'
+    default:
+      return 'Payment system error. Please try again or contact support.'
+  }
+}
+
+/**
+ * POST /api/subscription/downgrade
+ * Handles subscription downgrades with reason tracking
+ *
+ * For downgrade to 'free': Cancels subscription at period end
+ * For downgrade to 'pro': Schedules cancellation at period end, user will need to resubscribe to Pro
+ *
+ * Note: We use cancel_at_period_end for ALL downgrades to ensure users keep their current
+ * plan access until the period ends. The actual plan change happens via Stripe webhook
+ * when the subscription period ends.
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json(
+        { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } },
+        { status: 401 }
+      )
+    }
+
+    // Rate limiting - 5 requests per minute (sensitive operation)
+    const rateLimit = checkRateLimit(
+      user.id,
+      { maxRequests: 5, windowSeconds: 60, prefix: 'downgrade' },
+      'subscription-downgrade'
+    )
+    if (!rateLimit.allowed) {
+      const retryAfter = Math.max(1, rateLimit.resetAt - Math.floor(Date.now() / 1000))
+      return NextResponse.json(
+        { error: { code: 'RATE_LIMITED', message: 'Too many requests. Please wait.' } },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+      )
+    }
+
+    // Parse and validate request body
+    let body: { targetPlan?: string; reason?: string; idempotencyKey?: string }
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: { code: 'INVALID_BODY', message: 'Invalid JSON body' } },
+        { status: 400 }
+      )
+    }
+
+    const { targetPlan, reason, idempotencyKey } = body
+
+    // Validate target plan
+    if (!targetPlan || (targetPlan !== 'pro' && targetPlan !== 'free')) {
+      return NextResponse.json(
+        { error: { code: 'INVALID_PLAN', message: 'Target plan must be "pro" or "free"' } },
+        { status: 400 }
+      )
+    }
+
+    // Validate reason
+    if (!reason || !VALID_REASONS.includes(reason as DowngradeReason)) {
+      return NextResponse.json(
+        { error: { code: 'INVALID_REASON', message: 'A valid downgrade reason is required' } },
+        { status: 400 }
+      )
+    }
+
+    // Use service client for database operations
+    const serviceClient = createServiceClient()
+
+    // Get user's current profile and subscription
+    const { data: profile, error: profileError } = await serviceClient
+      .from('profiles')
+      .select('subscription_plan')
+      .eq('id', user.id)
+      .single()
+
+    if (profileError || !profile) {
+      return NextResponse.json(
+        { error: { code: 'PROFILE_NOT_FOUND', message: 'User profile not found' } },
+        { status: 404 }
+      )
+    }
+
+    const currentPlan = profile.subscription_plan as SubscriptionPlan
+
+    // Verify this is actually a downgrade using the shared utility
+    if (!isDowngrade(currentPlan, targetPlan)) {
+      return NextResponse.json(
+        { error: { code: 'NOT_A_DOWNGRADE', message: 'This is not a downgrade. To upgrade your plan, please use the billing portal or checkout page.' } },
+        { status: 400 }
+      )
+    }
+
+    // Get the user's Stripe subscription with full status
+    const { data: subscription, error: subError } = await serviceClient
+      .from('subscriptions')
+      .select('stripe_subscription_id, stripe_customer_id, current_period_end, status, cancel_at_period_end')
+      .eq('user_id', user.id)
+      .single()
+
+    if (subError || !subscription?.stripe_subscription_id) {
+      return NextResponse.json(
+        { error: { code: 'NO_SUBSCRIPTION', message: 'No active subscription found' } },
+        { status: 404 }
+      )
+    }
+
+    // P1-2 FIX: Validate subscription status
+    const validStatuses = ['active', 'trialing']
+    if (!validStatuses.includes(subscription.status)) {
+      return NextResponse.json(
+        { error: { code: 'INVALID_SUBSCRIPTION_STATUS', message: 'Cannot modify subscription in current state' } },
+        { status: 400 }
+      )
+    }
+
+    // P1-1 FIX: Check if already pending cancellation (idempotency)
+    // This also handles the P2-2 edge case: if Stripe call succeeded but DB update failed
+    // on a previous attempt, the subscription will have cancel_at_period_end=true in Stripe,
+    // which gets synced to our DB, so retries will correctly return ALREADY_CANCELING.
+    if (subscription.cancel_at_period_end) {
+      return NextResponse.json(
+        { error: { code: 'ALREADY_CANCELING', message: 'A downgrade or cancellation is already scheduled for this subscription.' } },
+        { status: 409 }
+      )
+    }
+
+    let periodEndDate = subscription.current_period_end
+
+    // Record the downgrade reason FIRST for analytics (P1-3, P2-7 partial fix)
+    // Insert before Stripe call so we have the reason even if Stripe fails
+    // Uses regular client since RLS policy allows users to insert their own records
+    try {
+      await supabase
+        .from('downgrade_reasons')
+        .insert({
+          user_id: user.id,
+          from_plan: currentPlan,
+          to_plan: targetPlan,
+          reason: reason,
+        })
+    } catch (insertError) {
+      // Log but don't fail the operation - analytics is not critical
+      console.error('Failed to record downgrade reason:', insertError)
+    }
+
+    // P0-1 FIX: For ALL downgrades (including Ultra->Pro), we cancel at period end
+    // The user keeps their current plan access until period ends
+    // They can then choose to subscribe to Pro if that's their target
+    //
+    // This is simpler and more correct than trying to schedule a plan change:
+    // 1. User keeps full access to current plan until period ends
+    // 2. Clear messaging: "Your subscription will end on [date]"
+    // 3. For Ultra->Pro users, we can prompt them to subscribe to Pro after cancellation
+
+    // Set up Stripe API options with idempotency key if provided
+    const stripeOptions: Stripe.RequestOptions = {}
+    if (idempotencyKey) {
+      stripeOptions.idempotencyKey = `downgrade-${user.id}-${idempotencyKey}`
+    }
+
+    // Cancel subscription at period end
+    const updatedStripeSubscription = await stripe.subscriptions.update(
+      subscription.stripe_subscription_id,
+      { cancel_at_period_end: true },
+      stripeOptions
+    )
+
+    // Get the actual period end from Stripe
+    const periodEnd = (updatedStripeSubscription as unknown as Record<string, unknown>).current_period_end as number | undefined
+    if (periodEnd) {
+      periodEndDate = new Date(periodEnd * 1000).toISOString()
+    }
+
+    // Update local subscription record
+    await serviceClient
+      .from('subscriptions')
+      .update({
+        cancel_at_period_end: true,
+        canceled_at: new Date().toISOString(),
+      })
+      .eq('stripe_subscription_id', subscription.stripe_subscription_id)
+
+    // Determine the appropriate success message
+    const message = targetPlan === 'free'
+      ? 'Your subscription will be canceled at the end of your billing period.'
+      : 'Your subscription will be canceled at the end of your billing period. You can subscribe to Pro afterwards if you wish.'
+
+    return NextResponse.json({
+      data: {
+        success: true,
+        targetPlan,
+        periodEndDate,
+        // Return the actual behavior - subscription cancels at period end
+        // User keeps current plan access until then
+        currentPlanUntil: periodEndDate,
+        message,
+      },
+    })
+  } catch (error) {
+    // P2-4 FIX: Better Stripe error handling
+    if (error instanceof Stripe.errors.StripeError) {
+      console.error('Stripe error during downgrade:', {
+        code: error.code,
+        type: error.type,
+        message: error.message,
+      })
+      return NextResponse.json(
+        { error: { code: 'STRIPE_ERROR', message: getStripeErrorMessage(error.code) } },
+        { status: 500 }
+      )
+    }
+
+    // P3-1 FIX: Sanitized error logging
+    console.error('Downgrade error:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      // Don't log full error object which may contain sensitive data
+    })
+
+    return NextResponse.json(
+      { error: { code: 'DOWNGRADE_ERROR', message: 'Failed to process downgrade' } },
+      { status: 500 }
+    )
+  }
+}

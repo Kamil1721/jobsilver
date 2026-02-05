@@ -19,14 +19,15 @@ export interface GeneratedQueries {
   }
 }
 
-// Subscription plan types - 2-tier model (January 2026)
+// Subscription plan types - 3-tier model (February 2026)
 // Free: 3 jobs/day, no AI access
-// Pro: 50 jobs/day, unlimited AI access, $4.99/wk or $14.99/mo
-export type SubscriptionPlan = 'free' | 'pro'
+// Pro: 15 jobs/day, limited AI access (30/day), $3.99/wk or $12.99/mo
+// Ultra: 35 jobs/day, unlimited AI access, $6.99/wk or $19.99/mo
+export type SubscriptionPlan = 'free' | 'pro' | 'ultra'
 
 // Legacy plans - kept for backwards compatibility with existing users
 // These will be migrated to new plans on next subscription update
-export type LegacySubscriptionPlan = 'starter' | 'basic' | 'ultra' | 'mega'
+export type LegacySubscriptionPlan = 'starter' | 'basic' | 'mega'
 
 // All possible subscription plans (current + legacy)
 export type AllSubscriptionPlans = SubscriptionPlan | LegacySubscriptionPlan
@@ -1091,6 +1092,32 @@ export interface Database {
           updated_at?: string
         }
       }
+      downgrade_reasons: {
+        Row: {
+          id: string
+          user_id: string
+          from_plan: string
+          to_plan: string
+          reason: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          from_plan: string
+          to_plan: string
+          reason: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          from_plan?: string
+          to_plan?: string
+          reason?: string
+          created_at?: string
+        }
+      }
     }
   }
 }
@@ -1802,3 +1829,19 @@ export interface AIUsageWithLimits {
   plan: SubscriptionPlan
   isTester: boolean
 }
+
+// ============================================
+// DOWNGRADE TRACKING TYPES
+// ============================================
+
+// Downgrade reason record from database
+export type DowngradeReason = Database['public']['Tables']['downgrade_reasons']['Row']
+
+// Downgrade reason codes
+export type DowngradeReasonCode =
+  | 'too_expensive'
+  | 'not_using'
+  | 'found_alternative'
+  | 'missing_features'
+  | 'temporary_break'
+  | 'other'

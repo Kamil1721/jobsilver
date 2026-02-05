@@ -47,7 +47,7 @@ const FAQ_CATEGORIES = [
       },
       {
         question: "Why am I seeing jobs that don't match my preferences?",
-        answer: "Try refining your preferences in Settings — adjust your job titles, locations, or salary range. Pro users benefit from AI that learns from your activity and improves matches over time.",
+        answer: "Try refining your preferences in Settings — adjust your job titles, locations, or salary range. Pro and Ultra users benefit from AI that learns from your activity and improves matches over time.",
       },
       {
         question: "Can I search for specific companies?",
@@ -101,19 +101,19 @@ const FAQ_CATEGORIES = [
     questions: [
       {
         question: "What can the AI assistant do?",
-        answer: "The AI assistant can write personalized cover letters, help answer application questions, optimize your CV for specific roles, analyze job fit, and help you prepare for interviews. Pro users get unlimited access to all AI features.",
+        answer: "The AI assistant can write personalized cover letters, help answer application questions, generate optimized CVs for specific roles, analyze job fit, and help you prepare for interviews. Pro users get 30 AI responses, 5 cover letters, and 3 CV generations per day. Ultra users get unlimited AI access.",
       },
       {
         question: "Is the AI chat available to Free users?",
-        answer: "Yes — the floating chat button (bottom corner of the screen) is available to everyone. Free users can ask general questions about using JobSilver. Job-specific AI help like cover letters and application answers requires a Pro subscription.",
+        answer: "Yes — the floating chat button (bottom corner of the screen) is available to everyone. Free users can ask general questions about using JobSilver. Job-specific AI help like cover letters and CV generation requires a Pro or Ultra subscription.",
       },
       {
         question: "How do I access job-specific AI help?",
-        answer: "On any job detail page, Pro users see an embedded AI chat that has context about that specific job. This allows the AI to write tailored cover letters and application responses. Free users see an option to upgrade.",
+        answer: "On any job detail page, Pro and Ultra users see an embedded AI chat that has context about that specific job. This allows the AI to write tailored cover letters and application responses. Free users see an option to upgrade.",
       },
       {
         question: "Can I upload screenshots of application forms?",
-        answer: "Yes (Pro only) — you can attach images to your chat messages and the AI will analyze the form fields to help you craft responses. Great for complex application questions.",
+        answer: "Yes (Pro and Ultra) — you can attach images to your chat messages and the AI will analyze the form fields to help you craft responses. Great for complex application questions.",
       },
       {
         question: "Are my AI conversations private?",
@@ -121,7 +121,7 @@ const FAQ_CATEGORIES = [
       },
       {
         question: "What's the difference between the chat button and job page chat?",
-        answer: "The floating chat button (bottom corner) helps with general questions and is available to all users. The job page chat (Pro only) is embedded on job detail pages and has full context about that specific job, enabling tailored assistance.",
+        answer: "The floating chat button (bottom corner) helps with general questions and is available to all users. The job page chat (Pro and Ultra) is embedded on job detail pages and has full context about that specific job, enabling tailored assistance.",
       },
     ],
   },
@@ -152,12 +152,12 @@ const FAQ_CATEGORIES = [
     title: "Account & Billing",
     questions: [
       {
-        question: "How do I upgrade to Pro?",
-        answer: "Go to Pricing, select the Pro plan, and enter your payment details. You'll get a 3-day free trial to try all Pro features before being charged.",
+        question: "How do I upgrade to Pro or Ultra?",
+        answer: "Go to Pricing and select your plan. Pro ($3.99/week or $12.99/month) includes a 3-day free trial. Ultra ($6.99/week or $19.99/month) has no trial but offers unlimited AI access.",
       },
       {
         question: "How do I cancel my subscription?",
-        answer: "Go to Dashboard → Settings → Manage Subscription → Cancel. You'll keep Pro access until the end of your current billing period.",
+        answer: "Go to Dashboard → Settings → Manage Subscription → Cancel. You'll keep your Pro or Ultra access until the end of your current billing period.",
       },
       {
         question: "Can I get a refund?",
@@ -169,7 +169,7 @@ const FAQ_CATEGORIES = [
       },
       {
         question: "What happens to my data when I cancel?",
-        answer: "Your saved jobs, preferences, and CV remain in your account until you actively delete it. You can continue using the Free tier features after canceling Pro.",
+        answer: "Your preferences, CV, and favorited jobs remain in your account until you actively delete it. Non-favorited jobs older than 60 days are automatically cleaned up to keep your board fresh. You can continue using Free tier features after canceling.",
       },
     ],
   },
@@ -187,7 +187,7 @@ const FAQ_CATEGORIES = [
       },
       {
         question: "Can I download my data?",
-        answer: "Yes — contact our support team to request a full export of your data. We'll provide everything we have on file within a few business days.",
+        answer: "Yes — go to Dashboard → Profile and click \"Download My Data\". You'll receive a JSON file containing your profile, job preferences, saved jobs, favorites, AI chat history, and learned preferences. You can export your data once per hour.",
       },
     ],
   },

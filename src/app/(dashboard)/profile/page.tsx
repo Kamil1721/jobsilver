@@ -31,6 +31,7 @@ import {
   AlertTriangle,
   ExternalLink,
   Sparkles,
+  Download,
 } from "lucide-react"
 import { FeatureGate } from "@/components/ui/feature-gate"
 import { Switch } from "@/components/ui/switch"
@@ -86,6 +87,8 @@ function ProfilePageContent() {
   const [showDeleteDialog, setShowDeleteDialog] = React.useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = React.useState("")
   const [isDeleting, setIsDeleting] = React.useState(false)
+  // Data export state
+  const [isExporting, setIsExporting] = React.useState(false)
   // CV viewer states
   const [cvViewUrl, setCvViewUrl] = React.useState<string | null>(null)
   const [isLoadingCv, setIsLoadingCv] = React.useState(false)
@@ -342,6 +345,48 @@ function ProfilePageContent() {
     }
   }, [profile?.cv_url, cvViewUrl, fetchCvUrl])
 
+  // Handle data export (GDPR data portability)
+  const handleExportData = async () => {
+    setIsExporting(true)
+    try {
+      const response = await fetch("/api/account/export")
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to export data")
+      }
+
+      // Get the filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition')
+      const filenameMatch = contentDisposition?.match(/filename="(.+)"/)
+      const filename = filenameMatch?.[1] || `jobsilver-data-export-${new Date().toISOString().split('T')[0]}.json`
+
+      // Create blob and download
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast({
+        title: "Data exported successfully",
+        description: "Your data has been downloaded as a JSON file.",
+      })
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Export failed",
+        description: error instanceof Error ? error.message : "Failed to export data. Please try again.",
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   // Handle account deletion
   const handleDeleteAccount = async () => {
     if (deleteConfirmation.toLowerCase() !== "confirm") {
@@ -501,14 +546,29 @@ function ProfilePageContent() {
                 </div>
 
                 <div className="flex justify-between pt-4">
-                  <Button
-                    variant="destructive"
-                    onClick={() => setShowDeleteDialog(true)}
-                    className="bg-red-600 hover:bg-red-700 text-white"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete Account
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={handleExportData}
+                      disabled={isExporting}
+                      className="border-zinc-300 dark:border-zinc-700"
+                    >
+                      {isExporting ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4 mr-2" />
+                      )}
+                      Download My Data
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => setShowDeleteDialog(true)}
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Account
+                    </Button>
+                  </div>
                   <Button
                     onClick={handleSave}
                     disabled={isSaving}

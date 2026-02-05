@@ -14,7 +14,7 @@ const FAQ_ITEMS: FAQItem[] = [
   {
     question: "What happens when I reach my daily limit?",
     answer:
-      "When you reach your daily AI job match or auto-application limit, you can still browse and manually apply to jobs. Your limits reset at midnight UTC. Upgrade to a higher plan for increased limits.",
+      "When you reach your daily job discovery or AI usage limit, you can still browse and track your existing jobs. Your limits reset at midnight UTC. Free users can upgrade to Pro for more jobs and AI access, or Ultra for unlimited AI.",
   },
   {
     question: "Can I change my plan at any time?",
@@ -22,9 +22,9 @@ const FAQ_ITEMS: FAQItem[] = [
       "Yes! You can upgrade or downgrade your plan at any time. When upgrading, you'll have immediate access to new features. When downgrading, your current plan benefits remain until the end of your billing period.",
   },
   {
-    question: "How does yearly billing work?",
+    question: "What's the difference between weekly and monthly billing?",
     answer:
-      "Yearly billing gives you 2 months free compared to monthly billing. You'll be charged once per year, and you can cancel anytime. If you cancel, you'll retain access until the end of your billing period.",
+      "Monthly billing saves you about 25% compared to paying weekly. For example, Pro is $3.99/week or $12.99/month (vs $15.96 if paid weekly). You can switch billing cycles when your current period ends.",
   },
   {
     question: "What payment methods do you accept?",
@@ -34,22 +34,22 @@ const FAQ_ITEMS: FAQItem[] = [
   {
     question: "Is there a free trial?",
     answer:
-      "The Free plan lets you explore core features without any commitment. When you upgrade to a paid plan, you can start using premium features immediately. We offer a 14-day money-back guarantee if you're not satisfied.",
+      "The Pro plan includes a 3-day free trial. Start instantly with full Pro features, and you won't be charged if you cancel within 3 days. Note: Ultra has no trial and charges immediately upon subscription.",
   },
   {
-    question: "How do auto-applications work?",
+    question: "What's included in each plan?",
     answer:
-      "Auto-applications use your profile information and saved answers to automatically fill out job applications on supported platforms. You review and approve applications before they're submitted, maintaining full control over your job search.",
+      "Free: 3 jobs/day, Kanban tracking, basic match scores. Pro ($3.99/wk or $12.99/mo): 15 jobs/day, 30 AI responses, 5 cover letters, 3 CVs per day, weekly alerts. Ultra ($6.99/wk or $19.99/mo): 35 jobs/day, unlimited AI, daily alerts, priority support.",
   },
   {
     question: "What's included in Priority Support?",
     answer:
-      "Priority Support includes faster response times (within 4 hours during business hours), direct access to our support team via chat, and priority bug fixes. Ultra plan members get dedicated support with a named account manager.",
+      "Priority Support (Ultra plan only) includes faster response times during business hours and prioritized bug fixes. Contact our support team at jobsilver50@gmail.com.",
   },
   {
-    question: "Can I get a refund?",
+    question: "Can I cancel anytime?",
     answer:
-      "Yes, we offer a 14-day money-back guarantee for all paid plans. If you're not satisfied within the first 14 days, contact us for a full refund. After 14 days, you can cancel anytime but refunds are not provided for the remaining period.",
+      "Yes, you can cancel your subscription anytime from your dashboard settings. You'll retain access to your current plan's features until the end of your billing period. No questions asked.",
   },
 ]
 

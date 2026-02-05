@@ -66,7 +66,7 @@ import {
 import { canAccessFeature } from '@/lib/features/config'
 import type { SubscriptionPlan, AllSubscriptionPlans } from '@/lib/supabase/types'
 
-// Plan-based quota limits (2-tier model: free=3 jobs/day, pro=50 jobs/day)
+// Plan-based quota limits (3-tier model: free=3 jobs/day, pro=15 jobs/day, ultra=35 jobs/day)
 import { getDailyJobLimit, getPlanLimits } from '@/lib/stripe/plans'
 
 // =============================================================================
@@ -82,7 +82,7 @@ interface QuotaResult {
 
 /**
  * Get plan-based daily job limit for a user
- * 2-tier model: free=3 jobs/day, pro=50 jobs/day
+ * 3-tier model: free=3 jobs/day, pro=15 jobs/day, ultra=35 jobs/day
  */
 function getPlanJobLimit(plan: AllSubscriptionPlans): number {
   return getDailyJobLimit(plan)
@@ -90,7 +90,7 @@ function getPlanJobLimit(plan: AllSubscriptionPlans): number {
 
 /**
  * Check and update user's daily job quota
- * 2-tier model: free=3 jobs/day, pro=50 jobs/day
+ * 3-tier model: free=3 jobs/day, pro=15 jobs/day, ultra=35 jobs/day
  */
 async function checkAndUpdateQuota(
   supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never,
@@ -119,7 +119,7 @@ async function checkAndUpdateQuota(
         jobs_fetched: 0,
         jobs_limit: planJobLimit,
         applications_used: 0,
-        applications_limit: planJobLimit, // Same as jobs limit in 2-tier model
+        applications_limit: planJobLimit, // Same as jobs limit in 3-tier model
       })
       .select()
       .single()
@@ -171,7 +171,7 @@ async function checkAndUpdateQuota(
 
 /**
  * Get current quota status without updating
- * 2-tier model: free=3 jobs/day, pro=50 jobs/day
+ * 3-tier model: free=3 jobs/day, pro=15 jobs/day, ultra=35 jobs/day
  */
 async function getQuotaStatus(
   supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never,
@@ -332,8 +332,8 @@ export async function POST(request: NextRequest) {
       }, { status: 429 })
     }
 
-    // Check if user can use AI learning features (cast to handle legacy plans)
-    const canUseAILearning = canAccessFeature(userPlan as 'free' | 'pro', 'ai_learning', isTester)
+    // Check if user can use AI learning features
+    const canUseAILearning = canAccessFeature(userPlan, 'ai_learning', isTester)
 
     console.log('CV Data check:', {
       hasProfile: !!profile,
@@ -1547,7 +1547,7 @@ export async function POST(request: NextRequest) {
     // Users must discard jobs or move them to APPLIED to make room for new ones
 
     const planLimits = getPlanLimits(userPlan)
-    const maxActiveJobs = planLimits.savedJobs // 50 for free, 1000 for pro
+    const maxActiveJobs = planLimits.savedJobs // 50 for free, 200 for pro, -1 (unlimited) for ultra
 
     // Count current active jobs (only discovered status = NEW MATCHES column)
     const { count: activeJobsCount, error: countError } = await supabase
@@ -1561,12 +1561,13 @@ export async function POST(request: NextRequest) {
     }
 
     const currentActiveJobs = activeJobsCount || 0
-    const remainingSlots = Math.max(0, maxActiveJobs - currentActiveJobs)
+    // Handle unlimited (-1) for Ultra users
+    const remainingSlots = maxActiveJobs === -1 ? Infinity : Math.max(0, maxActiveJobs - currentActiveJobs)
     let activeJobsLimitReached = false
 
-    console.log(`Active jobs limit check: ${currentActiveJobs}/${maxActiveJobs} (${remainingSlots} slots remaining)`)
+    console.log(`Active jobs limit check: ${currentActiveJobs}/${maxActiveJobs === -1 ? 'unlimited' : maxActiveJobs} (${remainingSlots === Infinity ? 'unlimited' : remainingSlots} slots remaining)`)
 
-    // If at limit, don't save any new jobs
+    // If at limit, don't save any new jobs (never true for unlimited)
     if (remainingSlots === 0) {
       activeJobsLimitReached = true
       console.log(`Active jobs limit reached for user ${effectiveUserId}. No new jobs will be saved.`)
@@ -1817,12 +1818,13 @@ export async function POST(request: NextRequest) {
     console.log(`Returning ${jobsWithCorrectIds.length} jobs to frontend`)
     console.log('Jobs by source:', sourceStats)
 
-    // Build upgrade teaser for free users with hidden jobs
-    // Pro users don't see this since there's no upgrade path beyond Pro
-    const canUpgrade = userPlan === 'free' || userPlan === 'starter' || userPlan === 'basic'
-    const upgradeTeaser = (hiddenJobsCount > 0 && canUpgrade) ? {
+    // Build upgrade teaser ONLY for Free users with hidden jobs
+    // Pro and Ultra users do NOT see the upgrade teaser - they simply get their daily limit
+    // This prevents confusing Pro users with "upgrade" prompts when they're already paid
+    const isFreeUser = userPlan === 'free' || userPlan === 'starter' || userPlan === 'basic'
+    const upgradeTeaser = (hiddenJobsCount > 0 && isFreeUser) ? {
       hidden_jobs_count: hiddenJobsCount,
-      message: `Found ${hiddenJobsCount} more job${hiddenJobsCount === 1 ? '' : 's'} matching your criteria. Upgrade to Pro to view all jobs.`,
+      message: `Found ${hiddenJobsCount} more job${hiddenJobsCount === 1 ? '' : 's'} matching your criteria. Upgrade to Pro to view more jobs daily.`,
       total_found: totalJobsFoundBeforeQuota,
       shown: jobsWithCorrectIds.length,
     } : null

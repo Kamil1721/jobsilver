@@ -6,6 +6,7 @@ import { notifyNewMatches } from '@/lib/email/triggers'
 import type { JobMatch } from '@/lib/email/templates/job-matches'
 import { getDailyJobLimit } from '@/lib/stripe/plans'
 import { checkRateLimit } from '@/lib/security/rate-limit'
+import { sendCronFailureAlert, sendCurationSummary } from '@/lib/email/cron-alerts'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes max for Vercel
@@ -146,9 +147,37 @@ export async function GET(request: NextRequest): Promise<NextResponse<CurationSu
 
     console.log('[Daily Curation] Completed:', summary)
 
+    // Send summary email to admin (only if there were failures or significant activity)
+    try {
+      await sendCurationSummary({
+        totalUsers: summary.totalUsers,
+        usersProcessed: summary.usersProcessed,
+        usersFailed: summary.usersFailed,
+        totalJobsCurated: summary.totalJobsCurated,
+        errors: summary.errors,
+        durationMs: summary.durationMs,
+      })
+    } catch (emailError) {
+      console.error('[Daily Curation] Failed to send summary email:', emailError)
+    }
+
     return NextResponse.json(summary)
   } catch (error) {
-    console.error('[Daily Curation] Critical error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    console.error('[Daily Curation] Critical error:', errorMessage)
+
+    // Send failure alert to admin
+    try {
+      await sendCronFailureAlert({
+        cronName: 'daily-curation',
+        error: errorMessage,
+        details: { startedAt },
+        timestamp: new Date().toISOString(),
+      })
+    } catch (alertError) {
+      console.error('[Daily Curation] Failed to send alert:', alertError)
+    }
+
     return NextResponse.json(
       { error: 'Curation failed due to internal error' },
       { status: 500 }
@@ -217,7 +246,7 @@ async function curateJobsForUser(
 ): Promise<UserCurationResult> {
   // Calculate per-user job target based on subscription plan
   const userPlan = (user.subscription_plan || 'free') as AllSubscriptionPlans
-  const jobTarget = getDailyJobLimit(userPlan) // 50 for pro, 3 for free
+  const jobTarget = getDailyJobLimit(userPlan) // 3 for free, 15 for pro, 35 for ultra
 
   console.log(`[Daily Curation] User ${user.id}: plan=${userPlan}, jobTarget=${jobTarget}`)
 

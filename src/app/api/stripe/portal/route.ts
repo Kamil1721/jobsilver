@@ -35,7 +35,18 @@ export async function POST(request: NextRequest) {
     let returnUrl: string | undefined
     try {
       const body = await request.json()
-      returnUrl = body.returnUrl
+      if (body.returnUrl && typeof body.returnUrl === 'string') {
+        // Validate return URL - must be relative path or same origin
+        const baseUrl = getBaseUrl(request)
+        if (body.returnUrl.startsWith('/')) {
+          // Relative URL - safe, construct full URL
+          returnUrl = baseUrl + body.returnUrl
+        } else if (body.returnUrl.startsWith(baseUrl)) {
+          // Same origin - safe
+          returnUrl = body.returnUrl
+        }
+        // Ignore other URLs (potential SSRF/redirect attack)
+      }
     } catch {
       // No body or invalid JSON, use default return URL
     }

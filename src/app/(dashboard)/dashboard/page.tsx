@@ -49,6 +49,7 @@ import { useSubscription } from "@/contexts/SubscriptionContext"
 import { QuotaDisplay } from "@/components/dashboard/quota-display"
 import { BulkActionsToolbar } from "@/components/dashboard/bulk-actions-toolbar"
 import type { Job, JobStatus, QuotaStatus } from "@/lib/supabase/types"
+import { getPlanLimits } from "@/lib/stripe/plans"
 
 interface UpgradeTeaser {
   hidden_jobs_count: number
@@ -121,6 +122,13 @@ function DashboardPageContent() {
   const [isBulkProcessing, setIsBulkProcessing] = React.useState(false)
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = React.useState(false)
   const [upgradeTeaser, setUpgradeTeaser] = React.useState<UpgradeTeaser | null>(null)
+  // Job limit warning for Free users (shown in New Matches column)
+  const [jobLimitWarning, setJobLimitWarning] = React.useState<{
+    show: boolean
+    currentCount: number
+    maxCount: number
+    atLimit: boolean
+  } | null>(null)
   // Track pending drag updates to prevent race conditions
   const pendingDragUpdates = React.useRef<Set<string>>(new Set())
   const { toast } = useToast()
@@ -128,8 +136,8 @@ function DashboardPageContent() {
   const searchParams = useSearchParams()
   const supabase = createClient()
   const { plan, isTester: subscriptionIsTester } = useSubscription()
-  // Check for premium plans (current 'pro' + legacy plans for backwards compatibility) or tester status
-  const isPremium = plan === "pro" || (plan as string) === "mega" || subscriptionIsTester || isTester
+  // Check for premium plans (current 'pro'/'ultra' + legacy 'mega' for backwards compatibility) or tester status
+  const isPremium = plan === "pro" || plan === "ultra" || (plan as string) === "mega" || subscriptionIsTester || isTester
 
   // Check for tester activation from OAuth callback
   React.useEffect(() => {
@@ -251,9 +259,10 @@ function DashboardPageContent() {
       setJobs(mappedJobs)
 
       // Fetch favorite IDs for premium users and testers
-      const userPlan = (profile as any)?.subscription_plan
+      const userPlan = (profile as any)?.subscription_plan || 'free'
       const userIsTester = (profile as any)?.is_tester
-      if (userPlan === 'pro' || userPlan === 'mega' || userIsTester) {
+      // Note: Job limit warning is calculated in useEffect when jobs/plan change
+      if (userPlan === 'pro' || userPlan === 'ultra' || userPlan === 'mega' || userIsTester) {
         try {
           const favResponse = await fetch('/api/jobs/favorites')
           if (favResponse.ok) {
@@ -270,6 +279,29 @@ function DashboardPageContent() {
 
     fetchJobs()
   }, [supabase, toast])
+
+  // Recalculate job limit warning when jobs change (for Free users only)
+  React.useEffect(() => {
+    if (plan !== 'free' || isTester || subscriptionIsTester) {
+      setJobLimitWarning(null)
+      return
+    }
+
+    const discoveredCount = jobs.filter(j => j.status === 'discovered').length
+    const limits = getPlanLimits('free')
+    const maxJobs = limits.savedJobs // 50 for free
+
+    if (discoveredCount >= maxJobs * 0.9) {
+      setJobLimitWarning({
+        show: true,
+        currentCount: discoveredCount,
+        maxCount: maxJobs,
+        atLimit: discoveredCount >= maxJobs,
+      })
+    } else {
+      setJobLimitWarning(null)
+    }
+  }, [jobs, plan, isTester, subscriptionIsTester])
 
   // Search for new jobs
   const handleSearch = async (filters: SearchFilters) => {
@@ -707,6 +739,12 @@ function DashboardPageContent() {
     return filterJobs(columnJobs)
   }
 
+  // Count only favorites that exist in current job list (some may have been discarded)
+  const actualFavoritesCount = React.useMemo(() => {
+    const jobIds = new Set(jobs.map(j => j.id))
+    return Array.from(favoriteIds).filter(id => jobIds.has(id)).length
+  }, [jobs, favoriteIds])
+
   // Calculate stats
   const stats = {
     newMatches: getColumnJobs("discovered").length,
@@ -758,13 +796,15 @@ function DashboardPageContent() {
               </div>
             </div>
 
-            {/* Search bar - visible for admins and testers */}
-            <SearchBar
-              onSearch={handleSearch}
-              onFilterChange={setSearchFilter}
-              isLoading={isSearching}
-              isAdmin={isAdmin || isTester}
-            />
+            {/* Search bar - only visible for admins and testers (regular users get daily curated jobs) */}
+            {(isAdmin || isTester) && (
+              <SearchBar
+                onSearch={handleSearch}
+                onFilterChange={setSearchFilter}
+                isLoading={isSearching}
+                isAdmin={isAdmin || isTester}
+              />
+            )}
 
             {/* Favorites filter for Pro/Ultra users and Selection mode toggle */}
             <div className="flex items-center gap-3">
@@ -820,13 +860,13 @@ function DashboardPageContent() {
                   >
                     <Heart className={`w-3.5 h-3.5 ${showFavoritesOnly ? "fill-rose-500 text-rose-500" : ""}`} />
                     Favorites
-                    {favoriteIds.size > 0 && (
+                    {actualFavoritesCount > 0 && (
                       <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
                         showFavoritesOnly
                           ? "bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300"
                           : "bg-zinc-100 dark:bg-white/[0.08] text-zinc-600 dark:text-zinc-400"
                       }`}>
-                        {favoriteIds.size}
+                        {actualFavoritesCount}
                       </span>
                     )}
                   </button>
@@ -842,8 +882,8 @@ function DashboardPageContent() {
 
       {/* 3-Column Kanban Board */}
       <div className="p-4 sm:p-6">
-        {/* Upgrade Teaser - compact notification above columns */}
-        {upgradeTeaser && upgradeTeaser.hidden_jobs_count > 0 && (
+        {/* Upgrade Teaser - only show to Free users (Pro/Ultra don't see "more jobs" teaser) */}
+        {upgradeTeaser && upgradeTeaser.hidden_jobs_count > 0 && plan === "free" && !isPremium && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -900,6 +940,7 @@ function DashboardPageContent() {
                 selectedJobIds={selectedJobIds}
                 onSelectionChange={handleSelectionChange}
                 onSelectAllInColumn={handleSelectAllInColumn}
+                jobLimitWarning={column.id === "discovered" ? jobLimitWarning ?? undefined : undefined}
               />
             ))}
           </motion.div>

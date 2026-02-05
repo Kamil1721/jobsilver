@@ -15,6 +15,8 @@ import {
   ArrowUpRight,
   CheckCircle2,
   FlaskConical,
+  Check,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -36,6 +38,11 @@ interface SubscriptionManagementProps {
   userId: string
 }
 
+interface PlanFeature {
+  name: string
+  included: boolean
+}
+
 const PLAN_DETAILS: Record<
   string,
   {
@@ -45,6 +52,8 @@ const PLAN_DETAILS: Record<
     bgColor: string
     description: string
     jobsPerDay: number
+    aiInfo: string
+    features: PlanFeature[]
   }
 > = {
   free: {
@@ -54,30 +63,69 @@ const PLAN_DETAILS: Record<
     bgColor: "bg-zinc-100 dark:bg-zinc-800",
     description: "Basic job search",
     jobsPerDay: 3,
+    aiInfo: "No AI access",
+    features: [
+      { name: "3 jobs discovered per day", included: true },
+      { name: "Kanban job tracking board", included: true },
+      { name: "Save up to 50 jobs", included: true },
+      { name: "Basic job match scores", included: true },
+      { name: "AI chat assistance", included: false },
+      { name: "Cover letter generation", included: false },
+      { name: "CV generation", included: false },
+    ],
   },
   starter: {
     name: "Starter",
     icon: Sparkles,
     color: "text-blue-600 dark:text-blue-400",
     bgColor: "bg-blue-100 dark:bg-blue-900/30",
-    description: "For active job seekers",
+    description: "Legacy plan",
     jobsPerDay: 10,
+    aiInfo: "Limited AI access",
+    features: [
+      { name: "10 jobs discovered per day", included: true },
+      { name: "Legacy plan - consider upgrading", included: true },
+    ],
   },
   pro: {
     name: "Pro",
     icon: Rocket,
     color: "text-violet-600 dark:text-violet-400",
     bgColor: "bg-violet-100 dark:bg-violet-900/30",
-    description: "Best value for job hunters",
-    jobsPerDay: 50,
+    description: "AI assistance with daily limits",
+    jobsPerDay: 15,
+    aiInfo: "30 AI responses/day",
+    features: [
+      { name: "15 jobs discovered per day", included: true },
+      { name: "30 AI responses per day", included: true },
+      { name: "5 cover letters per day", included: true },
+      { name: "3 CV generations per day", included: true },
+      { name: "Save up to 200 jobs", included: true },
+      { name: "Advanced filters", included: true },
+      { name: "Favorite jobs", included: true },
+      { name: "Weekly email alerts", included: true },
+      { name: "Priority support", included: false },
+    ],
   },
   ultra: {
     name: "Ultra",
     icon: Crown,
     color: "text-amber-600 dark:text-amber-400",
     bgColor: "bg-amber-100 dark:bg-amber-900/30",
-    description: "Maximum job search power",
-    jobsPerDay: 50,
+    description: "Unlimited AI for power users",
+    jobsPerDay: 35,
+    aiInfo: "Unlimited AI",
+    features: [
+      { name: "35 jobs discovered per day", included: true },
+      { name: "Unlimited AI chat assistance", included: true },
+      { name: "Unlimited cover letters", included: true },
+      { name: "Unlimited CV generations", included: true },
+      { name: "Unlimited saved jobs", included: true },
+      { name: "Advanced filters", included: true },
+      { name: "Favorite jobs", included: true },
+      { name: "Daily email alerts", included: true },
+      { name: "Priority support", included: true },
+    ],
   },
 }
 
@@ -245,14 +293,48 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
                   <span className="font-medium">
                     {planInfo.jobsPerDay} jobs/day
                   </span>
-                  <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    AI Assistant included
-                  </span>
+                  {!isFreePlan && (
+                    <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {planInfo.aiInfo}
+                    </span>
+                  )}
+                  {isFreePlan && (
+                    <span className="text-muted-foreground">
+                      {planInfo.aiInfo}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Features List */}
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-muted-foreground">Plan Features</h4>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {planInfo.features.map((feature, i) => (
+              <li
+                key={i}
+                className={cn(
+                  "flex items-center gap-2 text-sm",
+                  !feature.included && "opacity-50"
+                )}
+              >
+                {feature.included ? (
+                  <div className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                    <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                  </div>
+                ) : (
+                  <div className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 bg-muted text-muted-foreground">
+                    <X className="w-2.5 h-2.5" strokeWidth={3} />
+                  </div>
+                )}
+                <span>{feature.name}</span>
+              </li>
+            ))}
+          </ul>
         </div>
 
         {/* Trial Warning */}

@@ -14,6 +14,7 @@ import {
   Loader2,
   Zap,
   Rocket,
+  Crown,
   ChevronDown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -39,12 +40,19 @@ interface Plan {
   cta: string
   popular?: boolean
   badge?: string
-  tier: "free" | "pro"
+  tier: "free" | "pro" | "ultra"
   jobsPerDay: number
   hasAI: boolean
+  aiResponsesPerDay?: number | null // -1 = unlimited, null = no access
+  coverLettersPerDay?: number | null
+  cvGenerationsPerDay?: number | null
+  hasTrial?: boolean
 }
 
-// 2-tier pricing plans
+// 3-tier pricing plans (February 2026)
+// Free: 3 jobs/day, NO AI
+// Pro: 15 jobs/day, limited AI (30 responses, 5 cover letters, 3 CV gen per day)
+// Ultra: 35 jobs/day, UNLIMITED AI, priority support
 const PLANS: Plan[] = [
   {
     id: "free",
@@ -56,35 +64,73 @@ const PLANS: Plan[] = [
     cta: "Get Started",
     jobsPerDay: 3,
     hasAI: false,
+    aiResponsesPerDay: null,
+    coverLettersPerDay: null,
+    cvGenerationsPerDay: null,
+    hasTrial: false,
     features: [
       { name: "3 jobs discovered per day", included: true },
       { name: "Kanban job tracking board", included: true },
+      { name: "Save up to 50 jobs", included: true },
       { name: "Basic job match scores", included: true },
-      { name: "Manual apply to external sites", included: true },
       { name: "AI chat assistance", included: false },
       { name: "Cover letter generation", included: false },
-      { name: "CV optimization", included: false },
+      { name: "CV generation", included: false },
+      { name: "Advanced filters", included: false },
+      { name: "Favorite jobs", included: false },
+      { name: "Email alerts", included: false },
     ],
   },
   {
     id: "pro",
     name: "Pro",
-    description: "Unlimited AI power for your job search",
-    weeklyPrice: 4.99,
-    monthlyPrice: 14.99,
+    description: "AI assistance with daily limits",
+    weeklyPrice: 3.99,
+    monthlyPrice: 12.99,
     tier: "pro",
     popular: true,
     badge: "3-Day Free Trial",
     cta: "Start Free Trial",
-    jobsPerDay: 50,
+    jobsPerDay: 15,
     hasAI: true,
+    aiResponsesPerDay: 30,
+    coverLettersPerDay: 5,
+    cvGenerationsPerDay: 3,
+    hasTrial: true,
     features: [
-      { name: "50 jobs discovered per day", included: true },
+      { name: "15 jobs discovered per day", included: true },
+      { name: "30 AI responses per day", included: true },
+      { name: "5 cover letters per day", included: true },
+      { name: "3 CV generations per day", included: true },
+      { name: "Save up to 200 jobs", included: true },
+      { name: "Advanced filters", included: true },
+      { name: "Favorite jobs", included: true },
+      { name: "Weekly email alerts", included: true },
+    ],
+  },
+  {
+    id: "ultra",
+    name: "Ultra",
+    description: "Unlimited AI for power users",
+    weeklyPrice: 6.99,
+    monthlyPrice: 19.99,
+    tier: "ultra",
+    cta: "Subscribe",
+    jobsPerDay: 35,
+    hasAI: true,
+    aiResponsesPerDay: -1, // unlimited
+    coverLettersPerDay: -1,
+    cvGenerationsPerDay: -1,
+    hasTrial: false,
+    features: [
+      { name: "35 jobs discovered per day", included: true },
       { name: "Unlimited AI chat assistance", included: true },
       { name: "Unlimited cover letters", included: true },
-      { name: "CV optimization suggestions", included: true },
-      { name: "AI learns your preferences", included: true },
-      { name: "Advanced match analysis", included: true },
+      { name: "Unlimited CV generations", included: true },
+      { name: "Unlimited saved jobs", included: true },
+      { name: "Advanced filters", included: true },
+      { name: "Favorite jobs", included: true },
+      { name: "Daily email alerts", included: true },
       { name: "Priority support", included: true },
     ],
   },
@@ -94,15 +140,15 @@ const PLANS: Plan[] = [
 const FAQ_ITEMS = [
   {
     question: "How does the 3-day free trial work?",
-    answer: "Start your Pro plan trial instantly. No charge for 3 days. Cancel anytime before the trial ends and you won't be billed. After the trial, you'll be charged based on your selected billing cycle (weekly or monthly).",
+    answer: "The Pro plan includes a 3-day free trial. Start instantly, no charge for 3 days. Cancel anytime before the trial ends and you won't be billed. After the trial, you'll be charged based on your selected billing cycle. Note: Ultra has no trial and charges immediately.",
   },
   {
-    question: "What's the difference between Free and Pro?",
-    answer: "Free lets you discover 3 jobs per day and track them on your Kanban board. Pro unlocks 50 jobs per day plus unlimited AI assistance - chat help, cover letter generation, CV optimization, and AI that learns your preferences to find better matches.",
+    question: "What's the difference between the plans?",
+    answer: "Free gives you 3 jobs/day with basic tracking. Pro ($3.99/week or $12.99/month) unlocks 15 jobs/day plus limited AI: 30 chat responses, 5 cover letters, and 3 CV generations per day. Ultra ($6.99/week or $19.99/month) gives you 35 jobs/day with unlimited AI and priority support.",
   },
   {
     question: "Can I cancel anytime?",
-    answer: "Absolutely. Cancel your subscription anytime from your dashboard. You'll retain Pro access until the end of your current billing period.",
+    answer: "Absolutely. Cancel your subscription anytime from your dashboard. You'll retain access until the end of your current billing period.",
   },
   {
     question: "What payment methods do you accept?",
@@ -110,11 +156,11 @@ const FAQ_ITEMS = [
   },
   {
     question: "How does the AI assistant help?",
-    answer: "Our AI assistant helps you craft compelling answers to application questions, writes personalized cover letters tailored to each role, provides CV optimization suggestions, and learns your preferences to improve job recommendations over time.",
+    answer: "Our AI assistant helps you craft compelling answers to application questions, writes personalized cover letters tailored to each role, and generates optimized CVs. Pro users get daily limits (30 AI responses, 5 cover letters, 3 CVs), while Ultra users get unlimited access.",
   },
   {
     question: "What counts as a 'discovered job'?",
-    answer: "When you search for jobs, each new job that appears on your board counts toward your daily limit. Jobs you've already seen or saved don't count again. Free users can discover 3 new jobs per day, Pro users can discover 50.",
+    answer: "Each day, new jobs matching your preferences are automatically discovered and added to your board. Each new job counts toward your daily limit. Jobs you've already seen don't count again. Free: 3/day, Pro: 15/day, Ultra: 35/day.",
   },
 ]
 
@@ -335,7 +381,7 @@ function PricingPageContent() {
               className="text-lg md:text-xl text-zinc-500 max-w-xl mx-auto mb-12 leading-relaxed"
             >
               Discover more jobs and let AI supercharge your applications.
-              Free to start, Pro when you&apos;re ready.
+              Choose the plan that fits your job search.
             </motion.p>
 
             {/* Billing Toggle */}
@@ -350,10 +396,10 @@ function PricingPageContent() {
         </div>
       </section>
 
-      {/* Pricing Cards - 2 cards centered */}
+      {/* Pricing Cards - 3 cards */}
       <section className="relative py-8 md:py-16">
-        <div className="max-w-4xl mx-auto px-6">
-          <div className="grid md:grid-cols-2 gap-6 md:gap-8 items-stretch">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="grid md:grid-cols-3 gap-6 md:gap-6 items-stretch">
             {PLANS.map((plan, index) => (
               <PricingCard
                 key={plan.id}
@@ -434,7 +480,7 @@ function PricingPageContent() {
                 transition={{ duration: 0.6, delay: 0.3 }}
                 className="text-zinc-400 text-lg mb-10 max-w-md mx-auto"
               >
-                Start free with 3 jobs per day, or unlock 50 jobs and unlimited AI with Pro.
+                Start free with 3 jobs per day. Upgrade to Pro for AI assistance, or Ultra for unlimited power.
               </motion.p>
 
               <motion.div
@@ -531,7 +577,7 @@ function PricingCard({
   const price = billingCycle === "weekly" ? plan.weeklyPrice : plan.monthlyPrice
   const period = billingCycle === "weekly" ? "/week" : "/month"
 
-  const Icon = plan.tier === "free" ? Zap : Rocket
+  const Icon = plan.tier === "free" ? Zap : plan.tier === "ultra" ? Crown : Rocket
 
   return (
     <motion.div
@@ -632,12 +678,18 @@ function PricingCard({
           </div>
           <p className="text-xs text-zinc-500 mt-2">
             {plan.hasAI ? (
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="w-3 h-3 text-emerald-400" />
-                <span className="text-emerald-400">Unlimited AI assistance included</span>
-              </span>
+              plan.aiResponsesPerDay === -1 ? (
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="w-3 h-3 text-emerald-400" />
+                  <span className="text-emerald-400">Unlimited AI assistance</span>
+                </span>
+              ) : (
+                <span className="text-zinc-400">
+                  {plan.aiResponsesPerDay} AI responses/day
+                </span>
+              )
             ) : (
-              "AI features require Pro subscription"
+              "AI features require Pro or Ultra"
             )}
           </p>
         </div>
@@ -712,27 +764,29 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle: string })
   )
 }
 
-// Comparison Table - 2 columns
+// Comparison Table - 3 columns
 function ComparisonTable({ billingCycle }: { billingCycle: BillingCycle }) {
   const ref = useRef<HTMLDivElement>(null)
   const isInView = useInView(ref, { once: true, margin: "-100px" })
 
   const rows = [
-    { feature: "Jobs discovered/day", values: ["3", "50"] },
-    { feature: "AI chat assistance", values: [false, "Unlimited"] },
-    { feature: "Cover letters", values: [false, "Unlimited"] },
-    { feature: "CV optimization", values: [false, true] },
-    { feature: "AI learns preferences", values: [false, true] },
-    { feature: "Match analysis", values: ["Basic", "Advanced"] },
-    { feature: "3-day free trial", values: [false, true] },
-    { feature: "Weekly price", values: ["Free", "$4.99"] },
-    { feature: "Monthly price", values: ["Free", "$14.99"] },
-    { feature: "Priority support", values: [false, true] },
+    { feature: "Jobs discovered/day", values: ["3", "15", "35"] },
+    { feature: "AI chat assistance", values: [false, "30/day", "Unlimited"] },
+    { feature: "Cover letters", values: [false, "5/day", "Unlimited"] },
+    { feature: "CV generations", values: [false, "3/day", "Unlimited"] },
+    { feature: "Saved jobs", values: ["50", "200", "Unlimited"] },
+    { feature: "Advanced filters", values: [false, true, true] },
+    { feature: "Favorite jobs", values: [false, true, true] },
+    { feature: "Email alerts", values: [false, "Weekly", "Daily"] },
+    { feature: "3-day free trial", values: [false, true, false] },
+    { feature: "Weekly price", values: ["Free", "$3.99", "$6.99"] },
+    { feature: "Monthly price", values: ["Free", "$12.99", "$19.99"] },
+    { feature: "Priority support", values: [false, false, true] },
   ]
 
   return (
     <section className="relative py-24 md:py-32" ref={ref}>
-      <div className="max-w-3xl mx-auto px-6">
+      <div className="max-w-4xl mx-auto px-6">
         <SectionHeader
           title="Compare plans"
           subtitle="Find the right fit for your job search"

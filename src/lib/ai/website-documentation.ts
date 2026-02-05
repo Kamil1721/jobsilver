@@ -78,16 +78,18 @@ export const WEBSITE_HELP = {
       name: 'Choose Plan',
       purpose: 'Select or change your subscription plan',
       options: {
-        'Free': 'Browse jobs, track applications on Kanban board, basic job information',
-        'Pro': 'Unlimited AI assistance, cover letter generation, CV optimization, match scores, advanced filters',
+        'Free': 'Browse 3 jobs/day, track applications on Kanban board, no AI features',
+        'Pro': '15 jobs/day, limited AI access (30 responses, 5 cover letters, 3 CV generations per day), weekly emails',
+        'Ultra': '35 jobs/day, unlimited AI access, daily emails, priority support',
       },
       features: [
-        'Side-by-side comparison of Free and Pro features',
+        'Three-column comparison of Free, Pro, and Ultra features',
         'Weekly or monthly billing options',
         'Secure checkout through Stripe',
       ],
       tips: [
-        'Pro includes a 3-day free trial to test all features',
+        'Pro includes a 3-day free trial to test AI features',
+        'Ultra has no trial - immediate billing for unlimited access',
         'You can cancel anytime from your Profile settings',
       ],
     },
@@ -145,7 +147,7 @@ export const WEBSITE_HELP = {
     ],
   },
 
-  freeVsPro: {
+  planComparison: {
     free: [
       'Price: Free forever',
       '3 jobs discovered per day',
@@ -154,17 +156,31 @@ export const WEBSITE_HELP = {
       'Basic job match scores',
       'Filter jobs by keyword, location, or type',
       'Manual apply to external job sites',
+      'No AI features',
+      'No email alerts',
     ],
     pro: [
-      'Price: $4.99/week or $14.99/month',
+      'Price: $3.99/week or $12.99/month',
       '3-day free trial included',
-      '50 jobs discovered per day',
+      '15 jobs discovered per day',
+      '30 AI responses per day',
+      '5 cover letters per day',
+      '3 CV generations per day',
+      'Save up to 200 jobs',
+      'Favorite jobs feature',
+      'Weekly email alerts',
+      'AI learns your preferences',
+    ],
+    ultra: [
+      'Price: $6.99/week or $19.99/month',
+      'No trial - immediate full access',
+      '35 jobs discovered per day',
       'Unlimited AI chat assistance',
       'Unlimited cover letter generation',
-      'CV optimization suggestions',
-      'AI learns your preferences over time',
-      'Advanced match analysis',
-      'Save up to 1,000 jobs',
+      'Unlimited CV generations',
+      'Unlimited saved jobs',
+      'Favorite jobs feature',
+      'Daily email alerts',
       'Priority support',
     ],
   },
@@ -177,16 +193,36 @@ export const WEBSITE_HELP = {
       jobsPerDay: 3,
       savedJobs: 50,
       aiAccess: false,
+      emailAlerts: 'none',
     },
     pro: {
       name: 'Pro',
-      weeklyPrice: '$4.99/week',
-      monthlyPrice: '$14.99/month',
+      weeklyPrice: '$3.99/week',
+      monthlyPrice: '$12.99/month',
       trial: '3-day free trial',
-      jobsPerDay: 50,
-      savedJobs: 1000,
+      jobsPerDay: 15,
+      savedJobs: 200,
       aiAccess: true,
-      recommendation: 'Best value for active job seekers',
+      aiResponsesPerDay: 30,
+      coverLettersPerDay: 5,
+      cvGenerationsPerDay: 3,
+      emailAlerts: 'weekly',
+      recommendation: 'Great for active job seekers',
+    },
+    ultra: {
+      name: 'Ultra',
+      weeklyPrice: '$6.99/week',
+      monthlyPrice: '$19.99/month',
+      trial: 'No trial',
+      jobsPerDay: 35,
+      savedJobs: -1, // unlimited
+      aiAccess: true,
+      aiResponsesPerDay: -1, // unlimited
+      coverLettersPerDay: -1,
+      cvGenerationsPerDay: -1,
+      emailAlerts: 'daily',
+      prioritySupport: true,
+      recommendation: 'Best for power users who want unlimited AI',
     },
   },
 
@@ -201,8 +237,10 @@ export const WEBSITE_HELP = {
     'What is the orange flag button?': 'The orange flag icon in the bottom-left corner opens the Report Problem dialog. Use it to report incorrect job info, bugs, or submit suggestions. Choose from: Incorrect Questions, Incorrect Description, Bug Report, Suggestion, or Other. Fill in a title and description, and we will review your report.',
     'How do I get more job matches?': 'Update your preferences in the Setup wizard. Adding more target job titles, expanding location options, or adjusting your match threshold can increase matches.',
     'What file formats are supported for CV upload?': 'PDF, DOC, and DOCX files up to 10MB are supported.',
-    'How much does Pro cost?': 'Pro costs $4.99 per week or $14.99 per month. Monthly billing saves you about 25% compared to weekly. All Pro subscriptions include a 3-day free trial.',
-    'Which plan should I choose?': 'If you are actively job hunting and want AI help with cover letters and applications, Pro is recommended. If you just want to browse jobs and track applications manually, Free works great.',
+    'How much does Pro cost?': 'Pro costs $3.99 per week or $12.99 per month. Monthly billing saves you about 25% compared to weekly. Pro includes a 3-day free trial with 15 jobs/day and limited AI access (30 responses, 5 cover letters, 3 CV generations per day).',
+    'How much does Ultra cost?': 'Ultra costs $6.99 per week or $19.99 per month. Ultra has no trial and provides immediate access to 35 jobs/day, unlimited AI features, and priority support.',
+    'Which plan should I choose?': 'Free is great for casual browsing. Pro ($3.99/week) is good for active job seekers who want AI help but can work within daily limits. Ultra ($6.99/week) is best for power users who want unlimited AI and priority support.',
+    'What is the difference between Pro and Ultra?': 'Pro gives you 15 jobs/day and limited AI (30 responses, 5 cover letters, 3 CV generations per day). Ultra gives you 35 jobs/day, unlimited AI, daily email alerts (vs weekly for Pro), and priority support.',
   },
 }
 
@@ -291,23 +329,39 @@ export function getGeneralHelp(): string {
   help += `**Free Plan:** $0 - Free forever\n`
   help += `- 3 jobs discovered per day\n`
   help += `- Kanban tracking board\n`
-  help += `- Save up to 50 jobs\n\n`
-  help += `**Pro Plan:** $4.99/week or $14.99/month (save ~25% with monthly)\n`
+  help += `- Save up to 50 jobs\n`
+  help += `- No AI features\n\n`
+  help += `**Pro Plan:** $3.99/week or $12.99/month (save ~25% with monthly)\n`
   help += `- Includes 3-day free trial\n`
-  help += `- 50 jobs discovered per day\n`
-  help += `- Unlimited AI assistance (cover letters, application help)\n`
-  help += `- Save up to 1,000 jobs\n`
-  help += `- AI learns your preferences\n\n`
-  help += `**Recommendation:** Pro is best for active job seekers who want AI help. Free is great for casual browsing.\n\n`
+  help += `- 15 jobs discovered per day\n`
+  help += `- 30 AI responses per day\n`
+  help += `- 5 cover letters per day\n`
+  help += `- 3 CV generations per day\n`
+  help += `- Save up to 200 jobs\n`
+  help += `- Weekly email alerts\n\n`
+  help += `**Ultra Plan:** $6.99/week or $19.99/month\n`
+  help += `- No trial - immediate full access\n`
+  help += `- 35 jobs discovered per day\n`
+  help += `- Unlimited AI assistance\n`
+  help += `- Unlimited cover letters\n`
+  help += `- Unlimited CV generations\n`
+  help += `- Unlimited saved jobs\n`
+  help += `- Daily email alerts\n`
+  help += `- Priority support\n\n`
+  help += `**Recommendation:** Free for casual browsing, Pro for active job seekers with AI help, Ultra for power users who want unlimited AI.\n\n`
 
-  // Free vs Pro detailed features
+  // Plan comparison detailed features
   help += `## Detailed Feature Comparison\n\n`
   help += `**Free Plan includes:**\n`
-  WEBSITE_HELP.freeVsPro.free.forEach(f => {
+  WEBSITE_HELP.planComparison.free.forEach(f => {
     help += `- ${f}\n`
   })
-  help += `\n**Pro Plan includes everything in Free, plus:**\n`
-  WEBSITE_HELP.freeVsPro.pro.forEach(f => {
+  help += `\n**Pro Plan includes:**\n`
+  WEBSITE_HELP.planComparison.pro.forEach(f => {
+    help += `- ${f}\n`
+  })
+  help += `\n**Ultra Plan includes:**\n`
+  WEBSITE_HELP.planComparison.ultra.forEach(f => {
     help += `- ${f}\n`
   })
 

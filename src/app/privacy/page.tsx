@@ -10,8 +10,8 @@ export const metadata: Metadata = {
 }
 
 export default function PrivacyPolicyPage() {
-  const lastUpdated = 'January 30, 2026'
-  const effectiveDate = 'January 30, 2026'
+  const lastUpdated = 'February 5, 2026'
+  const effectiveDate = 'February 5, 2026'
 
   return (
     <div className="min-h-screen bg-[#0a0a0b] text-white flex flex-col">
@@ -359,6 +359,10 @@ export default function PrivacyPolicyPage() {
               <ul>
                 <li>
                   <strong>Active Accounts:</strong> Data is retained while your account remains active.
+                </li>
+                <li>
+                  <strong>Job Listings:</strong> To keep your board relevant, job listings older than 60 days
+                  are automatically removed. Favorited jobs are exempt and remain until you delete them.
                 </li>
                 <li>
                   <strong>Deleted Accounts:</strong> When you delete your account, we permanently delete

@@ -30,6 +30,13 @@ interface KanbanColumnProps {
   selectedJobIds?: Set<string>
   onSelectionChange?: (jobId: string, selected: boolean) => void
   onSelectAllInColumn?: (jobIds: string[], selected: boolean) => void
+  // Job limit warning (only for Free users in New Matches column)
+  jobLimitWarning?: {
+    show: boolean
+    currentCount: number
+    maxCount: number
+    atLimit: boolean
+  }
 }
 
 // Status colors for the 3-column system - metallic theme with subtle dots
@@ -77,6 +84,7 @@ export function KanbanColumn({
   selectedJobIds,
   onSelectionChange,
   onSelectAllInColumn,
+  jobLimitWarning,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id,
@@ -131,6 +139,40 @@ export function KanbanColumn({
           {count}
         </span>
       </div>
+
+      {/* Job limit warning - only shown for Free users in New Matches column */}
+      {id === "discovered" && jobLimitWarning?.show && (
+        <div className={cn(
+          "mx-2 mt-2 px-3 py-2 rounded-lg text-xs",
+          jobLimitWarning.atLimit
+            ? "bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400"
+            : "bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-blue-700 dark:text-blue-400"
+        )}>
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5">
+              {jobLimitWarning.atLimit ? "⚠️" : "ℹ️"}
+            </span>
+            <div className="flex-1">
+              <p className="font-medium">
+                {jobLimitWarning.atLimit
+                  ? `Limit reached: ${jobLimitWarning.maxCount} jobs`
+                  : `${jobLimitWarning.currentCount}/${jobLimitWarning.maxCount} jobs`}
+              </p>
+              <p className="mt-0.5 opacity-80">
+                {jobLimitWarning.atLimit
+                  ? "Discard or move jobs to Applied to discover new ones."
+                  : "Consider discarding jobs you're not interested in."}
+              </p>
+              <a
+                href="/pricing"
+                className="inline-block mt-1.5 text-xs font-medium underline hover:no-underline"
+              >
+                Upgrade for more →
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Jobs list */}
       <ScrollArea className="flex-1">

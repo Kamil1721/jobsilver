@@ -207,10 +207,10 @@ async function handleSubscriptionUpdated(
     return
   }
 
-  // Get plan from price ID and migrate legacy plans to 2-tier model
+  // Get plan from price ID and migrate legacy plans to 3-tier model
   const priceId = subscription.items.data[0]?.price.id
   const rawPlan = subscription.metadata?.plan || getPlanFromPriceId(priceId) || 'free'
-  // Migrate legacy plans: starter/basic -> free, ultra/mega -> pro
+  // Migrate legacy plans: starter/basic -> free, mega -> ultra
   const plan = mapLegacyPlan(rawPlan as AllSubscriptionPlans)
 
   // Log legacy plan migrations

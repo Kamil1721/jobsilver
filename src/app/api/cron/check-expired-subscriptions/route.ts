@@ -90,7 +90,7 @@ export async function GET(request: Request) {
       continue
     }
 
-    // Downgrade to free (only if still on pro)
+    // Downgrade to free (only if still on pro or ultra)
     const { error: updateError, count } = await supabase
       .from('profiles')
       .update({
@@ -98,7 +98,7 @@ export async function GET(request: Request) {
         subscription_started_at: null,
       })
       .eq('id', sub.user_id)
-      .eq('subscription_plan', 'pro') // Only update if still on pro
+      .in('subscription_plan', ['pro', 'ultra']) // Update if on pro or ultra
 
     if (updateError) {
       errors.push(`User ${sub.user_id}: ${updateError.message}`)

@@ -35,11 +35,16 @@ export const stripe = {
   get billingPortal() {
     return getStripeClient().billingPortal
   },
+  get prices() {
+    return getStripeClient().prices
+  },
 }
 
 // Plan configuration with billing cycle support
-// 2-tier model: Only Pro plan available for purchase
-// Environment variables: STRIPE_PRICE_PRO_WEEKLY, STRIPE_PRICE_PRO_MONTHLY
+// 3-tier model: Pro and Ultra plans available for purchase
+// Environment variables:
+//   STRIPE_PRICE_PRO_WEEKLY, STRIPE_PRICE_PRO_MONTHLY
+//   STRIPE_PRICE_ULTRA_WEEKLY, STRIPE_PRICE_ULTRA_MONTHLY
 export interface PlanPriceIds {
   weekly: string
   monthly: string
@@ -50,21 +55,28 @@ export const PLAN_PRICE_IDS: Record<string, PlanPriceIds> = {
     weekly: process.env.STRIPE_PRICE_PRO_WEEKLY || '',
     monthly: process.env.STRIPE_PRICE_PRO_MONTHLY || process.env.STRIPE_PRICE_PRO || '',
   },
-  // Legacy mappings - redirect to pro
+  ultra: {
+    weekly: process.env.STRIPE_PRICE_ULTRA_WEEKLY || '',
+    monthly: process.env.STRIPE_PRICE_ULTRA_MONTHLY || '',
+  },
+  // Legacy mappings
   starter: {
     weekly: process.env.STRIPE_PRICE_PRO_WEEKLY || '',
     monthly: process.env.STRIPE_PRICE_PRO_MONTHLY || '',
   },
-  ultra: {
-    weekly: process.env.STRIPE_PRICE_PRO_WEEKLY || '',
-    monthly: process.env.STRIPE_PRICE_PRO_MONTHLY || '',
+  mega: {
+    weekly: process.env.STRIPE_PRICE_ULTRA_WEEKLY || '',
+    monthly: process.env.STRIPE_PRICE_ULTRA_MONTHLY || '',
   },
 }
 
 // Get price ID for a specific plan and billing cycle
 export function getPriceId(plan: string, billingCycle: BillingCycle): string | null {
-  // Map legacy plans to pro
-  const effectivePlan = plan === 'starter' || plan === 'ultra' || plan === 'mega' ? 'pro' : plan
+  // Map legacy plans
+  let effectivePlan = plan
+  if (plan === 'starter') effectivePlan = 'pro'
+  if (plan === 'mega') effectivePlan = 'ultra'
+
   const planPrices = PLAN_PRICE_IDS[effectivePlan]
   if (!planPrices) return null
   return planPrices[billingCycle] || null
@@ -82,9 +94,9 @@ export function getPlanFromPriceId(priceId: string): { plan: string; billingCycl
   return null
 }
 
-// Validate plan name - only 'pro' is valid in the 2-tier model
-export function isValidPlan(plan: string): plan is 'pro' {
-  return plan === 'pro'
+// Validate plan name - 'pro' and 'ultra' are valid in the 3-tier model
+export function isValidPlan(plan: string): plan is 'pro' | 'ultra' {
+  return plan === 'pro' || plan === 'ultra'
 }
 
 // Validate billing cycle

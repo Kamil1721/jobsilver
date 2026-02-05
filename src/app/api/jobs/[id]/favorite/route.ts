@@ -59,12 +59,12 @@ export async function GET(
     const userPlan = (profile?.subscription_plan || 'free') as SubscriptionPlan
     const isTester = profile?.is_tester || false
 
-    if (!canAccessFeature(userPlan, 'ai_learning', isTester)) {
+    if (!canAccessFeature(userPlan, 'favorites', isTester)) {
       return NextResponse.json(
         {
           error: {
             code: 'FEATURE_GATED',
-            message: 'AI Learning feature requires Pro plan or higher'
+            message: 'Favorites feature requires Pro plan or higher'
           }
         },
         { status: 403, headers: getRateLimitHeaders(rateLimit) }
@@ -147,12 +147,12 @@ export async function POST(
     const userPlan = (profile?.subscription_plan || 'free') as SubscriptionPlan
     const isTester = profile?.is_tester || false
 
-    if (!canAccessFeature(userPlan, 'ai_learning', isTester)) {
+    if (!canAccessFeature(userPlan, 'favorites', isTester)) {
       return NextResponse.json(
         {
           error: {
             code: 'FEATURE_GATED',
-            message: 'AI Learning feature requires Pro plan or higher'
+            message: 'Favorites feature requires Pro plan or higher'
           }
         },
         { status: 403, headers: getRateLimitHeaders(rateLimit) }
@@ -286,12 +286,12 @@ export async function DELETE(
     const userPlan = (profile?.subscription_plan || 'free') as SubscriptionPlan
     const isTester = profile?.is_tester || false
 
-    if (!canAccessFeature(userPlan, 'ai_learning', isTester)) {
+    if (!canAccessFeature(userPlan, 'favorites', isTester)) {
       return NextResponse.json(
         {
           error: {
             code: 'FEATURE_GATED',
-            message: 'AI Learning feature requires Pro plan or higher'
+            message: 'Favorites feature requires Pro plan or higher'
           }
         },
         { status: 403, headers: getRateLimitHeaders(rateLimit) }

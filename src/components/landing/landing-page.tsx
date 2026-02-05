@@ -23,12 +23,12 @@ const problemSolutions = [
   {
     icon: Clock,
     problem: "Spending hours searching job boards",
-    solution: "Get up to 50 curated job matches delivered daily — no endless scrolling",
+    solution: "Get up to 35 curated job matches delivered daily — no endless scrolling",
   },
   {
     icon: Brain,
     problem: "Writing applications from scratch",
-    solution: "Pro users get unlimited AI help with cover letters, CVs, and application answers",
+    solution: "AI helps craft cover letters, CVs, and application answers (unlimited with Ultra)",
   },
   {
     icon: Send,
@@ -42,7 +42,7 @@ const steps = [
   {
     number: "01",
     title: "Set Up Your Profile",
-    description: "Upload your CV and set your preferences. Free users get 3 jobs/day, Pro gets 50.",
+    description: "Upload your CV and set your preferences. Free: 3 jobs/day, Pro: 15, Ultra: 35.",
   },
   {
     number: "02",
@@ -52,7 +52,7 @@ const steps = [
   {
     number: "03",
     title: "Win with AI",
-    description: "Pro users get unlimited AI assistance for cover letters, CVs, and interview prep.",
+    description: "Get AI help with cover letters, CVs, and interview prep. Pro has daily limits, Ultra is unlimited.",
   },
 ]
 
@@ -188,8 +188,8 @@ export function LandingPage() {
               transition={{ duration: 0.8, delay: 0.4 }}
               className="text-lg md:text-xl text-zinc-500 max-w-xl mx-auto mb-12 leading-relaxed"
             >
-              Get up to 50 curated job matches per day. Pro users get unlimited AI help
-              crafting applications. Start free, upgrade when ready.
+              Get up to 35 curated job matches per day. Unlock AI assistance for cover letters,
+              CVs, and more. Start free, upgrade when ready.
             </motion.p>
 
             {/* CTA */}
@@ -259,7 +259,7 @@ export function LandingPage() {
         <div className="max-w-7xl mx-auto px-6">
           <SectionHeader
             title="Simple pricing, powerful results"
-            subtitle="Free gets you started. Pro unlocks unlimited AI assistance."
+            subtitle="Free gets you started. Pro adds AI. Ultra unlocks everything."
           />
 
           <div className="mt-16 grid md:grid-cols-3 gap-5">
@@ -365,7 +365,7 @@ export function LandingPage() {
                 transition={{ duration: 0.6, delay: 0.3 }}
                 className="text-zinc-400 text-lg mb-10 max-w-md mx-auto"
               >
-                3 jobs/day free. Pro unlocks 50 jobs/day + unlimited AI for just $4.99/week.
+                Free: 3 jobs/day. Pro: 15 jobs + AI from $3.99/week. Ultra: 35 jobs + unlimited AI.
               </motion.p>
 
               <motion.div

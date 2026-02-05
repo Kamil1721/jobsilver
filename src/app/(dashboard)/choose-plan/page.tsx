@@ -4,11 +4,24 @@ import * as React from "react"
 import { Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
-import { Loader2, ArrowRight, Sparkles, Check, ArrowLeft } from "lucide-react"
+import { ArrowRight, Sparkles, Check, ArrowLeft } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { PricingCard, PRICING_PLANS } from "@/components/pricing/PricingCard"
 import { PricingToggle, type BillingCycle } from "@/components/pricing/PricingToggle"
+import { PlanChangeDialog, type DowngradeReason } from "@/components/plan-change-dialog"
+import { isDowngrade } from "@/lib/features/config"
+import type { SubscriptionPlan } from "@/lib/supabase/types"
+
+// Timeout for API requests (30 seconds)
+const API_TIMEOUT_MS = 30000
+
+/**
+ * Generate a unique idempotency key for API requests
+ */
+function generateIdempotencyKey(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
+}
 
 // Loading fallback for Suspense
 function ChoosePlanLoading() {
@@ -35,10 +48,29 @@ function ChoosePlanPageContent() {
   const [isLoading, setIsLoading] = React.useState(false)
   const [loadingPlan, setLoadingPlan] = React.useState<string | null>(null)
   const [currentPlan, setCurrentPlan] = React.useState<string>("free")
+  const [periodEndDate, setPeriodEndDate] = React.useState<string | null>(null)
+
+  // Downgrade dialog state
+  const [showDowngradeDialog, setShowDowngradeDialog] = React.useState(false)
+  const [pendingPlan, setPendingPlan] = React.useState<{ planId: string; cycle: BillingCycle } | null>(null)
+  const [isDowngrading, setIsDowngrading] = React.useState(false)
+
+  // Ref for abort controller to cancel in-flight requests
+  const abortControllerRef = React.useRef<AbortController | null>(null)
+
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const supabase = createClient()
+
+  // Cleanup abort controller on unmount
+  React.useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [])
 
   // Check for canceled checkout
   React.useEffect(() => {
@@ -50,8 +82,7 @@ function ChoosePlanPageContent() {
     }
   }, [searchParams, toast])
 
-  // Only fetch current plan if user is revisiting (has already selected a plan)
-  // For new users in onboarding, we don't show "Current Plan" badge
+  // Fetch current plan and subscription period end
   React.useEffect(() => {
     const fetchPlanStatus = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -64,9 +95,21 @@ function ChoosePlanPageContent() {
         .single()
 
       // Only show current plan badge if user has already selected a plan before
-      // (i.e., they're revisiting to change/upgrade their plan)
       if (profile?.has_selected_plan) {
         setCurrentPlan(profile.subscription_plan || "free")
+
+        // Fetch subscription period end date for paid plans
+        if (profile.subscription_plan && profile.subscription_plan !== 'free') {
+          const { data: subscription } = await supabase
+            .from("subscriptions")
+            .select("current_period_end")
+            .eq("user_id", user.id)
+            .single()
+
+          if (subscription?.current_period_end) {
+            setPeriodEndDate(subscription.current_period_end)
+          }
+        }
       } else {
         // New user in onboarding - don't mark any plan as "current"
         setCurrentPlan("")
@@ -76,13 +119,32 @@ function ChoosePlanPageContent() {
     fetchPlanStatus()
   }, [supabase])
 
+  /**
+   * Handle plan selection - checks for downgrades
+   */
   const handlePlanSelect = async (planId: string, cycle: BillingCycle) => {
+    // Check if this is a downgrade for existing paid users
+    if (currentPlan && currentPlan !== "" && isDowngrade(currentPlan, planId)) {
+      // Show downgrade confirmation dialog
+      setPendingPlan({ planId, cycle })
+      setShowDowngradeDialog(true)
+      return
+    }
+
+    // Not a downgrade - proceed with normal flow
+    await processUpgradeOrSelect(planId, cycle)
+  }
+
+  /**
+   * Process upgrade or new plan selection (no confirmation needed)
+   */
+  const processUpgradeOrSelect = async (planId: string, cycle: BillingCycle) => {
     setIsLoading(true)
     setLoadingPlan(planId)
 
     try {
       if (planId === "free") {
-        // Select free plan
+        // Select free plan (for new users only - downgrades go through handleDowngradeConfirm)
         const response = await fetch("/api/plan/select", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -103,36 +165,162 @@ function ChoosePlanPageContent() {
         return
       }
 
-      // For paid plans, redirect to Stripe checkout
-      const response = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          plan: planId,
-          billingCycle: cycle,
-          successUrl: `${window.location.origin}/setup?subscription=success`,
-          cancelUrl: `${window.location.origin}/choose-plan?subscription=canceled`,
-        }),
-      })
+      // For paid plans (upgrades), check if user already has a subscription
+      if (currentPlan && currentPlan !== 'free') {
+        // Existing paid user upgrading - redirect to Stripe billing portal
+        const response = await fetch("/api/stripe/portal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ returnUrl: "/choose-plan" }),
+        })
 
-      const data = await response.json()
+        const data = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.error?.message || "Failed to create checkout session")
-      }
+        if (!response.ok) {
+          throw new Error(data.error?.message || "Failed to access billing portal")
+        }
 
-      if (data.data?.url) {
-        window.location.href = data.data.url
+        if (data.data?.url) {
+          window.location.href = data.data.url
+        } else {
+          // P2-3 FIX: Handle missing URL explicitly
+          throw new Error("No redirect URL received from billing portal")
+        }
+      } else {
+        // New subscription - redirect to Stripe checkout
+        const response = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            plan: planId,
+            billingCycle: cycle,
+            successUrl: `${window.location.origin}/setup?subscription=success`,
+            cancelUrl: `${window.location.origin}/choose-plan?subscription=canceled`,
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error?.message || "Failed to create checkout session")
+        }
+
+        if (data.data?.url) {
+          window.location.href = data.data.url
+        } else {
+          // P2-3 FIX: Handle missing URL explicitly
+          throw new Error("No checkout URL received")
+        }
       }
     } catch (error) {
-      console.error("Plan selection error:", error)
+      // P3-2 FIX: Sanitize error logging
+      console.error("Plan selection error:", error instanceof Error ? error.message : "Unknown error")
       toast({
         variant: "destructive",
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to process your selection",
       })
+    } finally {
+      // P2-1 FIX: Always reset loading state
       setIsLoading(false)
       setLoadingPlan(null)
+    }
+  }
+
+  /**
+   * Handle downgrade confirmation from dialog
+   * Includes timeout handling and abort controller for resilience
+   */
+  const handleDowngradeConfirm = async (reason: DowngradeReason) => {
+    if (!pendingPlan) return
+
+    setIsDowngrading(true)
+
+    // Cancel any existing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+
+    // Create new abort controller with timeout
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
+    // Set up timeout
+    const timeoutId = setTimeout(() => {
+      abortController.abort()
+    }, API_TIMEOUT_MS)
+
+    try {
+      // Generate idempotency key for this request
+      const idempotencyKey = generateIdempotencyKey()
+
+      const response = await fetch("/api/subscription/downgrade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetPlan: pendingPlan.planId,
+          reason: reason,
+          idempotencyKey,
+        }),
+        signal: abortController.signal,
+      })
+
+      clearTimeout(timeoutId)
+
+      // Handle response.json() safely
+      let data: { data?: { message?: string }; error?: { message?: string } }
+      try {
+        data = await response.json()
+      } catch {
+        throw new Error("Invalid response from server")
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error?.message || "Failed to process downgrade")
+      }
+
+      // Close dialog and show success
+      setShowDowngradeDialog(false)
+      setPendingPlan(null)
+
+      toast({
+        title: "Downgrade scheduled",
+        description: data.data?.message || `Your subscription will be canceled at the end of your billing period.`,
+      })
+
+      // Redirect to profile page
+      router.push("/profile")
+    } catch (error) {
+      // Check if this was an abort due to timeout
+      if (error instanceof Error && error.name === 'AbortError') {
+        toast({
+          variant: "destructive",
+          title: "Request timed out",
+          description: "The request took too long. Please try again.",
+        })
+      } else {
+        // P3-2 FIX: Sanitize error logging
+        console.error("Downgrade error:", error instanceof Error ? error.message : "Unknown error")
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error instanceof Error ? error.message : "Failed to process downgrade",
+        })
+      }
+    } finally {
+      clearTimeout(timeoutId)
+      setIsDowngrading(false)
+      abortControllerRef.current = null
+    }
+  }
+
+  /**
+   * Handle dialog close (cancel downgrade)
+   */
+  const handleDialogClose = (open: boolean) => {
+    if (!open && !isDowngrading) {
+      setShowDowngradeDialog(false)
+      setPendingPlan(null)
     }
   }
 
@@ -163,7 +351,7 @@ function ChoosePlanPageContent() {
             Choose Your Plan
           </h1>
           <p className="text-lg text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto mb-8">
-            Discover jobs for free, or unlock unlimited AI assistance with Pro.
+            Discover jobs for free. Upgrade to Pro for AI assistance, or Ultra for unlimited power.
           </p>
 
           {/* Billing Toggle */}
@@ -175,8 +363,8 @@ function ChoosePlanPageContent() {
           </div>
         </motion.div>
 
-        {/* Pricing Cards - 2-column grid for 2-tier model */}
-        <div className="max-w-3xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+        {/* Pricing Cards - 3-column grid for 3-tier model */}
+        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
           {PRICING_PLANS.map((plan, index) => (
             <PricingCard
               key={plan.id}
@@ -252,6 +440,19 @@ function ChoosePlanPageContent() {
           </motion.div>
         )}
       </div>
+
+      {/* Downgrade Confirmation Dialog */}
+      {pendingPlan && (
+        <PlanChangeDialog
+          open={showDowngradeDialog}
+          onOpenChange={handleDialogClose}
+          currentPlan={currentPlan as SubscriptionPlan}
+          targetPlan={pendingPlan.planId as SubscriptionPlan}
+          periodEndDate={periodEndDate}
+          onConfirm={handleDowngradeConfirm}
+          isLoading={isDowngrading}
+        />
+      )}
     </div>
   )
 }

@@ -56,7 +56,7 @@ export function JobCard({
 }: JobCardProps) {
   const router = useRouter()
   const { plan, isTester } = useSubscription()
-  const isPremium = plan === "pro" || plan === "mega" || isTester
+  const isPremium = plan === "pro" || plan === "ultra" || plan === "mega" || isTester
   const {
     attributes,
     listeners,

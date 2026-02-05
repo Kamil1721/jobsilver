@@ -20,7 +20,9 @@ interface CleanupSummary {
  * Cleanup Expired Jobs Cron Endpoint
  *
  * Called by Vercel Cron daily at 7 AM UTC
- * Deletes all jobs older than 60 days from their creation date
+ * Deletes jobs older than 60 days from their creation date
+ *
+ * IMPORTANT: Favorited jobs are EXCLUDED from cleanup to preserve user data
  *
  * Authentication: Requires CRON_SECRET header
  *
@@ -53,28 +55,66 @@ export async function GET(request: NextRequest): Promise<NextResponse<CleanupSum
 
     console.log(`[Cleanup] Starting cleanup of jobs older than ${cutoffDate}`)
 
+    // Get all favorited job IDs to exclude from cleanup
+    // Favorited jobs should NEVER be auto-deleted
+    const { data: favoritedJobs, error: favError } = await supabase
+      .from('user_favorite_jobs')
+      .select('job_id')
+
+    if (favError) {
+      console.error('[Cleanup] Error fetching favorited jobs:', favError)
+      errors.push(`Fetch favorites error: ${favError.message}`)
+    }
+
+    const favoritedJobIds = new Set((favoritedJobs || []).map(f => f.job_id))
+    console.log(`[Cleanup] Excluding ${favoritedJobIds.size} favorited jobs from cleanup`)
+
     // Delete jobs in batches to avoid timeouts with large datasets
     // Chat messages are automatically deleted via ON DELETE CASCADE
     let totalDeleted = 0
     let hasMore = true
 
     while (hasMore) {
-      const { data: deletedJobs, error: deleteError } = await supabase
+      // First, get a batch of expired jobs
+      const { data: expiredJobs, error: fetchError } = await supabase
         .from('jobs')
-        .delete()
+        .select('id')
         .lt('created_at', cutoffDate)
         .limit(BATCH_SIZE)
-        .select('id')
 
-      if (deleteError) {
-        console.error('[Cleanup] Error deleting jobs batch:', deleteError)
-        errors.push(`Delete error: ${deleteError.message}`)
-        break // Stop on error to avoid infinite loop
+      if (fetchError) {
+        console.error('[Cleanup] Error fetching expired jobs:', fetchError)
+        errors.push(`Fetch error: ${fetchError.message}`)
+        break
       }
 
-      const batchDeleted = deletedJobs?.length || 0
-      totalDeleted += batchDeleted
-      hasMore = batchDeleted === BATCH_SIZE
+      if (!expiredJobs || expiredJobs.length === 0) {
+        hasMore = false
+        break
+      }
+
+      // Filter out favorited jobs
+      const jobsToDelete = expiredJobs
+        .filter(job => !favoritedJobIds.has(job.id))
+        .map(job => job.id)
+
+      if (jobsToDelete.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('jobs')
+          .delete()
+          .in('id', jobsToDelete)
+
+        if (deleteError) {
+          console.error('[Cleanup] Error deleting jobs batch:', deleteError)
+          errors.push(`Delete error: ${deleteError.message}`)
+          break
+        }
+
+        totalDeleted += jobsToDelete.length
+      }
+
+      // Check if we got a full batch (might be more to process)
+      hasMore = expiredJobs.length === BATCH_SIZE
 
       if (hasMore) {
         // Small delay between batches to give the database breathing room

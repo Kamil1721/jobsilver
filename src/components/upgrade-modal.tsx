@@ -21,6 +21,7 @@ import {
   ArrowRight,
   Loader2,
   Rocket,
+  Crown,
 } from "lucide-react"
 
 interface UpgradeModalEventDetail {
@@ -52,6 +53,21 @@ export function UpgradeModal() {
     }
   }, [])
 
+  // Determine target plan based on current plan and required plan
+  // Free → Pro, Pro → Ultra, or directly to required plan
+  const targetPlan = React.useMemo(() => {
+    if (!detail) return 'pro'
+
+    // If the required plan is 'ultra', upgrade to ultra
+    if (detail.requiredPlan === 'ultra') return 'ultra'
+
+    // For Pro users, suggest Ultra upgrade (especially for AI limits)
+    if (currentPlan === 'pro') return 'ultra'
+
+    // Default: Free → Pro
+    return 'pro'
+  }, [detail, currentPlan])
+
   const handleUpgrade = async () => {
     setIsLoading(true)
     setError(null)
@@ -61,7 +77,7 @@ export function UpgradeModal() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          plan: 'pro', // Only Pro plan available in 2-tier model
+          plan: targetPlan,
           billingCycle,
         }),
       })
@@ -93,7 +109,9 @@ export function UpgradeModal() {
 
   if (!detail) return null
 
-  const proLimits = PLAN_LIMITS.pro
+  const planLimits = targetPlan === 'ultra' ? PLAN_LIMITS.ultra : PLAN_LIMITS.pro
+  const isUltra = targetPlan === 'ultra'
+  const PlanIcon = isUltra ? Crown : Rocket
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -106,7 +124,7 @@ export function UpgradeModal() {
             <div>
               <DialogTitle className="text-xl">Unlock {detail.featureName}</DialogTitle>
               <Badge variant="outline" className="mt-1">
-                Pro Plan Required
+                {isUltra ? 'Ultra' : 'Pro'} Plan Required
               </Badge>
             </div>
           </div>
@@ -116,31 +134,37 @@ export function UpgradeModal() {
         </DialogHeader>
 
         <div className="space-y-4 pt-4">
-          {/* Pro Plan Details */}
+          {/* Plan Details */}
           <div className="p-4 rounded-xl bg-gradient-to-br from-zinc-50 to-zinc-100 dark:from-zinc-800/50 dark:to-zinc-900/50 border border-zinc-200 dark:border-zinc-700">
             <div className="flex items-center gap-2 mb-3">
-              <Rocket className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
-              <span className="font-semibold text-lg">Pro Plan</span>
-              <Badge className="ml-auto bg-emerald-500 text-white text-xs">
-                3-Day Free Trial
-              </Badge>
+              <PlanIcon className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+              <span className="font-semibold text-lg">{isUltra ? 'Ultra' : 'Pro'} Plan</span>
+              {!isUltra && (
+                <Badge className="ml-auto bg-emerald-500 text-white text-xs">
+                  3-Day Free Trial
+                </Badge>
+              )}
             </div>
 
             {/* Jobs per day - PRIMARY METRIC */}
             <div className="mb-4 p-3 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-600">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-zinc-600 dark:text-zinc-400">Jobs discovered</span>
-                <span className="text-xl font-bold">{proLimits.jobsPerDay}/day</span>
+                <span className="text-xl font-bold">{planLimits.jobsPerDay}/day</span>
               </div>
               <div className="flex items-center gap-1.5 mt-1 text-sm text-emerald-600 dark:text-emerald-400">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Unlimited AI assistance included</span>
+                <span>
+                  {isUltra
+                    ? 'Unlimited AI assistance'
+                    : `${planLimits.aiResponsesPerDay} AI responses/day`}
+                </span>
               </div>
             </div>
 
             {/* Features */}
             <ul className="space-y-2">
-              {proLimits.features.slice(0, 5).map((feature, index) => (
+              {planLimits.features.slice(0, 5).map((feature, index) => (
                 <li key={index} className="flex items-center gap-2 text-sm">
                   <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                   <span>{feature}</span>
@@ -159,7 +183,7 @@ export function UpgradeModal() {
                   : 'text-zinc-600 dark:text-zinc-400'
               }`}
             >
-              Weekly: ${proLimits.weeklyPrice}
+              Weekly: ${planLimits.weeklyPrice}
             </button>
             <button
               onClick={() => setBillingCycle('monthly')}
@@ -169,7 +193,7 @@ export function UpgradeModal() {
                   : 'text-zinc-600 dark:text-zinc-400'
               }`}
             >
-              Monthly: ${proLimits.monthlyPrice}
+              Monthly: ${planLimits.monthlyPrice}
               <span className="ml-1 text-xs text-emerald-600 dark:text-emerald-400">Save 25%</span>
             </button>
           </div>
@@ -178,6 +202,11 @@ export function UpgradeModal() {
           {currentPlan === 'free' && (
             <p className="text-xs text-center text-zinc-500">
               You&apos;re currently on the Free plan (3 jobs/day, no AI)
+            </p>
+          )}
+          {currentPlan === 'pro' && (
+            <p className="text-xs text-center text-zinc-500">
+              You&apos;re currently on Pro (15 jobs/day, limited AI)
             </p>
           )}
 
@@ -207,7 +236,7 @@ export function UpgradeModal() {
               ) : (
                 <ArrowRight className="w-4 h-4 mr-2" />
               )}
-              Start Free Trial
+              {isUltra ? 'Upgrade to Ultra' : 'Start Free Trial'}
             </Button>
           </div>
         </div>

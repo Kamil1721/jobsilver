@@ -26,6 +26,9 @@ export interface PricingPlan {
   icon: React.ElementType
   jobsPerDay: number
   hasAI: boolean
+  aiResponsesPerDay?: number | null // -1 = unlimited, null = no access
+  coverLettersPerDay?: number | null
+  cvGenerationsPerDay?: number | null
   hasTrial?: boolean
   trialDays?: number
 }
@@ -146,7 +149,7 @@ export function PricingCard({
           )}
         </div>
 
-        {/* Jobs per day - PRIMARY METRIC in 2-tier model */}
+        {/* Jobs per day - PRIMARY METRIC in 3-tier model */}
         <div className="mb-4 p-3 rounded-lg bg-muted/30 border border-border/50">
           <div className="text-center">
             <span className="text-2xl font-bold text-foreground">
@@ -158,10 +161,16 @@ export function PricingCard({
           </div>
           <p className="text-xs text-center mt-1">
             {plan.hasAI ? (
-              <span className="flex items-center justify-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                <Sparkles className="w-3 h-3" />
-                Unlimited AI assistance
-              </span>
+              plan.aiResponsesPerDay === -1 ? (
+                <span className="flex items-center justify-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                  <Sparkles className="w-3 h-3" />
+                  Unlimited AI assistance
+                </span>
+              ) : (
+                <span className="text-muted-foreground">
+                  {plan.aiResponsesPerDay} AI responses/day
+                </span>
+              )
             ) : (
               <span className="text-muted-foreground">AI features require Pro</span>
             )}
@@ -232,13 +241,17 @@ export function PricingCard({
   )
 }
 
+import { Crown } from "lucide-react"
+
 /**
- * 2-Tier Pricing Structure (January 2026)
+ * 3-Tier Pricing Structure (February 2026)
  *
  * Free: 3 jobs/day, NO AI access
- * Pro: 50 jobs/day, UNLIMITED AI (chat, cover letters, CV optimization)
+ * Pro: 15 jobs/day, limited AI (30 responses, 5 cover letters, 3 CV gen per day)
+ * Ultra: 35 jobs/day, UNLIMITED AI, priority support
  *
- * Pro has 3-day free trial, pricing: $4.99/week or $14.99/month
+ * Pro has 3-day free trial, pricing: $3.99/week or $12.99/month
+ * Ultra has NO trial (immediate charge), pricing: $6.99/week or $19.99/month
  */
 export const PRICING_PLANS: PricingPlan[] = [
   {
@@ -249,6 +262,9 @@ export const PRICING_PLANS: PricingPlan[] = [
     monthlyPrice: 0,
     jobsPerDay: 3,
     hasAI: false,
+    aiResponsesPerDay: null,
+    coverLettersPerDay: null,
+    cvGenerationsPerDay: null,
     icon: Zap,
     cta: "Start Free",
     features: [
@@ -256,19 +272,25 @@ export const PRICING_PLANS: PricingPlan[] = [
       { name: "Kanban job tracking board", included: true },
       { name: "Save up to 50 jobs", included: true },
       { name: "Basic job match scores", included: true },
+      { name: "Advanced filters", included: false },
       { name: "AI chat assistance", included: false },
       { name: "Cover letter generation", included: false },
-      { name: "CV optimization", included: false },
+      { name: "CV generation", included: false },
+      { name: "Favorite jobs", included: false },
+      { name: "Email alerts", included: false },
     ],
   },
   {
     id: "pro",
     name: "Pro",
-    description: "Unlimited AI for your job search",
-    weeklyPrice: 4.99,
-    monthlyPrice: 14.99,
-    jobsPerDay: 50,
+    description: "AI assistance with daily limits",
+    weeklyPrice: 3.99,
+    monthlyPrice: 12.99,
+    jobsPerDay: 15,
     hasAI: true,
+    aiResponsesPerDay: 30,
+    coverLettersPerDay: 5,
+    cvGenerationsPerDay: 3,
     icon: Rocket,
     cta: "Subscribe",
     highlighted: true,
@@ -276,13 +298,41 @@ export const PRICING_PLANS: PricingPlan[] = [
     hasTrial: true,
     trialDays: 3,
     features: [
-      { name: "50 jobs discovered per day", included: true },
-      { name: "Unlimited AI chat assistance", included: true },
-      { name: "Unlimited cover letters", included: true },
-      { name: "CV optimization suggestions", included: true },
-      { name: "AI learns your preferences", included: true },
-      { name: "Advanced match analysis", included: true },
-      { name: "Priority support", included: true },
+      { name: "15 jobs discovered per day", included: true },
+      { name: "30 AI responses per day", included: true },
+      { name: "5 cover letters per day", included: true },
+      { name: "3 CV generations per day", included: true },
+      { name: "Save up to 200 jobs", included: true },
+      { name: "Advanced filters", included: true },
+      { name: "Favorite jobs", included: true },
+      { name: "Weekly email alerts", included: true },
+      { name: "Priority support", included: false },
+    ],
+  },
+  {
+    id: "ultra",
+    name: "Ultra",
+    description: "Unlimited AI for power users",
+    weeklyPrice: 6.99,
+    monthlyPrice: 19.99,
+    jobsPerDay: 35,
+    hasAI: true,
+    aiResponsesPerDay: -1, // unlimited
+    coverLettersPerDay: -1,
+    cvGenerationsPerDay: -1,
+    icon: Crown,
+    cta: "Subscribe",
+    hasTrial: false,
+    features: [
+      { name: "35 jobs discovered per day", included: true },
+      { name: "Unlimited AI chat assistance", included: true, highlight: true },
+      { name: "Unlimited cover letters", included: true, highlight: true },
+      { name: "Unlimited CV generations", included: true, highlight: true },
+      { name: "Unlimited saved jobs", included: true },
+      { name: "Advanced filters", included: true },
+      { name: "Favorite jobs", included: true },
+      { name: "Daily email alerts", included: true },
+      { name: "Priority support", included: true, highlight: true },
     ],
   },
 ]

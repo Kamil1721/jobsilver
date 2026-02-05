@@ -7,9 +7,9 @@ import { checkRateLimit } from '@/lib/security/rate-limit'
 export const dynamic = 'force-dynamic'
 
 // Request validation schema
-// 2-tier model: Only 'pro' plan available for purchase
+// 3-tier model: 'pro' and 'ultra' plans available for purchase
 const checkoutRequestSchema = z.object({
-  plan: z.enum(['pro']).or(z.enum(['starter', 'ultra']).transform(() => 'pro' as const)), // Legacy plans redirect to pro
+  plan: z.enum(['pro', 'ultra']).or(z.enum(['starter']).transform(() => 'pro' as const)).or(z.enum(['mega']).transform(() => 'ultra' as const)), // Legacy plans redirect
   billingCycle: z.enum(['weekly', 'monthly']).default('monthly'),
   successUrl: z.string().url().optional(),
   cancelUrl: z.string().url().optional(),
@@ -58,7 +58,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { plan, billingCycle, successUrl, cancelUrl } = parseResult.data
+    const { plan, billingCycle, successUrl: rawSuccessUrl, cancelUrl: rawCancelUrl } = parseResult.data
+
+    // Validate and sanitize redirect URLs (prevent open redirect attacks)
+    const baseUrl = getBaseUrl(request)
+    let successUrl: string | undefined
+    let cancelUrl: string | undefined
+
+    if (rawSuccessUrl) {
+      if (rawSuccessUrl.startsWith('/')) {
+        successUrl = baseUrl + rawSuccessUrl
+      } else if (rawSuccessUrl.startsWith(baseUrl)) {
+        successUrl = rawSuccessUrl
+      }
+      // External URLs are ignored - use default
+    }
+
+    if (rawCancelUrl) {
+      if (rawCancelUrl.startsWith('/')) {
+        cancelUrl = baseUrl + rawCancelUrl
+      } else if (rawCancelUrl.startsWith(baseUrl)) {
+        cancelUrl = rawCancelUrl
+      }
+      // External URLs are ignored - use default
+    }
 
     // Validate plan has a price ID configured for this billing cycle
     const priceId = getPriceId(plan, billingCycle as BillingCycle)
@@ -154,9 +177,10 @@ export async function POST(request: NextRequest) {
 
     // Check trial eligibility by querying Stripe directly
     // This prevents abuse via account deletion + recreation
-    let isEligibleForTrial = true
+    // Note: Ultra plan has no trial - charges immediately
+    let isEligibleForTrial = plan === 'pro' // Only Pro has trial
 
-    if (email) {
+    if (isEligibleForTrial && email) {
       try {
         // Search Stripe for any customers with this email
         const existingCustomers = await stripe.customers.list({
@@ -190,6 +214,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Checkout session
+    // Note: Ultra plan has no trial - charges immediately
     const session = await stripe.checkout.sessions.create({
       customer: stripeCustomerId,
       mode: 'subscription',
@@ -203,8 +228,8 @@ export async function POST(request: NextRequest) {
       success_url: successUrl || `${getBaseUrl(request)}/setup?subscription=success`,
       cancel_url: cancelUrl || `${getBaseUrl(request)}/choose-plan?subscription=canceled`,
       subscription_data: {
-        // Only give trial to first-time subscribers
-        ...(isEligibleForTrial && { trial_period_days: 3 }),
+        // Only give trial to first-time Pro subscribers (Ultra has no trial)
+        ...(isEligibleForTrial && plan === 'pro' && { trial_period_days: 3 }),
         metadata: {
           supabase_user_id: user.id,
           plan: plan,

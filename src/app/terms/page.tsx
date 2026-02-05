@@ -10,8 +10,8 @@ export const metadata: Metadata = {
 }
 
 export default function TermsOfServicePage() {
-  const lastUpdated = 'January 30, 2026'
-  const effectiveDate = 'January 30, 2026'
+  const lastUpdated = 'February 5, 2026'
+  const effectiveDate = 'February 5, 2026'
 
   return (
     <div className="min-h-screen bg-[#0a0a0b] text-white flex flex-col">
@@ -227,6 +227,22 @@ export default function TermsOfServicePage() {
                 <li>Violates any applicable law or regulation</li>
                 <li>Contains sensitive personal information of others without consent</li>
               </ul>
+
+              <h3>7.4 Data Retention and Automatic Cleanup</h3>
+              <p>
+                To maintain platform performance and keep your job board relevant, we automatically
+                remove job listings that are older than 60 days from their discovery date. This helps
+                ensure you see fresh, active opportunities.
+              </p>
+              <p>
+                <strong>Important:</strong> Jobs you have favorited are <strong>never</strong> automatically
+                deleted and will remain in your account indefinitely. We recommend favoriting any jobs
+                you want to keep for long-term reference.
+              </p>
+              <p>
+                Your CV, profile information, preferences, and chat history are retained until you
+                choose to delete your account.
+              </p>
             </section>
 
             {/* Acceptable Use */}

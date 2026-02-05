@@ -55,7 +55,7 @@ export function FavoriteButton({
   const [isLoading, setIsLoading] = React.useState(false)
   const [showParticles, setShowParticles] = React.useState(false)
 
-  const isPremium = plan === "pro" || plan === "mega" || isTester
+  const isPremium = plan === "pro" || plan === "ultra" || plan === "mega" || isTester
   const config = sizeConfig[size]
   const lastClickRef = React.useRef<number>(0)
   const DEBOUNCE_MS = 500

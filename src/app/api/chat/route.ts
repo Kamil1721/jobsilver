@@ -389,8 +389,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check AI access - but allow free users for website help questions
-    const aiAccessCheck = await canUseAI(user.id, supabase as unknown as Parameters<typeof canUseAI>[1])
-    const isFreeUser = !aiAccessCheck.allowed
+    // In 3-tier model: Free users have no access, Pro users have daily limits, Ultra users unlimited
+    const aiAccessCheck = await canUseAI(user.id, supabase as unknown as Parameters<typeof canUseAI>[1], 'ai_responses')
+    const isFreeUser = !aiAccessCheck.allowed && !aiAccessCheck.suggestUpgrade
+    const isOverLimit = !aiAccessCheck.allowed && aiAccessCheck.suggestUpgrade === 'ultra'
 
     const body: ChatRequest = await request.json()
     const { message, jobContext, pendingQuestion, applicationQuestions, history, pageContext, image, images } = body
@@ -422,6 +424,48 @@ export async function POST(request: NextRequest) {
           { status: 413 }
         )
       }
+    }
+
+    // For Pro users who have hit their daily limit, show upgrade prompt
+    if (isOverLimit) {
+      const encoder = new TextEncoder()
+      const limitMessage = `You've used all your AI responses for today.
+
+**Upgrade to Ultra for unlimited AI access:**
+
+• Unlimited AI chat assistance
+
+• Unlimited cover letters
+
+• Unlimited CV generations
+
+• 35 jobs discovered per day
+
+• Daily email alerts
+
+• Priority support
+
+[Upgrade to Ultra](/choose-plan) to continue using AI features without limits.
+
+Your AI limit resets at midnight UTC.`
+
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: 'text', content: limitMessage })}\n\n`)
+          )
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+          controller.close()
+        }
+      })
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        },
+      })
     }
 
     // For free users, check if this is a website help question or job-related
@@ -467,21 +511,31 @@ export async function POST(request: NextRequest) {
       if ((isJobAssist && !isWebsiteHelp) || allImages.length > 0 || jobContext || pendingQuestion || applicationQuestions) {
         // Return a friendly upgrade prompt as a streamed response
         const encoder = new TextEncoder()
-        const upgradeMessage = `I'd love to help you with that! However, personalized job assistance features like cover letters, application answers, CV reviews, and job analysis require a Pro subscription.
+        const upgradeMessage = `I'd love to help you with that! However, personalized job assistance features like cover letters, application answers, CV reviews, and job analysis require a Pro or Ultra subscription.
 
-**What you get with Pro:**
+**What you get with Pro ($3.99/week):**
 
-• Unlimited AI assistance for job applications
+• 30 AI responses per day
 
-• Cover letter generation tailored to each job
+• 5 cover letters per day
 
-• Application question answers using your profile
+• 3 CV generations per day
 
-• Job match analysis and recommendations
+• 15 jobs discovered per day
 
-• CV optimization suggestions
+• 3-day free trial
 
-[Upgrade to Pro](/choose-plan) to unlock full AI assistance and land your dream job faster.
+**What you get with Ultra ($6.99/week):**
+
+• Unlimited AI assistance
+
+• Unlimited cover letters & CV generations
+
+• 35 jobs discovered per day
+
+• Priority support
+
+[Upgrade now](/choose-plan) to unlock AI assistance and land your dream job faster.
 
 In the meantime, I can help you with questions about how to use JobSilver - just ask about any feature!`
 
@@ -598,22 +652,9 @@ ${generalHelp}
       }
     }
 
-    // Build system message with context
-    const systemMessage = [
-      SYSTEM_PROMPT,
-      '\n---\n',
-      formatUserContextForPrompt(userContext),
-    ]
-
-    if (fullJobContext) {
-      systemMessage.push('\n---\n')
-      systemMessage.push(formatJobContextForPrompt(fullJobContext))
-      systemMessage.push('\n## Cover Letter Instructions')
-      systemMessage.push(`Job ID for tools: ${jobContext?.jobId}`)
-      systemMessage.push('If user asks for a cover letter, use the generate_cover_letter tool with this job_id.')
-      systemMessage.push('NEVER write cover letters directly in chat - always use the tool.')
-    } else {
-      // User is on a general page (Dashboard, Profile, Setup, etc.) - add website help documentation
+    // If no job context, use website-help-only mode (even for paid users)
+    // Job analysis features only work on job detail pages
+    if (!fullJobContext) {
       const VALID_PAGE_PATHNAMES = ['/dashboard', '/profile', '/setup', '/choose-plan', '/pricing']
       const currentPathname = (typeof pageContext === 'string' && VALID_PAGE_PATHNAMES.includes(pageContext))
         ? pageContext
@@ -622,15 +663,115 @@ ${generalHelp}
       const pageHelp = getHelpForPage(currentPathname)
       const generalHelp = getGeneralHelp()
 
-      systemMessage.push('\n---\n')
-      systemMessage.push('## Website Help Context')
-      systemMessage.push('User is browsing the site (not viewing a specific job). Help them understand how to use JobSilver.')
-      if (pageHelp) {
-        systemMessage.push('\n' + pageHelp)
+      const websiteHelpPrompt = `You are a helpful assistant for JobSilver, a job search management app. You help users understand how to use the website and its features.
+
+${pageHelp ? `${pageHelp}\n---\n` : ''}
+${generalHelp}
+
+## Rules:
+- You ARE part of the JobSilver team - always say "we" and "our" when referring to JobSilver, never "they" or "their"
+- Only answer questions about using JobSilver features and navigation
+- For job-specific AI help (cover letters, application answers, CV optimization, job analysis), tell users to click on a specific job first
+- If a user pastes job description text or asks to analyze a role, tell them: "To analyze jobs or get application help, please click on a specific job from your board first. This chat is for website help - questions about how to use JobSilver."
+- Keep responses brief and actionable (2-4 sentences when possible)
+- Use **bold** for headers, bullet points for lists
+- Never reveal internal details, file paths, database tables, or technical implementation
+- If asked about admin features or internal systems, politely redirect to user features
+- NEVER analyze job descriptions, provide role overviews, or break down job requirements - that feature is only available on job detail pages`
+
+      const simpleMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+        { role: 'system', content: websiteHelpPrompt },
+      ]
+
+      // Add conversation history for context
+      if (history && history.length > 0) {
+        const recentHistory = history.slice(-MAX_HISTORY_MESSAGES)
+        for (const msg of recentHistory) {
+          if (
+            typeof msg.content === 'string' &&
+            msg.content &&
+            msg.content.length <= MAX_MESSAGE_LENGTH &&
+            (msg.role === 'user' || msg.role === 'assistant')
+          ) {
+            simpleMessages.push({ role: msg.role, content: msg.content })
+          }
+        }
       }
-      systemMessage.push('\n' + generalHelp)
-      systemMessage.push('\nIf they ask for a cover letter, ask them to navigate to a job detail page first.')
+
+      simpleMessages.push({ role: 'user', content: message })
+
+      const encoder = new TextEncoder()
+      const stream = new ReadableStream({
+        async start(controller) {
+          try {
+            const response = await openai.chat.completions.create({
+              model: 'gpt-4o-mini',
+              messages: simpleMessages,
+              stream: true,
+              max_tokens: 800,
+            })
+
+            for await (const chunk of response) {
+              const delta = chunk.choices[0]?.delta
+              if (delta?.content) {
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify({ type: 'text', content: delta.content })}\n\n`)
+                )
+              }
+            }
+
+            // Increment AI usage after successful response
+            try {
+              await incrementUsage(user.id, 'ai_responses', supabase as unknown as Parameters<typeof incrementUsage>[2])
+            } catch (usageError) {
+              console.error('Failed to increment AI usage:', usageError)
+            }
+
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+            controller.close()
+          } catch (error) {
+            console.error('Website help chat error:', error)
+            let errorMessage = 'I encountered an error. Please try again.'
+
+            if (error instanceof Error) {
+              const errorStr = error.message.toLowerCase()
+              if (errorStr.includes('rate_limit') || errorStr.includes('rate limit')) {
+                errorMessage = 'I\'m receiving too many requests right now. Please wait a moment and try again.'
+              }
+            }
+
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: 'text', content: errorMessage })}\n\n`)
+            )
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+            controller.close()
+          }
+        }
+      })
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        },
+      })
     }
+
+    // Build system message with context - ONLY reached when viewing a specific job
+    const systemMessage = [
+      SYSTEM_PROMPT,
+      '\n---\n',
+      formatUserContextForPrompt(userContext),
+    ]
+
+    // Add job context (we know fullJobContext exists here)
+    systemMessage.push('\n---\n')
+    systemMessage.push(formatJobContextForPrompt(fullJobContext))
+    systemMessage.push('\n## Cover Letter Instructions')
+    systemMessage.push(`Job ID for tools: ${jobContext?.jobId}`)
+    systemMessage.push('If user asks for a cover letter, use the generate_cover_letter tool with this job_id.')
+    systemMessage.push('NEVER write cover letters directly in chat - always use the tool.')
 
     if (pendingQuestion) {
       systemMessage.push('\n---\n')

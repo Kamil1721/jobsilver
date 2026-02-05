@@ -651,14 +651,21 @@ export default function AdminPage() {
 
   const getPlanBadgeColor = (plan: string) => {
     switch (plan) {
-      case "pro": return "bg-blue-500/20 text-blue-400"
+      // Current 3-tier model plans
+      case "ultra": return "bg-amber-500/20 text-amber-400"
+      case "pro": return "bg-violet-500/20 text-violet-400"
       // Legacy plans (for backwards compatibility display)
       case "mega": return "bg-purple-500/20 text-purple-400"
-      case "ultra": return "bg-yellow-500/20 text-yellow-400"
       case "basic": return "bg-green-500/20 text-green-400"
       case "starter": return "bg-emerald-500/20 text-emerald-400"
       default: return "bg-gray-500/20 text-gray-400" // free
     }
+  }
+
+  // Get effective plan display - testers and admins show as "ultra" since they have Ultra-level access
+  const getEffectivePlanDisplay = (plan: string | null, isTester?: boolean, isAdmin?: boolean) => {
+    if (isAdmin || isTester) return "ultra"
+    return plan || "free"
   }
 
   const getReportTypeBadgeColor = (type: string) => {
@@ -836,17 +843,18 @@ export default function AdminPage() {
                       <SelectItem value="all">All Plans</SelectItem>
                       <SelectItem value="free">Free</SelectItem>
                       <SelectItem value="pro">Pro</SelectItem>
+                      <SelectItem value="ultra">Ultra</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              {/* Plan Stats */}
+              {/* Plan Stats - 3-tier model only */}
               <div className="flex gap-2 mb-4 flex-wrap">
-                {Object.entries(userStats).map(([plan, count]) => (
+                {['free', 'pro', 'ultra'].map((plan) => (
                   <Badge key={plan} variant="outline" className={getPlanBadgeColor(plan)}>
-                    {plan}: {count}
+                    {plan}: {userStats[plan] || 0}
                   </Badge>
                 ))}
               </div>
@@ -879,8 +887,8 @@ export default function AdminPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-1">
-                            <Badge className={getPlanBadgeColor(user.subscription_plan || "free")}>
-                              {user.subscription_plan || "free"}
+                            <Badge className={getPlanBadgeColor(getEffectivePlanDisplay(user.subscription_plan, user.is_tester, user.is_admin))}>
+                              {getEffectivePlanDisplay(user.subscription_plan, user.is_tester, user.is_admin)}
                             </Badge>
                             {user.is_tester && (
                               <Badge className="bg-teal-500/20 text-teal-400 border-teal-500/30">
@@ -1258,7 +1266,7 @@ export default function AdminPage() {
                   <Users className="w-5 h-5 text-teal-500" />
                   Active Testers
                 </CardTitle>
-                <CardDescription>Users with tester status receive Pro-level access (50 jobs/day, unlimited AI)</CardDescription>
+                <CardDescription>Users with tester status receive Ultra-level access (35 jobs/day, unlimited AI)</CardDescription>
               </div>
             </CardHeader>
             <CardContent>
@@ -1290,8 +1298,8 @@ export default function AdminPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <Badge className={getPlanBadgeColor(tester.subscription_plan || "free")}>
-                              {tester.subscription_plan || "free"}
+                            <Badge className={getPlanBadgeColor("ultra")}>
+                              ultra
                             </Badge>
                             <Badge className="bg-teal-500/20 text-teal-400 border-teal-500/30">
                               <FlaskConical className="w-3 h-3 mr-1" />
@@ -1548,8 +1556,8 @@ export default function AdminPage() {
                   Plan changes only via Stripe billing
                 </p>
               </div>
-              <Badge className={getPlanBadgeColor(selectedUser?.subscription_plan || "free")}>
-                {selectedUser?.subscription_plan || "free"}
+              <Badge className={getPlanBadgeColor(getEffectivePlanDisplay(selectedUser?.subscription_plan || null, selectedUser?.is_tester, selectedUser?.is_admin))}>
+                {getEffectivePlanDisplay(selectedUser?.subscription_plan || null, selectedUser?.is_tester, selectedUser?.is_admin)}
               </Badge>
             </div>
 
@@ -1561,7 +1569,7 @@ export default function AdminPage() {
                   Tester Status
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Testers get Pro-level access (50 jobs/day, unlimited AI)
+                  Testers get Ultra-level access (35 jobs/day, unlimited AI)
                 </p>
               </div>
               <Button

@@ -11,15 +11,20 @@ import {
  * AI feature types for usage tracking
  * Maps to database columns and plan limits
  */
-export type AIFeature = 'ai_responses' | 'cover_letters' | 'cv_optimizations'
+export type AIFeature = 'ai_responses' | 'cover_letters' | 'cv_generations'
 
 /**
  * Result from checking if a user can use AI
- * In 2-tier model: Free users have NO AI access, Pro users have UNLIMITED
+ * In 3-tier model:
+ * - Free users: NO AI access
+ * - Pro users: Limited AI access (30 responses/day, 5 cover letters/day, 3 CV generations/day)
+ * - Ultra users: UNLIMITED AI access
  */
 export interface CanUseAIResult {
   allowed: boolean
+  remaining?: number // -1 = unlimited, undefined if not allowed
   message?: string // User-friendly message if not allowed
+  suggestUpgrade?: 'pro' | 'ultra' // Which plan to suggest upgrading to
 }
 
 /**
@@ -77,8 +82,8 @@ function featureToResource(feature: AIFeature): AIResource {
       return 'aiResponses'
     case 'cover_letters':
       return 'coverLetters'
-    case 'cv_optimizations':
-      return 'cvOptimizations'
+    case 'cv_generations':
+      return 'cvGenerations'
     default:
       throw new Error(`Unknown AI feature: ${feature}`)
   }
@@ -112,23 +117,25 @@ async function getUserPlan(
 
 /**
  * Get the effective plan for a user, accounting for tester status
- * Testers get pro-level access (was ultra in old model)
+ * Testers get ultra-level access (unlimited AI)
  */
 function getEffectivePlan(plan: AllSubscriptionPlans, isTester: boolean): AllSubscriptionPlans {
-  return isTester ? 'pro' : plan
+  return isTester ? 'ultra' : plan
 }
 
 /**
  * PRIMARY FUNCTION: Check if a user can use AI features
  *
- * In the 2-tier model:
+ * In the 3-tier model:
  * - Free users: NO AI access
- * - Pro users: UNLIMITED AI access
- * - Testers: Pro-level access
+ * - Pro users: Limited AI access (30 responses/day)
+ * - Ultra users: UNLIMITED AI access
+ * - Testers: Ultra-level access
  */
 export async function canUseAI(
   userId: string,
-  supabase: SupabaseClientLike
+  supabase: SupabaseClientLike,
+  feature: AIFeature = 'ai_responses'
 ): Promise<CanUseAIResult> {
   // Get user's plan
   const { plan, isTester } = await getUserPlan(userId, supabase)
@@ -140,12 +147,63 @@ export async function canUseAI(
   if (!hasAccess) {
     return {
       allowed: false,
-      message: 'AI features require a Pro subscription. Upgrade to get unlimited AI assistance, cover letters, and CV optimization.',
+      message: 'AI features require a Pro subscription. Upgrade to get AI assistance, cover letters, and CV generation.',
+      suggestUpgrade: 'pro',
+    }
+  }
+
+  // Get plan limits
+  const planLimits = getPlanLimits(effectivePlan)
+  const resource = featureToResource(feature)
+  const limit = getResourceLimit(effectivePlan, resource)
+
+  // Check if unlimited (-1)
+  if (limit === -1) {
+    return {
+      allowed: true,
+      remaining: -1,
+    }
+  }
+
+  // Get current usage
+  const usage = await getDailyUsage(userId, supabase)
+  let used: number
+
+  switch (feature) {
+    case 'ai_responses':
+      used = usage.aiResponsesUsed
+      break
+    case 'cover_letters':
+      used = usage.coverLettersGenerated
+      break
+    case 'cv_generations':
+      used = usage.cvOptimizationsUsed
+      break
+    default:
+      used = 0
+  }
+
+  const remaining = Math.max(0, limit - used)
+
+  // Check if over limit
+  if (used >= limit) {
+    const featureNames: Record<AIFeature, string> = {
+      ai_responses: 'AI responses',
+      cover_letters: 'cover letters',
+      cv_generations: 'CV generations',
+    }
+
+    return {
+      allowed: false,
+      remaining: 0,
+      message: `You've used all ${limit} ${featureNames[feature]} for today. Upgrade to Ultra for unlimited access.`,
+      suggestUpgrade: 'ultra',
     }
   }
 
   return {
     allowed: true,
+    remaining,
   }
 }
 
@@ -185,10 +243,12 @@ export async function getDailyUsage(
 }
 
 /**
- * LEGACY FUNCTION: Check if a user can use an AI feature based on their plan and current usage
- * Kept for backwards compatibility with existing code
+ * Check if a user can use an AI feature based on their plan and current usage
  *
- * In 2-tier model: Free users are blocked (allowed: false), Pro users always allowed
+ * In 3-tier model:
+ * - Free users: blocked (allowed: false)
+ * - Pro users: limited access with daily quotas
+ * - Ultra users: unlimited access
  */
 export async function checkCanUseFeature(
   userId: string,
@@ -202,14 +262,14 @@ export async function checkCanUseFeature(
   // Get plan limits
   const planLimits = getPlanLimits(effectivePlan)
 
-  // Check AI access first (primary check in 2-tier model)
+  // Check AI access first
   if (!planLimits.hasAIAccess) {
     return {
       allowed: false,
       remaining: 0,
       limit: 0,
       used: 0,
-      message: 'AI features require a Pro subscription. Upgrade to get unlimited AI assistance.',
+      message: 'AI features require a Pro subscription. Upgrade to get AI assistance.',
     }
   }
 
@@ -217,22 +277,7 @@ export async function checkCanUseFeature(
   const resource = featureToResource(feature)
   const limit = getResourceLimit(effectivePlan, resource)
 
-  // CV optimizations are boolean access (not quota-based)
-  if (feature === 'cv_optimizations') {
-    const allowed = planLimits.cvOptimization
-
-    return {
-      allowed,
-      remaining: allowed ? -1 : 0,
-      limit: allowed ? -1 : 0,
-      used: 0,
-      message: allowed
-        ? undefined
-        : 'CV optimization is available on Pro plan. Upgrade to access this feature.',
-    }
-  }
-
-  // Get current usage (for analytics, not blocking in Pro)
+  // Get current usage
   const usage = await getDailyUsage(userId, supabase)
   let used: number
 
@@ -243,16 +288,46 @@ export async function checkCanUseFeature(
     case 'cover_letters':
       used = usage.coverLettersGenerated
       break
+    case 'cv_generations':
+      used = usage.cvOptimizationsUsed
+      break
     default:
       used = 0
   }
 
-  // Pro users have unlimited access (-1)
-  // In 2-tier model, if you have AI access, it's unlimited
+  // Check if unlimited (-1)
+  if (limit === -1) {
+    return {
+      allowed: true,
+      remaining: -1,
+      limit: -1,
+      used,
+    }
+  }
+
+  // Check if over limit
+  const remaining = Math.max(0, limit - used)
+
+  if (used >= limit) {
+    const featureNames: Record<AIFeature, string> = {
+      ai_responses: 'AI responses',
+      cover_letters: 'cover letters',
+      cv_generations: 'CV generations',
+    }
+
+    return {
+      allowed: false,
+      remaining: 0,
+      limit,
+      used,
+      message: `You've used all ${limit} ${featureNames[feature]} for today. Upgrade to Ultra for unlimited access.`,
+    }
+  }
+
   return {
     allowed: true,
-    remaining: -1,
-    limit: -1,
+    remaining,
+    limit,
     used,
   }
 }
@@ -262,7 +337,7 @@ export async function checkCanUseFeature(
  * Uses atomic database function to prevent race conditions
  * Returns the new count after increment
  *
- * Note: In 2-tier model, this is for analytics only (Pro users are unlimited)
+ * Note: In 3-tier model, this is used for both quota enforcement (Pro) and analytics (Ultra)
  */
 export async function incrementUsage(
   userId: string,
@@ -270,11 +345,15 @@ export async function incrementUsage(
   supabase: SupabaseClientLike,
   increment: number = 1
 ): Promise<number> {
+  // Map feature name to database column
+  // Note: 'cv_generations' maps to 'cv_optimizations' column in DB for backwards compatibility
+  const dbFeature = feature === 'cv_generations' ? 'cv_optimizations' : feature
+
   // Use the atomic increment_ai_usage database function
   // This prevents race conditions from concurrent requests
   const { data, error } = await supabase.rpc('increment_ai_usage', {
     p_user_id: userId,
-    p_feature: feature, // 'ai_responses', 'cover_letters', or 'cv_optimizations'
+    p_feature: dbFeature, // 'ai_responses', 'cover_letters', or 'cv_optimizations'
     p_increment: increment,
   })
 
@@ -298,6 +377,7 @@ export async function getUsageWithLimits(
   limits: {
     aiResponses: { used: number; limit: number; limitDisplay: string }
     coverLetters: { used: number; limit: number; limitDisplay: string }
+    cvGenerations: { used: number; limit: number; limitDisplay: string }
     cvOptimization: { enabled: boolean }
     aiLearning: { enabled: boolean }
   }
@@ -327,6 +407,13 @@ export async function getUsageWithLimits(
           ? formatQuotaDisplay(planLimits.coverLettersPerDay)
           : 'No access',
       },
+      cvGenerations: {
+        used: usage.cvOptimizationsUsed,
+        limit: planLimits.cvGenerationsPerDay,
+        limitDisplay: planLimits.hasAIAccess
+          ? formatQuotaDisplay(planLimits.cvGenerationsPerDay)
+          : 'No access',
+      },
       cvOptimization: {
         enabled: planLimits.cvOptimization,
       },
@@ -342,7 +429,10 @@ export async function getUsageWithLimits(
 
 /**
  * Check if user is close to their limit (80%+)
- * In 2-tier model: Always returns false for Pro users (unlimited)
+ * In 3-tier model:
+ * - Free users: always "at limit" (no access)
+ * - Pro users: check against daily limits
+ * - Ultra users: never near limit (unlimited)
  */
 export async function checkNearLimits(
   userId: string,
@@ -350,20 +440,30 @@ export async function checkNearLimits(
 ): Promise<{
   aiResponses: boolean
   coverLetters: boolean
+  cvGenerations: boolean
 }> {
   const { usage, limits, hasAIAccess } = await getUsageWithLimits(userId, supabase)
 
-  // Pro users (with AI access) have unlimited, never near limit
-  if (hasAIAccess) {
+  // Free users have no access, technically always "at limit"
+  if (!hasAIAccess) {
     return {
-      aiResponses: false,
-      coverLetters: false,
+      aiResponses: true,
+      coverLetters: true,
+      cvGenerations: true,
     }
   }
 
-  // Free users have no access, technically always "at limit"
+  // Check each resource
+  const checkNearLimit = (used: number, limit: number): boolean => {
+    // Unlimited (-1) is never near limit
+    if (limit === -1) return false
+    // At 80%+ of limit
+    return used >= limit * 0.8
+  }
+
   return {
-    aiResponses: true,
-    coverLetters: true,
+    aiResponses: checkNearLimit(limits.aiResponses.used, limits.aiResponses.limit),
+    coverLetters: checkNearLimit(limits.coverLetters.used, limits.coverLetters.limit),
+    cvGenerations: checkNearLimit(limits.cvGenerations.used, limits.cvGenerations.limit),
   }
 }

@@ -3,7 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit } from '@/lib/security/rate-limit'
 import { mapParsedCVToScreeningAnswers, type ParsedCV } from '@/lib/cv/data-mapper'
 import { tailorCVForJob, shouldUseAITailoring, sanitizeAIOutput } from '@/lib/cv/ai-tailor'
-import type { ScreeningAnswers, Json } from '@/lib/supabase/types'
+import type { ScreeningAnswers, Json, AllSubscriptionPlans } from '@/lib/supabase/types'
+import { canUseAI, incrementUsage } from '@/lib/ai/usage-tracker'
 
 export const dynamic = 'force-dynamic'
 
@@ -115,6 +116,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Too many CV generations. Please try again later.' },
         { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+      )
+    }
+
+    // Check plan-based CV generation limit
+    // In 3-tier model: Free=0/day, Pro=3/day, Ultra=unlimited
+    const cvAccessCheck = await canUseAI(user.id, supabase as unknown as Parameters<typeof canUseAI>[1], 'cv_generations')
+    if (!cvAccessCheck.allowed) {
+      return NextResponse.json(
+        {
+          error: cvAccessCheck.message || 'CV generation limit reached',
+          suggestUpgrade: cvAccessCheck.suggestUpgrade,
+        },
+        { status: 403 }
       )
     }
 
@@ -426,6 +440,14 @@ export async function POST(request: NextRequest) {
       // Log but don't fail the request - CV was generated successfully
       console.error('Failed to save screening answers (exception):', saveError)
       dataSaveWarning = 'Your data may not be saved for next time'
+    }
+
+    // Increment CV generation usage
+    try {
+      await incrementUsage(user.id, 'cv_generations', supabase as unknown as Parameters<typeof incrementUsage>[2])
+    } catch (usageError) {
+      console.error('Failed to increment CV generation usage:', usageError)
+      // Don't fail the request if usage tracking fails
     }
 
     return NextResponse.json({

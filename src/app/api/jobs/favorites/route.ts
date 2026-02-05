@@ -28,10 +28,10 @@ export async function GET() {
 
     const plan = (profile?.subscription_plan || "free") as SubscriptionPlan
     const isTester = profile?.is_tester || false
-    const hasAccess = canAccessFeature(plan, "ai_learning", isTester)
+    const hasAccess = canAccessFeature(plan, "favorites", isTester)
 
     if (!hasAccess) {
-      const requiredPlan = getRequiredPlan("ai_learning")
+      const requiredPlan = getRequiredPlan("favorites")
       return NextResponse.json(
         { error: { code: "FEATURE_LOCKED", message: `This feature requires the ${formatPlanName(requiredPlan)} plan or higher` } },
         { status: 403 }

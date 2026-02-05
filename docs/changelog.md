@@ -2,16 +2,17 @@
 
 ## Current State (February 2026)
 
-### Pricing
+### Pricing (3-Tier Model)
 - **Free**: 3 jobs/day, no AI assistance
-- **Pro**: $4.99/week or $14.99/month, 50 jobs/day, unlimited AI, 3-day trial
+- **Pro**: $3.99/week or $12.99/month, 15 jobs/day, 30 AI responses/day, 5 cover letters/day, 3 CV generations/day, 3-day trial
+- **Ultra**: $6.99/week or $19.99/month, 35 jobs/day, unlimited AI, priority support, no trial
 
 ### Core Features
 - Job search from multiple sources (fantastic.jobs, Greenhouse, Lever, Ashby)
 - Kanban board (New Matches → Applied → Offers)
-- AI assistant for applications, cover letters, interview prep
+- AI assistant for applications, cover letters, interview prep (limited for Pro, unlimited for Ultra)
 - CV upload, parsing, and generation
-- Email notifications for job matches (Pro users)
+- Email notifications: Weekly alerts (Pro), Daily alerts (Ultra)
 
 ### Architecture
 - **Manual apply workflow** - Users apply directly on company sites
@@ -35,6 +36,28 @@
 ---
 
 ## 2026-02 - February
+
+### 2026-02-05 - 3-Tier Pricing Model
+
+**Major pricing restructure from 2-tier (Free/Pro) to 3-tier (Free/Pro/Ultra):**
+
+| Feature | Free | Pro | Ultra |
+|---------|------|-----|-------|
+| Jobs/day | 3 | 15 | 35 |
+| AI responses/day | 0 | 30 | Unlimited |
+| Cover letters/day | 0 | 5 | Unlimited |
+| CV generations/day | 0 | 3 | Unlimited |
+| Saved jobs | 50 | 200 | Unlimited |
+| Email alerts | None | Weekly | Daily |
+| Price | $0 | $3.99/wk ($12.99/mo) | $6.99/wk ($19.99/mo) |
+| Trial | - | 3 days | None |
+
+**Key Changes:**
+- Pro plan reduced from 50 to 15 jobs/day with limited AI access
+- New Ultra tier for power users with unlimited AI
+- Tester access upgraded from Pro to Ultra equivalent
+- 60-day job cleanup now excludes favorited jobs
+- Updated all pricing pages, FAQs, and documentation
 
 ### 2026-02-05 - CV Generator Improvements & Security Fixes
 
@@ -225,9 +248,9 @@ Tables kept but no longer written to: `scraped_questions`, `application_queue`, 
 - `src/app/api/ai/usage/route.ts` - GET endpoint for usage stats
 
 #### Plan Limits Updated
-- New 2-tier model: Free and Pro
+- New 2-tier model: Free and Pro (superseded by 3-tier on 2026-02-05)
 - Free: 3 jobs/day, no AI
-- Pro: 50 jobs/day, unlimited AI, $4.99/week
+- Pro: 50 jobs/day, unlimited AI, $4.99/week (now updated to 15 jobs/day, limited AI)
 
 #### Chat API Changes
 - Added AI quota check before processing

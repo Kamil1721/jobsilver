@@ -1,30 +1,34 @@
 import type { SubscriptionPlan, AllSubscriptionPlans } from '@/lib/supabase/types'
 
 /**
- * Plan limits and features configuration for 2-tier pricing model (January 2026)
+ * Plan limits and features configuration for 3-tier pricing model (February 2026)
  *
- * New Model:
- * - Free: 3 jobs discovered per day, NO AI access
- * - Pro: 50 jobs discovered per day, UNLIMITED AI access, $4.99/week or $14.99/month
+ * Current Model:
+ * - Free: 3 jobs/day, no AI access
+ * - Pro: 15 jobs/day, limited AI (30/day), 5 cover letters/day, 3 CV gen/day, $3.99/wk or $12.99/mo, 3-day trial
+ * - Ultra: 35 jobs/day, unlimited AI access, $6.99/wk or $19.99/mo, no trial
  *
- * Key Changes:
- * - Limit is now by jobs discovered (not AI responses)
- * - AI access is boolean (not quota-based)
- * - Pro has 3-day free trial
+ * Note: Jobs auto-clear after 60 days, so saved job limits are rarely hit.
  */
 export interface PlanLimits {
   // Job discovery limits (primary metric)
   jobsPerDay: number
 
-  // AI access (boolean - not quota-based)
+  // AI access (boolean - whether user has any AI access)
   hasAIAccess: boolean
 
+  // AI usage limits per day (-1 = unlimited, 0 = no access)
+  aiResponsesPerDay: number
+  coverLettersPerDay: number
+  cvGenerationsPerDay: number
+
   // Legacy fields (for backwards compatibility with existing UI)
-  aiResponsesPerDay: number // -1 = unlimited
-  coverLettersPerDay: number // -1 = unlimited
   cvOptimization: boolean
   aiLearning: boolean
-  savedJobs: number
+  savedJobs: number // -1 = unlimited
+
+  // Email notification frequency
+  emailFrequency: 'none' | 'weekly' | 'daily'
 
   // Features list for display
   features: string[]
@@ -35,19 +39,21 @@ export interface PlanLimits {
   trialDays: number
 }
 
-// AI resource types for legacy quota tracking (kept for backwards compatibility)
-export type AIResource = 'aiResponses' | 'coverLetters' | 'cvOptimizations'
+// AI resource types for quota tracking
+export type AIResource = 'aiResponses' | 'coverLetters' | 'cvGenerations'
 
-// New 2-tier pricing structure
+// 3-tier pricing structure (February 2026)
 export const PLAN_LIMITS: Record<SubscriptionPlan, PlanLimits> = {
   free: {
     jobsPerDay: 3,
     hasAIAccess: false,
     aiResponsesPerDay: 0,
     coverLettersPerDay: 0,
+    cvGenerationsPerDay: 0,
     cvOptimization: false,
     aiLearning: false,
     savedJobs: 50,
+    emailFrequency: 'none',
     features: [
       '3 jobs discovered per day',
       'Kanban job tracking board',
@@ -60,40 +66,68 @@ export const PLAN_LIMITS: Record<SubscriptionPlan, PlanLimits> = {
     trialDays: 0,
   },
   pro: {
-    jobsPerDay: 50,
+    jobsPerDay: 15,
+    hasAIAccess: true,
+    aiResponsesPerDay: 30,
+    coverLettersPerDay: 5,
+    cvGenerationsPerDay: 3,
+    cvOptimization: true,
+    aiLearning: true,
+    savedJobs: 200,
+    emailFrequency: 'weekly',
+    features: [
+      '15 jobs discovered per day',
+      '30 AI responses per day',
+      '5 cover letters per day',
+      '3 CV generations per day',
+      'Save up to 200 jobs',
+      'Favorite jobs',
+      'Weekly email alerts',
+      '3-day free trial',
+    ],
+    weeklyPrice: 3.99,
+    monthlyPrice: 12.99,
+    trialDays: 3,
+  },
+  ultra: {
+    jobsPerDay: 35,
     hasAIAccess: true,
     aiResponsesPerDay: -1, // Unlimited
     coverLettersPerDay: -1, // Unlimited
+    cvGenerationsPerDay: -1, // Unlimited
     cvOptimization: true,
     aiLearning: true,
-    savedJobs: 1000,
+    savedJobs: -1, // Unlimited
+    emailFrequency: 'daily',
     features: [
-      '50 jobs discovered per day',
+      '35 jobs discovered per day',
       'Unlimited AI chat assistance',
       'Unlimited cover letters',
-      'CV optimization suggestions',
-      'AI learns your preferences',
-      'Advanced match analysis',
+      'Unlimited CV generations',
+      'Unlimited saved jobs',
+      'Favorite jobs',
+      'Daily email alerts',
       'Priority support',
-      'Save up to 1,000 jobs',
     ],
-    weeklyPrice: 4.99,
-    monthlyPrice: 14.99,
-    trialDays: 3,
+    weeklyPrice: 6.99,
+    monthlyPrice: 19.99,
+    trialDays: 0, // No trial for Ultra
   },
 }
 
 // Legacy plan mappings for backwards compatibility
-// Maps old plans to their equivalent in the new 2-tier model
+// Maps old plans to their equivalent in the new 3-tier model
 export const LEGACY_PLAN_LIMITS: Record<string, PlanLimits> = {
   starter: {
     jobsPerDay: 3, // Downgraded to free equivalent
     hasAIAccess: false,
     aiResponsesPerDay: 0,
     coverLettersPerDay: 0,
+    cvGenerationsPerDay: 0,
     cvOptimization: false,
     aiLearning: false,
     savedJobs: 50,
+    emailFrequency: 'none',
     features: ['Same as Free - plan discontinued'],
     weeklyPrice: 0,
     monthlyPrice: 0,
@@ -104,38 +138,29 @@ export const LEGACY_PLAN_LIMITS: Record<string, PlanLimits> = {
     hasAIAccess: false,
     aiResponsesPerDay: 0,
     coverLettersPerDay: 0,
+    cvGenerationsPerDay: 0,
     cvOptimization: false,
     aiLearning: false,
     savedJobs: 50,
+    emailFrequency: 'none',
     features: ['Same as Free - plan discontinued'],
     weeklyPrice: 0,
     monthlyPrice: 0,
     trialDays: 0,
   },
-  ultra: {
-    jobsPerDay: 50, // Maps to pro
-    hasAIAccess: true,
-    aiResponsesPerDay: -1,
-    coverLettersPerDay: -1,
-    cvOptimization: true,
-    aiLearning: true,
-    savedJobs: 1000,
-    features: ['Same as Pro'],
-    weeklyPrice: 4.99,
-    monthlyPrice: 14.99,
-    trialDays: 0,
-  },
   mega: {
-    jobsPerDay: 50, // Maps to pro
+    jobsPerDay: 35, // Maps to ultra
     hasAIAccess: true,
     aiResponsesPerDay: -1,
     coverLettersPerDay: -1,
+    cvGenerationsPerDay: -1,
     cvOptimization: true,
     aiLearning: true,
-    savedJobs: 1000,
-    features: ['Same as Pro'],
-    weeklyPrice: 4.99,
-    monthlyPrice: 14.99,
+    savedJobs: -1,
+    emailFrequency: 'daily',
+    features: ['Same as Ultra'],
+    weeklyPrice: 6.99,
+    monthlyPrice: 19.99,
     trialDays: 0,
   },
 }
@@ -145,7 +170,7 @@ export const LEGACY_PLAN_LIMITS: Record<string, PlanLimits> = {
  */
 export function getPlanLimits(plan: AllSubscriptionPlans): PlanLimits {
   // Check current plans first
-  if (plan === 'free' || plan === 'pro') {
+  if (plan === 'free' || plan === 'pro' || plan === 'ultra') {
     return PLAN_LIMITS[plan]
   }
   // Fall back to legacy mappings
@@ -159,7 +184,8 @@ export function canUsePlan(
   currentPlan: AllSubscriptionPlans,
   requiredPlan: AllSubscriptionPlans
 ): boolean {
-  // In the 2-tier model, pro is higher than free
+  // In the 3-tier model: free < pro < ultra
+  // Legacy plans: starter/basic -> free, mega -> ultra
   const planOrder: AllSubscriptionPlans[] = ['free', 'starter', 'basic', 'pro', 'ultra', 'mega']
   const currentIndex = planOrder.indexOf(currentPlan)
   const requiredIndex = planOrder.indexOf(requiredPlan)
@@ -206,9 +232,9 @@ export function getRemainingQuota(
     case 'coverLetters':
       limit = limits.coverLettersPerDay
       break
-    case 'cvOptimizations':
-      // CV optimizations are boolean access, not quota-based
-      return limits.cvOptimization ? -1 : 0
+    case 'cvGenerations':
+      limit = limits.cvGenerationsPerDay
+      break
     default:
       return 0
   }
@@ -244,9 +270,9 @@ export function isOverLimit(
     case 'coverLetters':
       limit = limits.coverLettersPerDay
       break
-    case 'cvOptimizations':
-      // CV optimizations are boolean access, not quota-based
-      return !limits.cvOptimization
+    case 'cvGenerations':
+      limit = limits.cvGenerationsPerDay
+      break
     default:
       return true
   }
@@ -279,8 +305,8 @@ export function getResourceLimit(
       return limits.aiResponsesPerDay
     case 'coverLetters':
       return limits.coverLettersPerDay
-    case 'cvOptimizations':
-      return limits.cvOptimization ? -1 : 0
+    case 'cvGenerations':
+      return limits.cvGenerationsPerDay
     default:
       return 0
   }
@@ -298,14 +324,18 @@ export function hasFeatureAccess(
 }
 
 /**
- * Get the upgrade plan (always Pro now)
+ * Get the upgrade plan for the current plan
+ * In 3-tier model: free -> pro, pro -> ultra, ultra has no upgrade
  */
 export function getUpgradePlan(currentPlan: AllSubscriptionPlans): SubscriptionPlan | null {
-  // In 2-tier model, free upgrades to pro, pro has no upgrade
+  // In 3-tier model: free -> pro, pro -> ultra
   if (currentPlan === 'free' || currentPlan === 'starter' || currentPlan === 'basic') {
     return 'pro'
   }
-  return null // pro, ultra, mega have no upgrade
+  if (currentPlan === 'pro') {
+    return 'ultra'
+  }
+  return null // ultra, mega have no upgrade
 }
 
 /**
@@ -394,14 +424,32 @@ export function mapLegacyPlan(plan: AllSubscriptionPlans): SubscriptionPlan {
       return 'free'
     case 'pro':
       return 'pro'
+    case 'ultra':
+      return 'ultra'
     // Legacy plans mapping:
     case 'starter':
     case 'basic':
       return 'free' // Downgrade to free
-    case 'ultra':
     case 'mega':
-      return 'pro' // Equivalent to pro
+      return 'ultra' // Equivalent to ultra
     default:
       return 'free'
   }
+}
+
+/**
+ * Get daily CV generation limit for a plan
+ * Returns -1 for unlimited, 0 for no access
+ */
+export function getDailyCVGenerationQuota(plan: AllSubscriptionPlans): number {
+  const limits = getPlanLimits(plan)
+  return limits.hasAIAccess ? limits.cvGenerationsPerDay : 0
+}
+
+/**
+ * Get email notification frequency for a plan
+ */
+export function getEmailFrequency(plan: AllSubscriptionPlans): 'none' | 'weekly' | 'daily' {
+  const limits = getPlanLimits(plan)
+  return limits.emailFrequency
 }

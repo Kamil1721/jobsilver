@@ -102,29 +102,10 @@ export default function DashboardLayout({
       const limits = getPlanLimits(plan)
       const maxActiveJobs = limits.savedJobs
 
-      // Generate system messages based on job limit
+      // Job limit warnings are now shown ONLY for Free users and INSIDE the New Matches column
+      // (handled by dashboard/page.tsx), not in the top banner
+      // The banner is reserved for announcements only
       const newMessages: SystemMessage[] = []
-
-      if (activeCount >= maxActiveJobs) {
-        newMessages.push({
-          id: 'job-limit-reached',
-          type: 'warning',
-          message: `You have ${maxActiveJobs} jobs in New Matches. Discard or move jobs to Applied to discover new ones.`,
-          action: plan === 'free' ? {
-            label: 'Upgrade to Pro',
-            href: '/pricing',
-          } : undefined,
-          dismissible: false, // Can't dismiss until they take action
-        })
-      } else if (activeCount >= maxActiveJobs * 0.9) {
-        // Warning at 90% capacity
-        newMessages.push({
-          id: 'job-limit-warning',
-          type: 'info',
-          message: `You have ${activeCount} of ${maxActiveJobs} jobs in New Matches. Consider discarding jobs you're not interested in.`,
-          dismissible: true,
-        })
-      }
 
       setSystemMessages(newMessages)
     } catch (err) {
@@ -310,7 +291,7 @@ export default function DashboardLayout({
                 ))
               ) : (
                 // Show announcement banner when no system messages
-                <AnnouncementBanner plan={(profile?.subscription_plan || 'free') as 'free' | 'pro'} />
+                <AnnouncementBanner plan={(profile?.subscription_plan || 'free') as 'free' | 'pro' | 'ultra'} />
               )}
             </div>
           )}

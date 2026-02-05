@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { checkAdminAuth, isAdminEmail } from '@/lib/admin/auth'
 import {
   sanitizeSearchInput,
@@ -93,28 +93,44 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
     }
 
-    // Get stats per plan
-    const { data: planStats } = await supabase
+    // Get stats per plan - calculate EFFECTIVE plan (considering tester/admin status)
+    // Use service client to ensure we can see all profiles
+    const serviceClient = createServiceClient()
+    const { data: planStats } = await serviceClient
       .from('profiles')
-      .select('subscription_plan')
+      .select('subscription_plan, is_tester, is_admin')
 
+    // 3-tier model: free, pro, ultra (no starter - it's legacy)
     const statsByPlan: Record<string, number> = {
       free: 0,
-      starter: 0,
       pro: 0,
       ultra: 0,
     }
 
     if (planStats) {
       for (const user of planStats) {
-        const userPlan = user.subscription_plan || 'free'
-        statsByPlan[userPlan] = (statsByPlan[userPlan] || 0) + 1
+        // Calculate effective plan: testers and admins get ultra-level access
+        let effectivePlan: string
+        if (user.is_admin || user.is_tester) {
+          effectivePlan = 'ultra'
+        } else {
+          // Map legacy plans to current model
+          const dbPlan = user.subscription_plan || 'free'
+          if (dbPlan === 'starter' || dbPlan === 'basic') {
+            effectivePlan = 'free' // Legacy plans map to free
+          } else if (dbPlan === 'mega') {
+            effectivePlan = 'ultra' // Legacy mega maps to ultra
+          } else {
+            effectivePlan = dbPlan
+          }
+        }
+        statsByPlan[effectivePlan] = (statsByPlan[effectivePlan] || 0) + 1
       }
     }
 
-    // Get job counts for each user
+    // Get job counts for each user - use service client to bypass RLS
     const userIds = users?.map(u => u.id) || []
-    const { data: jobCounts } = await supabase
+    const { data: jobCounts } = await serviceClient
       .from('jobs')
       .select('user_id')
       .in('user_id', userIds)
