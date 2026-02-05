@@ -8,6 +8,7 @@ interface SubscriptionData {
   plan: AllSubscriptionPlans
   limits: PlanLimits
   isTester: boolean
+  isAdmin: boolean
   subscription: {
     status: string
     currentPeriodStart: string | null
@@ -26,6 +27,7 @@ interface SubscriptionContextValue {
   plan: AllSubscriptionPlans
   limits: PlanLimits | null
   isTester: boolean
+  isAdmin: boolean
   subscription: SubscriptionData['subscription']
   usage: SubscriptionData['usage'] | null
   isLoading: boolean
@@ -138,6 +140,7 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
     plan: data?.plan || 'free',
     limits: data?.limits || null,
     isTester: data?.isTester || false,
+    isAdmin: data?.isAdmin || false,
     subscription: data?.subscription || null,
     usage: data?.usage || null,
     isLoading,

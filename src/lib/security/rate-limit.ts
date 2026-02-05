@@ -115,28 +115,24 @@ function checkRateLimitInMemory(
   const windowMs = config.windowSeconds * 1000
   const key = `${config.prefix || 'rl'}:${endpoint || 'default'}:${identifier}`
 
+  // Atomic check-and-increment to prevent race conditions
+  // Get existing record or initialize new one
   let record = rateLimitStore.get(key)
 
-  // If no record or window expired, create new one
+  // Reset window if expired
   if (!record || record.resetAt < now) {
     record = {
-      count: 1,
+      count: 0,
       resetAt: now + windowMs,
-    }
-    rateLimitStore.set(key, record)
-
-    return {
-      allowed: true,
-      remaining: config.maxRequests - 1,
-      resetAt: Math.floor(record.resetAt / 1000),
-      limit: config.maxRequests,
     }
   }
 
-  // Increment count
+  // Increment BEFORE checking - this makes the operation effectively atomic
+  // since we're single-threaded in Node.js between await points
   record.count++
   rateLimitStore.set(key, record)
 
+  // Now check if allowed (after increment)
   const allowed = record.count <= config.maxRequests
   const remaining = Math.max(0, config.maxRequests - record.count)
 

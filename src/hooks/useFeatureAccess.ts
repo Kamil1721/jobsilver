@@ -26,13 +26,13 @@ interface FeatureAccessResult {
 
 /**
  * Hook to check if the current user has access to a specific feature
- * based on their subscription plan (testers get ultra-level access)
+ * based on their subscription plan (testers and admins get full access)
  */
 export function useFeatureAccess(feature: Feature): FeatureAccessResult {
-  const { plan, isTester, isLoading } = useSubscription()
+  const { plan, isTester, isAdmin, isLoading } = useSubscription()
 
-  // Testers get ultra-level access to all features
-  const hasAccess = canAccessFeature(plan, feature, isTester)
+  // Testers and admins get full access to all features
+  const hasAccess = isAdmin || canAccessFeature(plan, feature, isTester)
   const requiredPlan = getRequiredPlan(feature)
   const featureInfo = FEATURE_INFO[feature]
 

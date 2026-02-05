@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit } from '@/lib/security/rate-limit'
+import { sanitizeForPrompt } from '@/lib/security/validation'
 import { canUseAI } from '@/lib/ai/usage-tracker'
 import OpenAI from 'openai'
 
@@ -26,24 +27,8 @@ interface SuggestAchievementsRequest {
   skills?: string[]
 }
 
-/**
- * Sanitize user input to prevent prompt injection
- * Removes control characters and limits problematic patterns
- */
-function sanitizeInput(input: string, maxLength: number): string {
-  if (!input || typeof input !== 'string') return ''
-  return input
-    .slice(0, maxLength)
-    // Remove newlines and carriage returns that could break prompt structure
-    .replace(/[\r\n]+/g, ' ')
-    // Remove potential prompt injection patterns
-    .replace(/\b(ignore|disregard|forget)\s+(all\s+)?(previous|above|prior)\s+(instructions?|prompts?|rules?)/gi, '')
-    // Remove markdown/code block attempts
-    .replace(/```/g, '')
-    // Collapse multiple spaces
-    .replace(/\s+/g, ' ')
-    .trim()
-}
+// Use shared sanitization function
+const sanitizeInput = (input: string, maxLength: number) => sanitizeForPrompt(input, maxLength)
 
 export async function POST(request: NextRequest) {
   try {

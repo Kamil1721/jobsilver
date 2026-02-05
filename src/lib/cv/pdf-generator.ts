@@ -254,8 +254,8 @@ class PDFHelper {
   drawEducation(edu: Education): void {
     this.checkPageBreak(40)
 
-    // Degree and Field
-    const degree = `${edu.degree} in ${edu.area}`
+    // Degree and Field - handle empty area gracefully
+    const degree = edu.area ? `${edu.degree} in ${edu.area}` : edu.degree
     this.page.drawText(degree, {
       x: MARGIN_LEFT,
       y: this.yPosition,

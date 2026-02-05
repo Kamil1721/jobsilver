@@ -5,6 +5,10 @@
 
 import OpenAI from 'openai'
 import type { CVData } from './pdf-generator'
+import { sanitizeForPrompt, sanitizeAIOutput } from '@/lib/security/validation'
+
+// Re-export sanitizeAIOutput for backwards compatibility
+export { sanitizeAIOutput }
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -24,59 +28,6 @@ export interface TailoredContent {
   summary: string
   skills: string[] // Reordered with most relevant first
   enhancedHighlights?: Map<number, string[]> // Index -> enhanced highlights for that work entry
-}
-
-/**
- * Sanitize user input to prevent prompt injection
- * Removes control characters and limits problematic patterns
- */
-function sanitizeForPrompt(input: string, maxLength: number): string {
-  if (!input || typeof input !== 'string') return ''
-  return input
-    .slice(0, maxLength)
-    // Remove newlines and carriage returns that could break prompt structure
-    .replace(/[\r\n]+/g, ' ')
-    // Remove potential prompt injection patterns
-    .replace(/\b(ignore|disregard|forget)\s+(all\s+)?(previous|above|prior)\s+(instructions?|prompts?|rules?)/gi, '')
-    // Remove markdown/code block attempts
-    .replace(/```/g, '')
-    // Remove HTML tags
-    .replace(/<[^>]+>/g, ' ')
-    // Collapse multiple spaces
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/**
- * Sanitize AI output for YAML/LaTeX compatibility
- * Converts Unicode characters that break Python YAML parsing or LaTeX rendering
- */
-export function sanitizeAIOutput(text: string): string {
-  if (!text) return ''
-  return text
-    // Smart single quotes → straight quote
-    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
-    // Smart double quotes → straight quote
-    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
-    // Em-dashes, en-dashes → hyphen
-    .replace(/[\u2013\u2014\u2015]/g, '-')
-    // Ellipsis → three dots
-    .replace(/\u2026/g, '...')
-    // Bullet points → hyphen
-    .replace(/[\u2022\u2023\u2043]/g, '-')
-    // Non-breaking space → regular space
-    .replace(/\u00A0/g, ' ')
-    // LaTeX special characters → space (safer than escaping)
-    .replace(/[&%$#_{}~^\\]/g, ' ')
-    // Other non-ASCII → attempt NFD normalization or remove
-    .replace(/[^\x00-\x7F]/g, char => {
-      const normalized = char.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      // If normalization produces ASCII, use it; otherwise remove
-      return /^[\x00-\x7F]*$/.test(normalized) ? normalized : ''
-    })
-    // Collapse multiple spaces
-    .replace(/\s+/g, ' ')
-    .trim()
 }
 
 /**

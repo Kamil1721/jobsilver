@@ -51,6 +51,57 @@ interface CVGeneratorDialogProps {
   onCVGenerated?: (cvUrl: string, signedUrl?: string) => void
 }
 
+// Maximum limits to prevent memory exhaustion
+const MAX_WORK_ENTRIES = 10
+const MAX_EDUCATION_ENTRIES = 5
+
+// Map country names to phone country codes
+const COUNTRY_PHONE_CODES: Record<string, string> = {
+  'united states': '+1',
+  'usa': '+1',
+  'us': '+1',
+  'canada': '+1',
+  'united kingdom': '+44',
+  'uk': '+44',
+  'australia': '+61',
+  'germany': '+49',
+  'france': '+33',
+  'spain': '+34',
+  'italy': '+39',
+  'netherlands': '+31',
+  'belgium': '+32',
+  'switzerland': '+41',
+  'austria': '+43',
+  'sweden': '+46',
+  'norway': '+47',
+  'denmark': '+45',
+  'finland': '+358',
+  'ireland': '+353',
+  'portugal': '+351',
+  'poland': '+48',
+  'india': '+91',
+  'china': '+86',
+  'japan': '+81',
+  'south korea': '+82',
+  'singapore': '+65',
+  'hong kong': '+852',
+  'taiwan': '+886',
+  'brazil': '+55',
+  'mexico': '+52',
+  'argentina': '+54',
+  'israel': '+972',
+  'south africa': '+27',
+  'new zealand': '+64',
+  'uae': '+971',
+  'united arab emirates': '+971',
+}
+
+function getPhoneCodeFromCountry(country: string | undefined): string {
+  if (!country) return '+1'
+  const normalized = country.toLowerCase().trim()
+  return COUNTRY_PHONE_CODES[normalized] || '+1'
+}
+
 export function CVGeneratorDialog({
   open,
   onOpenChange,
@@ -69,7 +120,7 @@ export function CVGeneratorDialog({
   const [loadingAchievements, setLoadingAchievements] = React.useState<number | null>(null)
   const [achievementSuggestions, setAchievementSuggestions] = React.useState<{ index: number; suggestions: string[] } | null>(null)
 
-  // Form state
+  // Form state - phone_country_code will be set based on user's country when data loads
   const [screeningAnswers, setScreeningAnswers] = React.useState<Partial<ScreeningAnswers>>({
     first_name: "",
     last_name: "",
@@ -77,7 +128,7 @@ export function CVGeneratorDialog({
     linkedin_url: "",
     city: "",
     country: "",
-    phone_country_code: "+1",
+    phone_country_code: "",
     phone_number: "",
     work_history: [createEmptyWorkEntry()],
     education: [createEmptyEducationEntry()],
@@ -114,6 +165,9 @@ export function CVGeneratorDialog({
     const loadData = async () => {
       setIsLoading(true)
       setGeneratedUrl(null)
+      // Reset AI suggestion state on dialog reopen
+      setAiSkillSuggestions([])
+      setAchievementSuggestions(null)
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
@@ -131,7 +185,7 @@ export function CVGeneratorDialog({
           linkedin_url: "",
           city: "",
           country: "",
-          phone_country_code: "+1",
+          phone_country_code: "", // Will be set from user's country
           phone_number: "",
           work_history: [],
           education: [],
@@ -208,6 +262,16 @@ export function CVGeneratorDialog({
           baseData.last_name = nameParts.slice(1).join(" ") || ""
         }
 
+        // Set phone country code based on user's country
+        // Update if: empty, or if it's the old default "+1" but country is not US/Canada
+        const expectedCode = getPhoneCodeFromCountry(baseData.country)
+        const isOldDefault = baseData.phone_country_code === '+1'
+        const countryIsNotUS = expectedCode !== '+1'
+
+        if (!baseData.phone_country_code || (isOldDefault && countryIsNotUS)) {
+          baseData.phone_country_code = expectedCode
+        }
+
         // Ensure at least one empty entry for work/education forms
         setScreeningAnswers({
           ...baseData,
@@ -234,6 +298,15 @@ export function CVGeneratorDialog({
   }
 
   const addWorkEntry = () => {
+    const currentCount = screeningAnswers.work_history?.length || 0
+    if (currentCount >= MAX_WORK_ENTRIES) {
+      toast({
+        variant: "destructive",
+        title: "Maximum reached",
+        description: `You can add up to ${MAX_WORK_ENTRIES} work entries.`,
+      })
+      return
+    }
     setScreeningAnswers(prev => ({
       ...prev,
       work_history: [...(prev.work_history || []), createEmptyWorkEntry()],
@@ -256,6 +329,15 @@ export function CVGeneratorDialog({
   }
 
   const addEducationEntry = () => {
+    const currentCount = screeningAnswers.education?.length || 0
+    if (currentCount >= MAX_EDUCATION_ENTRIES) {
+      toast({
+        variant: "destructive",
+        title: "Maximum reached",
+        description: `You can add up to ${MAX_EDUCATION_ENTRIES} education entries.`,
+      })
+      return
+    }
     setScreeningAnswers(prev => ({
       ...prev,
       education: [...(prev.education || []), createEmptyEducationEntry()],
@@ -539,11 +621,40 @@ export function CVGeneratorDialog({
                   <Input
                     id="country"
                     value={screeningAnswers.country || ""}
-                    onChange={(e) => setScreeningAnswers(prev => ({ ...prev, country: e.target.value }))}
+                    onChange={(e) => {
+                      const newCountry = e.target.value
+                      setScreeningAnswers(prev => ({
+                        ...prev,
+                        country: newCountry,
+                        // Auto-update phone code when country changes (only if user hasn't manually edited it)
+                        phone_country_code: prev.phone_country_code === getPhoneCodeFromCountry(prev.country)
+                          ? getPhoneCodeFromCountry(newCountry)
+                          : prev.phone_country_code,
+                      }))
+                    }}
                     placeholder="United States"
                   />
                 </div>
-                <div className="space-y-2 col-span-2">
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="phone_country_code"
+                      value={screeningAnswers.phone_country_code || getPhoneCodeFromCountry(screeningAnswers.country)}
+                      onChange={(e) => setScreeningAnswers(prev => ({ ...prev, phone_country_code: e.target.value }))}
+                      placeholder="+1"
+                      className="w-20"
+                    />
+                    <Input
+                      id="phone_number"
+                      value={screeningAnswers.phone_number || ""}
+                      onChange={(e) => setScreeningAnswers(prev => ({ ...prev, phone_number: e.target.value }))}
+                      placeholder="555-123-4567"
+                      className="flex-1"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="linkedin_url">LinkedIn URL</Label>
                   <Input
                     id="linkedin_url"
@@ -618,6 +729,14 @@ export function CVGeneratorDialog({
                         value={work.end_date || ""}
                         onChange={(e) => updateWorkHistory(index, { end_date: e.target.value || null })}
                         placeholder="Present"
+                      />
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                      <Label className="text-xs">Location</Label>
+                      <Input
+                        value={work.location || ""}
+                        onChange={(e) => updateWorkHistory(index, { location: e.target.value })}
+                        placeholder="City, Country or Remote"
                       />
                     </div>
                   </div>
@@ -779,6 +898,59 @@ export function CVGeneratorDialog({
                         placeholder="2020"
                       />
                     </div>
+                    <div className="space-y-1 col-span-2">
+                      <Label className="text-xs">Location</Label>
+                      <Input
+                        value={edu.location || ""}
+                        onChange={(e) => updateEducation(index, { location: e.target.value })}
+                        placeholder="City, Country"
+                      />
+                    </div>
+                  </div>
+                  {/* Education Highlights/Achievements */}
+                  <div className="space-y-2">
+                    <Label className="text-xs">Achievements (optional)</Label>
+                    <div className="space-y-2">
+                      {(edu.highlights || []).map((highlight, hIdx) => (
+                        <div key={hIdx} className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">•</span>
+                          <Input
+                            value={highlight}
+                            onChange={(e) => {
+                              const newHighlights = [...(edu.highlights || [])]
+                              newHighlights[hIdx] = e.target.value
+                              updateEducation(index, { highlights: newHighlights })
+                            }}
+                            placeholder="e.g., Dean's List, GPA 3.8"
+                            className="flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-zinc-400 hover:text-red-500"
+                            onClick={() => {
+                              const newHighlights = (edu.highlights || []).filter((_, i) => i !== hIdx)
+                              updateEducation(index, { highlights: newHighlights })
+                            }}
+                          >
+                            ×
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          updateEducation(index, { highlights: [...(edu.highlights || []), ""] })
+                        }}
+                        className="h-7 px-2 text-xs gap-1 text-zinc-500 hover:text-zinc-700"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add Achievement
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -838,6 +1010,11 @@ export function CVGeneratorDialog({
                         key={skill}
                         type="button"
                         onClick={() => {
+                          // Check for duplicates before adding
+                          const currentSkills = screeningAnswers.skills || []
+                          if (currentSkills.some(s => s.toLowerCase() === skill.toLowerCase())) {
+                            return // Skip duplicate
+                          }
                           setScreeningAnswers(prev => ({
                             ...prev,
                             skills: [...(prev.skills || []), skill],

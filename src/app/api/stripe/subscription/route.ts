@@ -38,10 +38,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get user's profile with plan and tester status
+    // Get user's profile with plan, tester, and admin status
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('subscription_plan, subscription_started_at, is_tester')
+      .select('subscription_plan, subscription_started_at, is_tester, is_admin')
       .eq('id', user.id)
       .single()
 
@@ -79,6 +79,7 @@ export async function GET(request: NextRequest) {
         plan,
         limits,
         isTester: profile?.is_tester || false,
+        isAdmin: profile?.is_admin || false,
         subscription: subscription ? {
           status: subscription.status,
           currentPeriodStart: subscription.current_period_start,
