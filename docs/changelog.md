@@ -8,22 +8,31 @@
 - **Ultra**: $6.99/week or $19.99/month, 35 jobs/day, unlimited AI, priority support, no trial
 
 ### Core Features
-- Job search from multiple sources (fantastic.jobs, Greenhouse, Lever, Ashby)
-- Kanban board (New Matches → Applied → Offers)
+- Job search from fantastic.jobs (primary, via RapidAPI) and ATS integrations (Greenhouse, Lever, Ashby)
+- Kanban board (New Matches → Applied → Offers) with drag-and-drop, bulk actions, favorites
 - AI assistant for applications, cover letters, interview prep (limited for Pro, unlimited for Ultra)
-- CV upload, parsing, and generation
-- Email notifications: Weekly alerts (Pro), Daily alerts (Ultra)
+- CV upload, parsing, AI-tailored generation, and reparse
+- Cover letter generation with DOCX download
+- Job notes with auto-save
+- Admin announcements system
+- Email notifications: Daily alerts (Pro and Ultra)
+- Subscription downgrade flow with reason tracking
+- GDPR data export
+- Cron health monitoring
 
 ### Architecture
 - **Manual apply workflow** - Users apply directly on company sites
 - **AI-powered assistance** - Help with applications, not automation
+- **47 API routes** with rate limiting and security hardening
+- **38 database migrations** tracking all schema changes
 
 ### Tech Stack
-- Next.js 14 (App Router), React, TypeScript, Tailwind, shadcn/ui
+- Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS, shadcn/ui
 - Supabase (PostgreSQL + Auth + Storage)
-- Stripe (subscriptions, webhooks)
-- OpenAI via Vercel AI SDK
+- Stripe (subscriptions, webhooks, billing portal)
+- OpenAI (gpt-4o-mini) via Vercel AI SDK
 - Resend for transactional emails
+- Remotion for animated landing page demos
 
 ---
 
@@ -37,7 +46,32 @@
 
 ## 2026-02 - February
 
-### 2026-02-05 - 3-Tier Pricing Model
+### 2026-02-06 - API Quota Optimization & UI Polish
+
+**Reduced fantastic.jobs API consumption by ~70%:**
+- Cron's `fetchJobsFromSearch()` previously looped over `buildSearchQueries()` results, making 3+ identical API calls per user — now makes a single call
+- Reduced per-search limits from 50/30 to 35/20 (primary/location queries)
+- Global quota guard added in `fantasticjobs.ts` with 10% safety reserve
+- API quota tracked in `api_usage` table (monthly `jobs_fetched` and `requests_made`)
+
+**Cover letter daily limits enforced:**
+- Cover letter generation now respects plan-based daily limits (Free=0, Pro=5, Ultra=unlimited)
+- Curate job limits fixed to match plan tiers
+- Email notifications updated from weekly (Pro) to daily for all paid plans
+
+**Setup flow & admin panel fixes:**
+- Multiple bug fixes in the onboarding wizard
+- Admin panel improvements
+
+**UI Polish:**
+- Added tagline to landing page hero section
+- Fixed white scrollbar appearing after logout
+- Fixed orange announcement flash on login
+- Resend client lazy loading fix to prevent build-time errors
+
+---
+
+### 2026-02-05 - 3-Tier Pricing, Announcements, Job Notes & Downgrade Flow
 
 **Major pricing restructure from 2-tier (Free/Pro) to 3-tier (Free/Pro/Ultra):**
 
@@ -48,132 +82,102 @@
 | Cover letters/day | 0 | 5 | Unlimited |
 | CV generations/day | 0 | 3 | Unlimited |
 | Saved jobs | 50 | 200 | Unlimited |
-| Email alerts | None | Weekly | Daily |
+| Email alerts | None | Daily | Daily |
 | Price | $0 | $3.99/wk ($12.99/mo) | $6.99/wk ($19.99/mo) |
 | Trial | - | 3 days | None |
 
-**Key Changes:**
-- Pro plan reduced from 50 to 15 jobs/day with limited AI access
-- New Ultra tier for power users with unlimited AI
-- Tester access upgraded from Pro to Ultra equivalent
-- 60-day job cleanup now excludes favorited jobs
-- Updated all pricing pages, FAQs, and documentation
+**Subscription Downgrade Flow:**
+- New `/api/subscription/downgrade` endpoint
+- Downgrade to free: cancels subscription at period end
+- Ultra-to-Pro: uses Stripe Subscription Schedules for auto-transition at period end
+- Reason tracking for analytics (too expensive, not using features, found alternative, etc.)
+- Plan change confirmation dialog with feature loss summary
 
-### 2026-02-05 - CV Generator Improvements & Security Fixes
+**Admin Announcements System:**
+- Full CRUD for announcements via `/api/admin/announcements`
+- Public endpoint `/api/announcements/active` with plan-based targeting
+- Announcement banner component with marquee text and dismissibility
+- Supports info/warning/promo/maintenance types
 
-**Major CV Generator Dialog Enhancements:**
+**Job Notes Feature:**
+- Auto-saving personal notes on each job with 2-second debounce
+- Concurrent save queuing, abort on unmount, error recovery
+- 50,000 character limit with warning at 45,000
 
-#### UI Improvements
-- **Info banner** - Added blue info banner explaining that work/education data is saved and pre-filled for future generations
-- **Phone number fields** - Added phone country code and number inputs with auto-detection from user's country (40+ country codes supported)
-- **Work location field** - Added location input for each work history entry
-- **Education highlights** - Added editable achievements/highlights section to education entries
-- **Array limits** - Max 10 work entries, 5 education entries with toast warnings
+**CV Generator Improvements:**
+- Phone number fields with auto country code detection (40+ countries)
+- Work location field, education highlights/achievements
+- AI-suggested achievements for work entries
+- Quick CV generation and pdf-parse dependency
+- CV data persistence across sessions
+- CV reparse endpoint (`/api/cv/reparse`)
 
-#### Security Fixes (P0-P1)
-- **Job ownership verification** - CV tailoring now verifies user owns the job before applying AI enhancements
-- **Rate limit race condition** - Fixed non-atomic check-and-increment in in-memory rate limiter
-- **Sanitized data usage** - PDF generation now uses properly sanitized CV data
-- **Enhanced highlights iteration** - AI highlights now apply to all work entries, not just the first
+**Security Fixes (P0-P1):**
+- Job ownership verification for CV tailoring
+- Rate limit race condition fixed (atomic check-and-increment)
+- Sanitized data in PDF generation
+- Consolidated sanitization functions (`sanitizeForPrompt`, `sanitizeAIOutput`)
+- Zod validation schemas for CV generation
+- User data isolation security enhancements
+- Company+title duplicate prevention in job search
 
-#### Code Quality (P2-P3)
-- **Consolidated sanitization** - Created shared `sanitizeForPrompt()` and `sanitizeAIOutput()` in `validation.ts`
-- **Zod validation schemas** - Added comprehensive schemas for CV generation request validation
-- **Education filter alignment** - Filter now requires `area` field matching validation
-- **Defensive coding** - Added null checks for highlights arrays
-- **Save warning** - API returns warning when profile data save fails
-- **Skills duplicate check** - Prevents duplicate skills when clicking AI suggestions
-- **State reset** - AI suggestion states reset when dialog reopens
-- **Empty area handling** - PDF shows degree correctly when field of study is empty
+**Cron Monitoring:**
+- New `/api/cron/check-expired-subscriptions` — safety net for missed Stripe webhooks
+- New `/api/cron/health` — health check with status reporting
+- Subscription lifecycle handling for payment failures
 
-#### Admin & Feature Access
-- **Admin full access** - Admin users now bypass all feature gates
-- **isAdmin in context** - Added `isAdmin` to SubscriptionContext from profile
+**Admin & Feature Access:**
+- Admin users bypass all feature gates
+- `isAdmin` added to SubscriptionContext
+- Admin user management: PATCH (update tester status), DELETE (cascade delete)
 
-**Files Changed:**
-- `src/components/cv/cv-generator-dialog.tsx` - UI improvements, limits, phone auto-detect
-- `src/app/api/cv/generate/route.ts` - Security fixes, job ownership, sanitization
-- `src/lib/cv/ai-tailor.ts` - Uses shared sanitization functions
-- `src/lib/cv/pdf-generator.ts` - Empty area handling
-- `src/lib/security/rate-limit.ts` - Atomic rate limiting
-- `src/lib/security/validation.ts` - Shared sanitization, Zod schemas
-- `src/app/api/stripe/subscription/route.ts` - Returns isAdmin
-- `src/contexts/SubscriptionContext.tsx` - Added isAdmin
-- `src/hooks/useFeatureAccess.ts` - Admin bypass for feature gates
-- `src/app/api/ai/suggest-skills/route.ts` - Uses shared sanitization
-- `src/app/api/ai/suggest-achievements/route.ts` - Uses shared sanitization
+**GDPR Compliance:**
+- Account data export endpoint (`/api/account/export`)
 
----
-
-### 2026-02-03 - Email System Remaining Fixes
-
-**Task:** Fix remaining P0 and P2 issues in the email notification system
-
-#### P0-2: Welcome Email Now Triggered on Signup
-- **File:** `src/app/auth/callback/route.ts`
-- After successful session creation, checks if user profile was created in last 5 minutes
-- If new user, triggers welcome email (fire-and-forget)
-
-#### P2-1: Retry Logic for Failed Email Sends
-- **File:** `src/lib/email/client.ts`
-- Added `sendWithRetry()` helper with exponential backoff (3 retries: 1s, 2s, 4s)
-
-#### P2-2: Timeout on Internal API Calls
-- **File:** `src/app/api/cron/daily-curation/route.ts`
-- Added AbortController with 30 second timeout to `fetchJobsFromSearch()`
+**Stripe Production Setup:**
+- Added Stripe products/prices for production environment
+- Legacy plan mapping (mega→ultra, starter/basic→pro)
 
 ---
 
-### 2026-02-03 - Email System P3 Fixes
+### 2026-02-03 - Email System Fixes
 
-#### P3-1: Plain Text Email Formatting
-- **File:** `src/lib/email/client.ts`
-- Improved `stripHtml()` to preserve line breaks and decode HTML entities
+**P0: Welcome Email on Signup**
+- Auth callback now checks if profile was created in last 5 minutes
+- Triggers welcome email for new users (fire-and-forget)
 
-#### P3-2: Duplicate Email Prevention
-- **File:** `src/lib/email/triggers.ts`
-- Added check to prevent duplicate job match emails per day
-
----
-
-### 2026-02-03 - Email System Security Fixes
-
-#### P0-1: XSS Vulnerability in Email Templates (CRITICAL)
-- **File:** `src/lib/email/utils.ts` (NEW)
+**P0: XSS Vulnerability in Email Templates (CRITICAL)**
 - Created `escapeHtml()` utility for all user-supplied data in templates
 
-#### P1-1: Timing Attack Vulnerability in Cron Secret
-- **File:** `src/app/api/cron/daily-curation/route.ts`
-- Using `crypto.timingSafeEqual()` for constant-time comparison
+**P1: Security Hardening**
+- Timing-safe comparison for cron secret (`crypto.timingSafeEqual`)
+- Rate limiting on cron endpoint (2/min)
+- Missing `remote` field added to email job data
 
-#### P1-2: Rate Limiting on Cron Endpoint
-- Added 2 requests/minute limit after authentication
-
-#### P1-5: Missing `remote` Field in Email Job Data
-- Added `remote: savedJob.remote` to curated jobs
-
-#### P2-3: Jobs Sorted by Match Score
-- Sorting curated jobs by match score before sending
+**P2: Reliability**
+- Retry logic with exponential backoff (3 retries: 1s, 2s, 4s)
+- 30-second timeout on internal API calls via AbortController
+- Duplicate email prevention per day
+- Jobs sorted by match score in emails
+- Plain text formatting improvements
 
 ---
 
 ### 2026-02-02 - Security & Routing Fixes
 
-#### Chat History 404 Fix (RESOLVED)
-- **Root Cause:** Vercel custom domain routing didn't match Next.js dynamic `[id]` segments
-- **Solution:** Added explicit identity rewrites in `vercel.json` for `/api/jobs/:id/*` routes
+**Chat History 404 Fix (RESOLVED)**
+- Root cause: Vercel custom domain routing didn't match Next.js dynamic `[id]` segments
+- Solution: Added explicit identity rewrites in `vercel.json`
 
-#### Rate Limiting Added
-- `src/app/api/ai/suggest-skills/route.ts` - 10 requests/hour
-- `src/app/api/cv/generate/route.ts` - 5 requests/hour
-- `src/app/api/cover-letter/upload/route.ts` - 10 requests/hour
+**Rate Limiting Added**
+- `suggest-skills`: 10/hr → updated to 20/hr
+- `cv/generate`: 5/hr
+- `cover-letter/upload`: 10/hr
 
-#### Input Validation Hardened
-- `src/app/api/jobs/[id]/chat/route.ts` - Added role validation
-
-#### Cross-Account Contamination Prevention
+**Input Validation & Security**
+- Chat message role validation
+- Cross-account contamination prevention
 - Auth state change listener forces refresh on user change
-- CV URL validation matches current user ID
 
 ---
 
@@ -202,142 +206,51 @@
 | `/api/production-mode/toggle` | Toggle production mode |
 | `/api/cron/recover-stale-jobs` | Recover stuck jobs |
 
-#### Files Modified
-- `src/app/(dashboard)/admin/page.tsx` - Removed "Scrape Fails" and "Apply Fails" tabs
-- `src/app/api/jobs/curate/route.ts` - Simplified to always set `auto_apply_status: 'manual'`
-- `vercel.json` - Removed auto-apply cron jobs
-
 #### Database Impact
-Tables kept but no longer written to: `scraped_questions`, `application_queue`, `scraper_failures`
+Legacy tables dropped in migration `20260206_drop_unused_legacy_tables.sql`
 
 ---
 
-### 2026-01-28 - AI Assistant Pivot (Frontend)
+### 2026-01-28 - AI Assistant Pivot
 
-**Task:** Update frontend for AI assistant focus
+**Frontend:**
+- Landing page hero changed from "apply automatically" to "helps you craft perfect applications"
+- AI-focused pricing tiers, job card quick actions (Help, Letter, Match)
+- New `UsageIndicator` component, `useAIUsage` hook
 
-#### Landing Page Updates
-- Hero changed from "apply automatically" to "helps you craft perfect applications"
-- Step 3 changed to AI assistant focus
-
-#### Pricing Page Updates
-- All tiers now show AI-focused features
-- Removed auto-apply metrics
-
-#### Job Card Updates
-- Added AI quick action buttons (Help, Letter, Match)
-- Added Apply button that opens external URL
-
-#### New Components
-- `src/components/ai-assistant/usage-indicator.tsx` - Shows remaining AI quota
-- `src/hooks/use-ai-usage.ts` - Hook for AI usage data
-
----
-
-### 2026-01-28 - AI Assistant Pivot (Backend)
-
-**Task:** Backend infrastructure for AI assistant
-
-#### Database Migration
-- `20260128000000_add_ai_usage_tracking.sql`
-- Created `user_ai_usage` table for daily tracking
-- RLS policies and increment functions
-
-#### New Files
-- `src/lib/ai/usage-tracker.ts` - Check limits, increment usage, get stats
-- `src/app/api/ai/usage/route.ts` - GET endpoint for usage stats
-
-#### Plan Limits Updated
-- New 2-tier model: Free and Pro (superseded by 3-tier on 2026-02-05)
-- Free: 3 jobs/day, no AI
-- Pro: 50 jobs/day, unlimited AI, $4.99/week (now updated to 15 jobs/day, limited AI)
-
-#### Chat API Changes
-- Added AI quota check before processing
-- Returns 429 with `QUOTA_EXCEEDED` code when over limit
-
----
-
-### 2026-01-26 - Multi-Step Form Scraper (Historical - Superseded)
-
-> **Note:** This work was superseded by the auto-apply removal on 2026-01-29.
-
-Enhanced scraper for multi-step job application forms across 25+ ATS platforms with detailed tracking.
+**Backend:**
+- `user_ai_usage` table for daily tracking
+- `usage-tracker.ts` for plan-based AI limits
+- Chat API returns 429 with `QUOTA_EXCEEDED` when over limit
 
 ---
 
 ### 2026-01-25 - Tester System & Security
 
-#### Tester Role Implementation
-- `supabase/migrations/20260125000000_add_tester_system.sql`
-- Added `is_tester` to profiles, created `tester_invites` table
+- `is_tester` flag on profiles, `tester_invites` table
 - Testers get Ultra-level access without admin privileges
-
-#### API Endpoints
-- `GET/POST/PATCH/DELETE /api/admin/testers` - Manage testers and invites
-- `GET/POST /api/auth/tester-signup` - Validate and apply invite codes
-
-#### Security Fixes
-- P0: Atomic invite redemption with row locking
-- P1: Rate limiting on expensive endpoints
-- P1: Generic error responses to prevent enumeration
-
----
-
-### 2026-01-25 - Pricing & Quota Updates
-
-#### Free Tier Changes
-- Jobs limit: 3 → 5 per day
-- Auto-applies: 0 → 1 per day (before removal)
-
-#### Quota System
-- Plan-aware limits
-- Atomic reservation functions
+- Admin CRUD for testers, public invite validation/redemption
+- Atomic invite redemption with row locking
+- Rate limiting on expensive endpoints
 
 ---
 
 ### 2026-01-24 - AI Learning System
 
-#### Database Tables
-- `user_favorite_jobs` - Jobs marked as favorites
-- `user_interactions` - All job interactions (view, save, apply, etc.)
-- `user_preferences` - Computed preference profile
-- `user_learning_settings` - User controls for learning
-
-#### Preference Learning Engine
-- `src/lib/ai/preference-learning.ts` - Computes preferences from behavior
-- Weighted scoring (favorite=1.0, apply=0.8, save=0.5, discard=-0.5)
+- `user_favorite_jobs`, `user_interactions`, `user_preferences`, `user_learning_settings` tables
+- Preference learning from behavior (weighted: favorite=1.0, apply=0.8, save=0.5, discard=-0.5)
 - Recency decay with 30-day half-life
-- Confidence levels: none, low, medium, high
-
-#### Job Scoring Integration
-- `src/lib/ai/preference-scoring.ts` - Scores jobs based on preferences
-- 20% diversity injection to prevent filter bubbles
+- Preference scoring with 20% diversity injection
 - Pro/Ultra feature gating
 
 ---
 
 ### 2026-01-23 - Infrastructure & Security
 
-#### Daily Curation System
-- `src/app/api/cron/daily-curation/route.ts` - Runs at 6 AM daily
-- Sends job match emails to users with notifications enabled
-
-#### Email System (Resend)
-- Email templates for welcome, job matches, status updates
-- Notification triggers with preference checks
-
-#### Security Audit
-- Rate limiting on all API endpoints
-- RLS policy tightening
-- SQL injection protection
-- Stripe webhook verification
-
-#### Pricing Page
-- Full-featured pricing with monthly/yearly toggle
-- Feature comparison table
-- FAQ section
-- Stripe checkout integration
+- Daily curation cron job (6 AM)
+- Resend email system (welcome, job matches)
+- Security audit: rate limiting, RLS policies, SQL injection protection, Stripe webhook verification
+- Pricing page with Stripe checkout integration
 
 ---
 
@@ -348,7 +261,9 @@ Enhanced scraper for multi-step job application forms across 25+ ATS platforms w
 | 2026-01-23 | Email notification system launched |
 | 2026-01-24 | AI learning system implemented |
 | 2026-01-25 | Tester system and security hardening |
-| 2026-01-28 | AI assistant pivot completed, new pricing model |
+| 2026-01-28 | AI assistant pivot completed |
 | 2026-01-29 | Auto-apply system removed |
 | 2026-02-02 | Production routing fix (vercel.json rewrites) |
 | 2026-02-03 | Email security and reliability improvements |
+| 2026-02-05 | 3-tier pricing, announcements, job notes, downgrade flow, CV generator v2 |
+| 2026-02-06 | API quota optimization (~70% reduction), cover letter limits, UI polish |
