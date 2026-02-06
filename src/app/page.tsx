@@ -12,6 +12,14 @@ export const metadata: Metadata = {
     description: "Find your dream job faster with AI-powered matching, smart curation, and an intelligent assistant that helps you craft perfect applications.",
     type: "website",
     url: "https://jobsilver.com",
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'JobSilver - AI-Powered Job Search Assistant',
+      },
+    ],
   },
 }
 
