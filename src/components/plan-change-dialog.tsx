@@ -53,7 +53,7 @@ const PLAN_FEATURE_DISPLAY = {
     cvGenerations: "3 CV generations/day",
     savedJobs: "200 saved jobs",
     favorites: "Favorite jobs",
-    emailAlerts: "Weekly email alerts",
+    emailAlerts: "Daily email alerts",
     prioritySupport: null,
   },
   free: {

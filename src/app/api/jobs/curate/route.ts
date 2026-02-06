@@ -6,18 +6,9 @@ import {
   getClientIdentifier,
   getRateLimitHeaders,
 } from '@/lib/security/rate-limit'
+import { getDailyJobLimit } from '@/lib/stripe/plans'
 
 export const dynamic = 'force-dynamic'
-
-// Plan-based daily job limits
-const PLAN_JOB_LIMITS: Record<AllSubscriptionPlans, number> = {
-  free: 0,        // Free users cannot use auto-curation
-  starter: 10,    // Starter: 10 jobs/day
-  basic: 15,      // Basic: 15 jobs/day
-  pro: 20,        // Pro: 20 jobs/day
-  ultra: 30,      // Ultra: 30 jobs/day
-  mega: 50,       // Mega: 50 jobs/day
-}
 
 const DEFAULT_DAILY_JOB_TARGET = 20
 const MAX_FETCH_ATTEMPTS = 3
@@ -105,7 +96,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<CurationR
 
     // P0 FIX: Server-side plan validation - free users cannot use auto-curation
     const userPlan = (profile.subscription_plan || 'free') as AllSubscriptionPlans
-    const dailyJobLimit = PLAN_JOB_LIMITS[userPlan] ?? 0
+    const dailyJobLimit = getDailyJobLimit(userPlan)
 
     if (dailyJobLimit === 0) {
       return NextResponse.json({

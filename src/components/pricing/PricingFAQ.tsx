@@ -39,7 +39,7 @@ const FAQ_ITEMS: FAQItem[] = [
   {
     question: "What's included in each plan?",
     answer:
-      "Free: 3 jobs/day, Kanban tracking, basic match scores. Pro ($3.99/wk or $12.99/mo): 15 jobs/day, 30 AI responses, 5 cover letters, 3 CVs per day, weekly alerts. Ultra ($6.99/wk or $19.99/mo): 35 jobs/day, unlimited AI, daily alerts, priority support.",
+      "Free: 3 jobs/day, Kanban tracking, basic match scores. Pro ($3.99/wk or $12.99/mo): 15 jobs/day, 30 AI responses, 5 cover letters, 3 CVs per day, daily alerts. Ultra ($6.99/wk or $19.99/mo): 35 jobs/day, unlimited AI, daily alerts, priority support.",
   },
   {
     question: "What's included in Priority Support?",

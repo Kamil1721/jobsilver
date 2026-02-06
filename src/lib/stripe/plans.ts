@@ -28,7 +28,7 @@ export interface PlanLimits {
   savedJobs: number // -1 = unlimited
 
   // Email notification frequency
-  emailFrequency: 'none' | 'weekly' | 'daily'
+  emailFrequency: 'none' | 'daily'
 
   // Features list for display
   features: string[]
@@ -74,7 +74,7 @@ export const PLAN_LIMITS: Record<SubscriptionPlan, PlanLimits> = {
     cvOptimization: true,
     aiLearning: true,
     savedJobs: 200,
-    emailFrequency: 'weekly',
+    emailFrequency: 'daily',
     features: [
       '15 jobs discovered per day',
       '30 AI responses per day',
@@ -82,7 +82,7 @@ export const PLAN_LIMITS: Record<SubscriptionPlan, PlanLimits> = {
       '3 CV generations per day',
       'Save up to 200 jobs',
       'Favorite jobs',
-      'Weekly email alerts',
+      'Daily email alerts',
       '3-day free trial',
     ],
     weeklyPrice: 3.99,
@@ -449,7 +449,7 @@ export function getDailyCVGenerationQuota(plan: AllSubscriptionPlans): number {
 /**
  * Get email notification frequency for a plan
  */
-export function getEmailFrequency(plan: AllSubscriptionPlans): 'none' | 'weekly' | 'daily' {
+export function getEmailFrequency(plan: AllSubscriptionPlans): 'none' | 'daily' {
   const limits = getPlanLimits(plan)
   return limits.emailFrequency
 }

@@ -103,7 +103,7 @@ const PLAN_DETAILS: Record<
       { name: "Save up to 200 jobs", included: true },
       { name: "Advanced filters", included: true },
       { name: "Favorite jobs", included: true },
-      { name: "Weekly email alerts", included: true },
+      { name: "Daily email alerts", included: true },
       { name: "Priority support", included: false },
     ],
   },

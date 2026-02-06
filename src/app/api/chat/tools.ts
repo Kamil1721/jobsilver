@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Job, Profile, SavedAnswer, SubscriptionPlan } from '@/lib/supabase/types'
 import OpenAI from 'openai'
 import { canAccessFeature } from '@/lib/features/config'
+import { canUseAI, incrementUsage } from '@/lib/ai/usage-tracker'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -483,6 +484,16 @@ async function handleGenerateCoverLetter(
     })
   }
 
+  // Check daily cover letter quota
+  const coverLetterCheck = await canUseAI(userId, supabase as never, 'cover_letters')
+  if (!coverLetterCheck.allowed) {
+    return JSON.stringify({
+      error: 'QUOTA_EXCEEDED',
+      message: coverLetterCheck.message || 'Daily cover letter limit reached.',
+      suggestUpgrade: coverLetterCheck.suggestUpgrade,
+    })
+  }
+
   // Fetch job details
   const { data: job } = await supabase
     .from('jobs')
@@ -557,6 +568,10 @@ Write a compelling letter that connects the candidate's experience to the job re
     })
 
     const coverLetter = response.choices[0]?.message?.content || ''
+
+    // Increment cover letter usage after successful generation
+    await incrementUsage(userId, 'cover_letters', supabase as never)
+
     return JSON.stringify({ coverLetter, jobTitle: job.title, company: job.company })
   } catch (error) {
     console.error('Error generating cover letter:', error)
@@ -717,6 +732,16 @@ async function handleAttachCoverLetter(
     })
   }
 
+  // Check daily cover letter quota
+  const coverLetterCheck = await canUseAI(userId, supabase as never, 'cover_letters')
+  if (!coverLetterCheck.allowed) {
+    return JSON.stringify({
+      error: 'QUOTA_EXCEEDED',
+      message: coverLetterCheck.message || 'Daily cover letter limit reached.',
+      suggestUpgrade: coverLetterCheck.suggestUpgrade,
+    })
+  }
+
   // Fetch job details
   const { data: job } = await supabase
     .from('jobs')
@@ -790,6 +815,9 @@ Write a compelling letter that connects the candidate's experience to the job re
     })
 
     const coverLetterContent = response.choices[0]?.message?.content || ''
+
+    // Increment cover letter usage after successful generation
+    await incrementUsage(userId, 'cover_letters', supabase as never)
 
     // Return the content for file attachment
     return JSON.stringify({

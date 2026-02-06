@@ -19,12 +19,12 @@ export type Feature =
 /**
  * Minimum plan required to access each feature
  * 3-tier model: free, pro, or ultra
- * - Pro: Basic AI features with limits, weekly emails, favorites
+ * - Pro: Basic AI features with limits, daily emails, favorites
  * - Ultra: Unlimited AI, daily emails, priority support
  */
 export const FEATURE_REQUIREMENTS: Record<Feature, SubscriptionPlan> = {
   ai_assistant: 'pro',
-  email_alerts: 'pro', // Weekly for Pro, Daily for Ultra
+  email_alerts: 'pro', // Daily for Pro and Ultra
   ai_cover_letters: 'pro',
   advanced_filters: 'pro',
   ai_learning: 'pro',
@@ -84,7 +84,7 @@ export const FEATURE_INFO: Record<Feature, { name: string; description: string }
   },
   daily_emails: {
     name: 'Daily Email Alerts',
-    description: 'Receive daily job match notifications instead of weekly',
+    description: 'Receive daily job match notifications',
   },
   favorites: {
     name: 'Favorite Jobs',

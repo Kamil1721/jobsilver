@@ -79,7 +79,7 @@ export const WEBSITE_HELP = {
       purpose: 'Select or change your subscription plan',
       options: {
         'Free': 'Browse 3 jobs/day, track applications on Kanban board, no AI features',
-        'Pro': '15 jobs/day, limited AI access (30 responses, 5 cover letters, 3 CV generations per day), weekly emails',
+        'Pro': '15 jobs/day, limited AI access (30 responses, 5 cover letters, 3 CV generations per day), daily emails',
         'Ultra': '35 jobs/day, unlimited AI access, daily emails, priority support',
       },
       features: [
@@ -168,7 +168,7 @@ export const WEBSITE_HELP = {
       '3 CV generations per day',
       'Save up to 200 jobs',
       'Favorite jobs feature',
-      'Weekly email alerts',
+      'Daily email alerts',
       'AI learns your preferences',
     ],
     ultra: [
@@ -206,7 +206,7 @@ export const WEBSITE_HELP = {
       aiResponsesPerDay: 30,
       coverLettersPerDay: 5,
       cvGenerationsPerDay: 3,
-      emailAlerts: 'weekly',
+      emailAlerts: 'daily',
       recommendation: 'Great for active job seekers',
     },
     ultra: {
@@ -240,7 +240,7 @@ export const WEBSITE_HELP = {
     'How much does Pro cost?': 'Pro costs $3.99 per week or $12.99 per month. Monthly billing saves you about 25% compared to weekly. Pro includes a 3-day free trial with 15 jobs/day and limited AI access (30 responses, 5 cover letters, 3 CV generations per day).',
     'How much does Ultra cost?': 'Ultra costs $6.99 per week or $19.99 per month. Ultra has no trial and provides immediate access to 35 jobs/day, unlimited AI features, and priority support.',
     'Which plan should I choose?': 'Free is great for casual browsing. Pro ($3.99/week) is good for active job seekers who want AI help but can work within daily limits. Ultra ($6.99/week) is best for power users who want unlimited AI and priority support.',
-    'What is the difference between Pro and Ultra?': 'Pro gives you 15 jobs/day and limited AI (30 responses, 5 cover letters, 3 CV generations per day). Ultra gives you 35 jobs/day, unlimited AI, daily email alerts (vs weekly for Pro), and priority support.',
+    'What is the difference between Pro and Ultra?': 'Pro gives you 15 jobs/day and limited AI (30 responses, 5 cover letters, 3 CV generations per day) with daily email alerts. Ultra gives you 35 jobs/day, unlimited AI, daily email alerts, and priority support.',
   },
 }
 
@@ -338,7 +338,7 @@ export function getGeneralHelp(): string {
   help += `- 5 cover letters per day\n`
   help += `- 3 CV generations per day\n`
   help += `- Save up to 200 jobs\n`
-  help += `- Weekly email alerts\n\n`
+  help += `- Daily email alerts\n\n`
   help += `**Ultra Plan:** $6.99/week or $19.99/month\n`
   help += `- No trial - immediate full access\n`
   help += `- 35 jobs discovered per day\n`

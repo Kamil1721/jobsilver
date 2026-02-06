@@ -105,7 +105,7 @@ const PLANS: Plan[] = [
       { name: "Save up to 200 jobs", included: true },
       { name: "Advanced filters", included: true },
       { name: "Favorite jobs", included: true },
-      { name: "Weekly email alerts", included: true },
+      { name: "Daily email alerts", included: true },
     ],
   },
   {
@@ -777,7 +777,7 @@ function ComparisonTable({ billingCycle }: { billingCycle: BillingCycle }) {
     { feature: "Saved jobs", values: ["50", "200", "Unlimited"] },
     { feature: "Advanced filters", values: [false, true, true] },
     { feature: "Favorite jobs", values: [false, true, true] },
-    { feature: "Email alerts", values: [false, "Weekly", "Daily"] },
+    { feature: "Email alerts", values: [false, "Daily", "Daily"] },
     { feature: "3-day free trial", values: [false, true, false] },
     { feature: "Weekly price", values: ["Free", "$3.99", "$6.99"] },
     { feature: "Monthly price", values: ["Free", "$12.99", "$19.99"] },
