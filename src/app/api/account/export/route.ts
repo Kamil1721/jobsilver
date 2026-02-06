@@ -115,8 +115,8 @@ export async function GET() {
 
       // Learned preferences
       supabase
-        .from('user_preferences')
-        .select('preferred_titles, preferred_companies, preferred_locations, preferred_skills, avoided_companies, confidence_level, updated_at')
+        .from('user_ai_preferences')
+        .select('preferred_companies, preferred_locations, avoided_companies, confidence_level, preferred_industries, preferred_job_types, keyword_weights, updated_at')
         .eq('user_id', userId)
         .single(),
     ])
@@ -199,11 +199,12 @@ export async function GET() {
 
       learnedPreferences: preferencesResult.data ? {
         note: "These preferences were learned from your activity to improve job recommendations",
-        preferredTitles: preferencesResult.data.preferred_titles,
         preferredCompanies: preferencesResult.data.preferred_companies,
         preferredLocations: preferencesResult.data.preferred_locations,
-        preferredSkills: preferencesResult.data.preferred_skills,
+        preferredIndustries: preferencesResult.data.preferred_industries,
+        preferredJobTypes: preferencesResult.data.preferred_job_types,
         avoidedCompanies: preferencesResult.data.avoided_companies,
+        keywordWeights: preferencesResult.data.keyword_weights,
         confidenceLevel: preferencesResult.data.confidence_level,
         lastUpdated: preferencesResult.data.updated_at,
       } : null,

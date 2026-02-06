@@ -122,11 +122,8 @@ interface UserReport {
   job_details?: {
     application_url: string | null
     platform_detected: string | null
-    auto_apply_status: string | null
     job_status: string | null
     job_created_at: string | null
-    has_scraped_questions: boolean
-    scraped_questions_count: number
   }
   user_report_count?: number
   job_report_count?: number

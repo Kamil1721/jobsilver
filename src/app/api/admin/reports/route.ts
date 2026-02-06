@@ -137,30 +137,18 @@ export async function GET(request: NextRequest) {
           .select(`
             application_url,
             platform_detected,
-            auto_apply_status,
             status,
-            created_at,
-            scraped_questions (
-              id,
-              questions
-            )
+            created_at
           `)
           .eq('id', report.job_id)
           .single()
 
         if (job) {
-          // scraped_questions is an array from the join - get first element
-          const scrapedQuestions = Array.isArray(job.scraped_questions)
-            ? job.scraped_questions[0]
-            : job.scraped_questions
           enriched.job_details = {
             application_url: job.application_url,
             platform_detected: job.platform_detected,
-            auto_apply_status: job.auto_apply_status,
             job_status: job.status,
             job_created_at: job.created_at,
-            has_scraped_questions: !!scrapedQuestions,
-            scraped_questions_count: scrapedQuestions?.questions?.length || 0,
           }
         }
       }

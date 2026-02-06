@@ -357,21 +357,6 @@ export async function DELETE(request: NextRequest) {
     // Delete job quotas
     await supabaseAdmin.from('user_job_quotas').delete().eq('user_id', user_id)
 
-    // Delete application history
-    await supabaseAdmin.from('application_history').delete().eq('user_id', user_id)
-
-    // Delete saved answers
-    await supabaseAdmin.from('saved_answers').delete().eq('user_id', user_id)
-
-    // Delete application queue
-    await supabaseAdmin.from('application_queue').delete().eq('user_id', user_id)
-
-    // Delete platform credentials
-    await supabaseAdmin.from('platform_credentials').delete().eq('user_id', user_id)
-
-    // Delete scraper failures
-    await supabaseAdmin.from('scraper_failures').delete().eq('user_id', user_id)
-
     // Delete user reports
     await supabaseAdmin.from('user_reports').delete().eq('user_id', user_id)
 
@@ -392,9 +377,6 @@ export async function DELETE(request: NextRequest) {
 
     // Delete user interactions
     await supabaseAdmin.from('user_interactions').delete().eq('user_id', user_id)
-
-    // Delete user preferences
-    await supabaseAdmin.from('user_preferences').delete().eq('user_id', user_id)
 
     // Delete user learning settings
     await supabaseAdmin.from('user_learning_settings').delete().eq('user_id', user_id)

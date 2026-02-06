@@ -1,4 +1,4 @@
-import type { Profile, Job, SavedAnswer } from '@/lib/supabase/types'
+import type { Profile, Job } from '@/lib/supabase/types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 interface CVData {
@@ -20,7 +20,6 @@ interface CVData {
 interface UserContext {
   profile: Profile | null
   cvData: CVData | null
-  savedAnswers: SavedAnswer[]
   recentJobs: Job[]
 }
 
@@ -50,14 +49,6 @@ export async function buildUserContext(
     }
   }
 
-  // Fetch saved answers for reference
-  const { data: savedAnswers } = await supabase
-    .from('saved_answers')
-    .select('*')
-    .eq('user_id', userId)
-    .order('usage_count', { ascending: false })
-    .limit(20)
-
   // Fetch recent jobs
   const { data: recentJobs } = await supabase
     .from('jobs')
@@ -69,7 +60,6 @@ export async function buildUserContext(
   return {
     profile,
     cvData,
-    savedAnswers: savedAnswers || [],
     recentJobs: recentJobs || [],
   }
 }
@@ -99,7 +89,7 @@ export async function buildJobContext(
  * Format user context as a system message
  */
 export function formatUserContextForPrompt(context: UserContext): string {
-  const { profile, cvData, savedAnswers, recentJobs } = context
+  const { profile, cvData, recentJobs } = context
   const screeningAnswers = profile?.screening_answers as Record<string, unknown> | null
   const jobFilters = profile?.job_filters as Record<string, unknown> | null
 
@@ -257,10 +247,6 @@ export function formatUserContextForPrompt(context: UserContext): string {
     Object.entries(statusCounts).forEach(([status, count]) => {
       parts.push(`- ${status}: ${count}`)
     })
-  }
-
-  if (savedAnswers.length > 0) {
-    parts.push(`\n## Saved Answer Templates (${savedAnswers.length} available)`)
   }
 
   return parts.join('\n')

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Job, Profile, SavedAnswer, SubscriptionPlan } from '@/lib/supabase/types'
+import type { Job, Profile, SubscriptionPlan } from '@/lib/supabase/types'
 import OpenAI from 'openai'
 import { canAccessFeature } from '@/lib/features/config'
 import { canUseAI, incrementUsage } from '@/lib/ai/usage-tracker'
@@ -411,13 +411,6 @@ async function handleGenerateAnswer(
   const cvData = profile?.cv_parsed_data as Record<string, unknown> | null
   const screeningAnswers = profile?.screening_answers as Record<string, unknown> | null
 
-  // Fetch saved answers for reference
-  const { data: savedAnswers } = await supabase
-    .from('saved_answers')
-    .select('question_text, answer_text')
-    .eq('user_id', userId)
-    .limit(10)
-
   const prompt = `Generate a professional answer for this job application question.
 
 Question: ${question}
@@ -429,11 +422,6 @@ Candidate Info:
 - Current Role: ${screeningAnswers?.current_job_title || 'Not provided'}
 - Experience: ${screeningAnswers?.experience_summary || 'Not provided'}
 - Skills: ${(cvData?.skills as string[])?.join(', ') || 'Not provided'}
-
-${savedAnswers && savedAnswers.length > 0 ? `
-Reference answers the candidate has used before:
-${savedAnswers.map(sa => `Q: ${sa.question_text}\nA: ${sa.answer_text}`).join('\n\n')}
-` : ''}
 
 Write a concise, professional answer (max ${maxLength} characters) that:
 1. Directly addresses the question

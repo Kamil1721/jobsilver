@@ -702,7 +702,7 @@ export async function getUserLearnedPreferences(
 ): Promise<UserLearnedPreferences | null> {
   const supabase = await createClient()
 
-  // Query from user_preferences table (matches UserPreferences type)
+  // Query from user_ai_preferences table (matches UserPreferences type)
   const { data, error } = await supabase
     .from('user_ai_preferences')
     .select('*')

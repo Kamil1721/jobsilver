@@ -178,18 +178,6 @@ export async function PATCH(
       return NextResponse.json({ error: 'Failed to update job' }, { status: 400 })
     }
 
-    // If marking as applied, also save to history
-    if (status === 'applied') {
-      await supabase.from('application_history').insert({
-        user_id: user.id,
-        job_id: job.id,
-        job_title: job.title,
-        company: job.company,
-        status: 'applied',
-        applied_at: new Date().toISOString(),
-      })
-    }
-
     return NextResponse.json({ job })
   } catch (error) {
     console.error('Error updating job:', error)

@@ -111,9 +111,6 @@ export async function DELETE(request: Request) {
       { table: "job_chat_messages", column: "user_id" },
       { table: "user_favorite_jobs", column: "user_id" },
       { table: "user_interactions", column: "user_id" },
-      { table: "scraped_questions", column: "job_id", useJobIds: true },
-      { table: "application_queue", column: "user_id" },
-      { table: "application_history", column: "user_id" },
     ]
 
     // Phase 2: Tables that reference profiles (must delete before profiles)
@@ -121,13 +118,10 @@ export async function DELETE(request: Request) {
       { table: "user_learning_settings", column: "user_id" },
       { table: "user_ai_preferences", column: "user_id" },
       { table: "user_reports", column: "user_id" },
-      { table: "saved_answers", column: "user_id" },
     ]
 
     // Phase 3: Tables that reference auth.users directly
     const tablesReferencingAuthUsers = [
-      { table: "platform_credentials", column: "user_id" },
-      { table: "scraper_failures", column: "user_id" },
       { table: "user_job_quotas", column: "user_id" },
       { table: "curation_logs", column: "user_id" },
       { table: "subscriptions", column: "user_id" },
@@ -140,7 +134,6 @@ export async function DELETE(request: Request) {
     // Phase 4: Main data tables
     const mainTables = [
       { table: "jobs", column: "user_id" },
-      { table: "user_preferences", column: "user_id" },
       { table: "profiles", column: "id" },
       { table: "users", column: "id" }, // public.users table
     ]
@@ -161,22 +154,9 @@ export async function DELETE(request: Request) {
       ...mainTables,
     ]
 
-    for (const { table, column, useJobIds } of allTables as { table: string; column: string; useJobIds?: boolean }[]) {
+    for (const { table, column } of allTables) {
       try {
-        if (useJobIds) {
-          // For scraped_questions, delete by job_id (jobs belonging to user)
-          const { data: userJobs } = await supabaseAdmin
-            .from("jobs")
-            .select("id")
-            .eq("user_id", userId)
-
-          if (userJobs && userJobs.length > 0) {
-            const jobIds = userJobs.map(j => j.id)
-            await supabaseAdmin.from(table).delete().in(column, jobIds)
-          }
-        } else {
-          await supabaseAdmin.from(table).delete().eq(column, userId)
-        }
+        await supabaseAdmin.from(table).delete().eq(column, userId)
       } catch (error) {
         console.error(`Error deleting from ${table}:`, error)
         // Continue with other tables even if one fails
