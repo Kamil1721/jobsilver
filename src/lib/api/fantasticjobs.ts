@@ -226,6 +226,41 @@ export type RemoteType = 'fully_remote' | 'hybrid' | 'onsite'
 const RAPIDAPI_HOST = 'active-jobs-db.p.rapidapi.com'
 
 /**
+ * Check global fantastic.jobs API quota before making requests.
+ * Reads the api_usage table for the current month and compares against plan limits.
+ * Reserves 10% of quota for emergency/admin use.
+ */
+async function checkGlobalQuota(): Promise<{ allowed: boolean; jobsRemaining: number }> {
+  try {
+    const supabase = await createServerClient()
+    const currentMonth = new Date().toISOString().slice(0, 7) // YYYY-MM
+    const rapidapiPlan = process.env.RAPIDAPI_PLAN || 'pro'
+    const planLimits: Record<string, number> = {
+      basic: 250,
+      pro: 5000,
+      ultra: 20000,
+      mega: 50000,
+    }
+    const jobsLimit = planLimits[rapidapiPlan] || 5000
+
+    const { data } = await supabase
+      .from('api_usage')
+      .select('jobs_fetched')
+      .eq('month_year', currentMonth)
+      .single()
+
+    const jobsFetched = data?.jobs_fetched || 0
+    const remaining = jobsLimit - jobsFetched
+    // Reserve 10% for emergency/admin use
+    const safeRemaining = remaining - Math.floor(jobsLimit * 0.10)
+    return { allowed: safeRemaining > 0, jobsRemaining: Math.max(0, safeRemaining) }
+  } catch {
+    // Fail open with conservative limit if quota check fails
+    return { allowed: true, jobsRemaining: 100 }
+  }
+}
+
+/**
  * Search jobs using the fantastic.jobs API (Active Jobs DB)
  * Uses the /active-ats-7d endpoint for jobs from the last 7 days
  */
@@ -241,6 +276,18 @@ export async function searchJobs(
     console.error('CRITICAL: RAPIDAPI_KEY environment variable is not set!')
     console.error('Please add RAPIDAPI_KEY to your Vercel environment variables.')
     throw new Error('RAPIDAPI_KEY is not configured - add it to Vercel environment variables')
+  }
+
+  // Global quota guard: check monthly API usage before making request
+  const globalQuota = await checkGlobalQuota()
+  if (!globalQuota.allowed) {
+    console.warn(`[fantastic.jobs] Monthly quota nearly exhausted (${globalQuota.jobsRemaining} safe remaining). Skipping API call.`)
+    return []
+  }
+  // Cap limit to remaining quota
+  if (params.limit && params.limit > globalQuota.jobsRemaining) {
+    console.warn(`[fantastic.jobs] Capping request limit from ${params.limit} to ${globalQuota.jobsRemaining} (quota guard)`)
+    params.limit = globalQuota.jobsRemaining
   }
 
   console.log('RAPIDAPI_KEY is configured, proceeding with search...')

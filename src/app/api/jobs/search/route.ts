@@ -546,7 +546,7 @@ export async function POST(request: NextRequest) {
           const jobs = await searchFantasticJobs({
             title_filter: query,
             location_filter: effectiveLocationFilter,
-            limit: Math.min(50, quotaStatus.remaining), // Respect quota
+            limit: Math.min(35, quotaStatus.remaining), // Respect quota (reduced from 50 to conserve API quota)
             ai_work_arrangement_filter: workArrangement,
             // ai_employment_type_filter removed - handled by soft scoring
             // ai_experience_level_filter removed - handled by soft scoring
@@ -579,14 +579,14 @@ export async function POST(request: NextRequest) {
       if (filters.remote_countries && filters.remote_countries.length > 0) {
         const realCountries = filters.remote_countries
           .filter(loc => !specialLocationValues.some(s => loc.toLowerCase().includes(s)))
-          .slice(0, 2)
+          .slice(0, 1) // Reduced from 2 to conserve API quota (diminishing returns from 2nd location)
 
         for (const location of realCountries) {
           try {
             const jobs = await searchFantasticJobs({
               title_filter: baseQuery,
               location_filter: location,
-              limit: 30,
+              limit: 20, // Reduced from 30 to conserve API quota
               ai_work_arrangement_filter: workArrangement,
               // ai_employment_type_filter removed - handled by soft scoring
               ai_taxonomies_a_filter: taxonomyFilter,

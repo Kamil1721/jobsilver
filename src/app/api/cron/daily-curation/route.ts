@@ -335,7 +335,6 @@ async function curateJobsForUser(
     const result = await fetchAndCurateJobs(
       supabase,
       user.id,
-      user.job_filters,
       jobsNeeded,
       user.id
     )
@@ -401,7 +400,6 @@ async function curateJobsForUser(
 async function fetchAndCurateJobs(
   supabase: ReturnType<typeof createServiceClient>,
   userId: string,
-  filters: JobFilters,
   targetCount: number,
   searchUserId: string
 ): Promise<{ jobsCurated: number; jobsFailed: number; curatedJobs: JobMatch[] }> {
@@ -418,13 +416,10 @@ async function fetchAndCurateJobs(
 
   const existingIds = new Set(existingJobs?.map(j => j.external_id) || [])
 
-  // Build search queries from filters
-  const searchQueries = buildSearchQueries(filters)
-
   while (jobsCurated < targetCount && attempts < MAX_FETCH_ATTEMPTS) {
     attempts++
 
-    const jobs = await fetchJobsFromSearch(searchQueries, filters, targetCount - jobsCurated, existingIds, searchUserId)
+    const jobs = await fetchJobsFromSearch(targetCount - jobsCurated, existingIds, searchUserId)
 
     if (jobs.length === 0) {
       console.log(`[Daily Curation] No more jobs available for user ${userId}`)
@@ -498,86 +493,63 @@ async function fetchAndCurateJobs(
 }
 
 /**
- * Build search queries from job filters
- */
-function buildSearchQueries(filters: JobFilters): string[] {
-  const queries: string[] = []
-
-  // Use job titles as primary queries
-  if (filters.job_titles && filters.job_titles.length > 0) {
-    queries.push(...filters.job_titles)
-  }
-
-  // Add keyword-based queries
-  if (filters.include_keywords && filters.include_keywords.length > 0) {
-    queries.push(...filters.include_keywords.slice(0, 3))
-  }
-
-  return queries.length > 0 ? queries : ['software engineer'] // Default fallback
-}
-
-/**
  * Fetch jobs from the internal search API
+ *
+ * Makes a SINGLE call to /api/jobs/search with useProfileFilters=true.
+ * The search endpoint generates its own AI queries from the user's profile,
+ * so passing individual query strings has no effect — it ignores the `query` body param.
+ * Previously this function looped over buildSearchQueries() results, making 3+ identical
+ * API calls per user, wasting ~66% of the fantastic.jobs monthly quota.
  */
 async function fetchJobsFromSearch(
-  queries: string[],
-  filters: JobFilters,
   count: number,
   existingIds: Set<string | null>,
   userId: string
 ): Promise<Partial<Job>[]> {
-  const jobs: Partial<Job>[] = []
   // SECURITY: Use a hardcoded internal URL to prevent SSRF attacks
   // NEXT_PUBLIC_APP_URL could be manipulated in deployment configs
   const appUrl = process.env.INTERNAL_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
-  for (const query of queries) {
-    if (jobs.length >= count * 2) break // Fetch extra to account for duplicates
+  // Create AbortController with 30 second timeout
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 30000)
 
-    // Create AbortController with 30 second timeout
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 30000)
+  try {
+    const response = await fetch(`${appUrl}/api/jobs/search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Internal API key for cron/internal calls
+        'x-api-key': process.env.INTERNAL_API_KEY || '',
+      },
+      body: JSON.stringify({
+        useProfileFilters: true,
+        skipQuota: true, // Internal curation doesn't count against user quota
+        userId, // Pass the user ID for proper context
+      }),
+      signal: controller.signal,
+    })
 
-    try {
-      const response = await fetch(`${appUrl}/api/jobs/search`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Internal API key for cron/internal calls
-          'x-api-key': process.env.INTERNAL_API_KEY || '',
-        },
-        body: JSON.stringify({
-          query,
-          filters,
-          limit: count,
-          skipQuota: true, // Internal curation doesn't count against quota
-          userId, // Pass the user ID for proper context
-        }),
-        signal: controller.signal,
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const newJobs = (data.jobs || []).filter(
-          (j: Job) => !existingIds.has(j.external_id)
-        )
-        jobs.push(...newJobs)
-        newJobs.forEach((j: Job) => existingIds.add(j.external_id))
-      } else {
-        console.warn(`[Daily Curation] Search API returned ${response.status} for query: ${query}`)
-      }
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        console.error(`[Daily Curation] Request timed out for query "${query}"`)
-      } else {
-        console.error(`[Daily Curation] Error fetching jobs for query "${query}":`, err)
-      }
-    } finally {
-      clearTimeout(timeoutId)
+    if (response.ok) {
+      const data = await response.json()
+      const newJobs = (data.jobs || []).filter(
+        (j: Job) => !existingIds.has(j.external_id)
+      )
+      return newJobs.slice(0, count)
+    } else {
+      console.warn(`[Daily Curation] Search API returned ${response.status}`)
     }
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      console.error(`[Daily Curation] Request timed out`)
+    } else {
+      console.error(`[Daily Curation] Error fetching jobs:`, err)
+    }
+  } finally {
+    clearTimeout(timeoutId)
   }
 
-  return jobs.slice(0, count)
+  return []
 }
 
 /**
