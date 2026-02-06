@@ -167,6 +167,16 @@ export function LandingPage() {
             transition={{ duration: 1 }}
             className="text-center max-w-3xl mx-auto"
           >
+            {/* Tagline */}
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="text-sm text-zinc-500 tracking-wide uppercase mb-6"
+            >
+              Finding a job shouldn&apos;t be a full-time job
+            </motion.p>
+
             {/* Headline */}
             <motion.h1
               initial={{ opacity: 0, y: 30 }}
@@ -174,7 +184,7 @@ export function LandingPage() {
               transition={{ duration: 0.8, delay: 0.3 }}
               className="text-4xl md:text-6xl lg:text-7xl font-semibold tracking-tight leading-[1.05] mb-6"
             >
-              <span className="text-white">Your dream job,</span>
+              <span className="text-white">Your dream job</span>
               <br />
               <span className="bg-gradient-to-r from-zinc-400 via-zinc-300 to-zinc-500 bg-clip-text text-transparent">
                 delivered daily
