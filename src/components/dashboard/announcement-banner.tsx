@@ -32,23 +32,22 @@ function getTypeStyles(type: AnnouncementType): string {
 
 export function AnnouncementBanner({ plan }: AnnouncementBannerProps) {
   const [announcements, setAnnouncements] = React.useState<ActiveAnnouncement[]>([])
-  const [dismissedRecord, setDismissedRecord] = React.useState<DismissedRecord>({})
-  const [isLoading, setIsLoading] = React.useState(true)
-
-  // Load dismissed announcements from localStorage
-  React.useEffect(() => {
+  const [dismissedRecord, setDismissedRecord] = React.useState<DismissedRecord>(() => {
+    if (typeof window === 'undefined') return {}
     try {
       const stored = localStorage.getItem(DISMISSED_KEY)
       if (stored) {
         const parsed = JSON.parse(stored)
         if (typeof parsed === 'object' && parsed !== null) {
-          setDismissedRecord(parsed)
+          return parsed
         }
       }
     } catch {
       // Ignore localStorage errors
     }
-  }, [])
+    return {}
+  })
+  const [isLoading, setIsLoading] = React.useState(true)
 
   // Fetch active announcements
   React.useEffect(() => {

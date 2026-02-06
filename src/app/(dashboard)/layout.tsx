@@ -66,7 +66,7 @@ export default function DashboardLayout({
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  const { resolvedTheme } = useTheme()
+  const { resolvedTheme, setTheme } = useTheme()
   const [mounted, setMounted] = React.useState(false)
 
   React.useEffect(() => {
@@ -210,6 +210,8 @@ export default function DashboardLayout({
   )
 
   const handleSignOut = async () => {
+    // Reset theme to dark before navigating to public pages
+    setTheme("dark")
     await supabase.auth.signOut()
     router.push("/")
     router.refresh()
@@ -290,8 +292,8 @@ export default function DashboardLayout({
                   </div>
                 ))
               ) : (
-                // Show announcement banner when no system messages
-                <AnnouncementBanner plan={(profile?.subscription_plan || 'free') as 'free' | 'pro' | 'ultra'} />
+                // Show announcement banner when no system messages (only after profile loads to avoid flash with wrong plan)
+                profile && <AnnouncementBanner plan={(profile.subscription_plan || 'free') as 'free' | 'pro' | 'ultra'} />
               )}
             </div>
           )}
