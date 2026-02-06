@@ -46,6 +46,16 @@
 
 ## 2026-02 - February
 
+### 2026-02-06 - Research Agent (Agent C)
+**Task:** CV upload system security vulnerability and resilience audit
+**Output:** Inline research brief (Agent C analysis)
+**Key findings:** 20 findings total (2x P1, 8x P2, 10x P3). Most critical: CVE-2024-4367 in bundled pdfjs-dist v1.10.100 enables arbitrary code execution via malicious PDFs (P1), unsanitized CV text enables prompt injection into OpenAI calls (P1). No magic byte validation on uploads, no size limit on cvText field, generate endpoint skips existing Zod schemas. adm-zip 0.5.16 confirmed safe.
+
+### 2026-02-06 - Research Agent (Agent B)
+**Task:** CV system control flow and state management audit
+**Output:** Inline research brief (Agent B analysis)
+**Key findings:** 14 architectural issues identified (1x P0, 4x P1, 5x P2, 4x P3). Most critical: orphan files leak on re-upload/generate (P0), silent empty parse on AI failure (P1), job-specific CVs create untracked storage files (P1).
+
 ### 2026-02-06 - API Quota Optimization & UI Polish
 
 **Reduced fantastic.jobs API consumption by ~70%:**
@@ -267,3 +277,4 @@ Legacy tables dropped in migration `20260206_drop_unused_legacy_tables.sql`
 | 2026-02-03 | Email security and reliability improvements |
 | 2026-02-05 | 3-tier pricing, announcements, job notes, downgrade flow, CV generator v2 |
 | 2026-02-06 | API quota optimization (~70% reduction), cover letter limits, UI polish |
+| 2026-02-06 | CV upload system audit: pdf-parse fix verified, 11 gaps identified (storage orphans, prompt injection, .doc support) |

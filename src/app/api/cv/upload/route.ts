@@ -19,7 +19,9 @@ function sanitizeFileName(fileName: string): string {
     .replace(/_+/g, '_') // Collapse multiple underscores
     .replace(/^_|_$/g, '') // Remove leading/trailing underscores
 
-  return `${sanitized}.${ext}`
+  // Fallback if sanitization produced empty name (e.g., non-Latin filenames)
+  const baseName = sanitized || 'cv'
+  return `${baseName}.${ext}`
 }
 
 export async function POST(request: NextRequest) {
@@ -81,8 +83,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Get existing CV URL so we can clean up the old file after successful update
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('cv_url')
+      .eq('id', user.id)
+      .single()
+
+    const oldCvUrl = existingProfile?.cv_url
+
     let textContent = cvText || ''
-    let cvUrl = null
+    let cvUrl = oldCvUrl || null
 
     if (file) {
       // Upload file to Supabase Storage
@@ -101,46 +112,70 @@ export async function POST(request: NextRequest) {
       }
 
       // Store the file path (not public URL since bucket is private)
-      // The path can be used to create signed URLs when needed
       cvUrl = uploadData.path
 
       // Extract text from file if not provided
       if (!textContent) {
         const buffer = Buffer.from(await file.arrayBuffer())
-        // Use Adobe PDF Services or fallback extraction for all file types
         textContent = await extractTextFromFile(buffer, file.name)
       }
     }
 
     // Parse CV with AI if we have text content
     let parsedData = null
+    let parsingFailed = false
     if (textContent) {
       parsedData = await parseCV(textContent)
+      if (!parsedData) {
+        parsingFailed = true
+      }
+    }
+
+    // Build the profile update — preserve existing cv_parsed_data if AI parsing failed
+    const profileUpdate: Record<string, unknown> = {
+      id: user.id,
+      cv_url: cvUrl,
+      cv_is_generated: false,
+      updated_at: new Date().toISOString(),
+    }
+    if (!parsingFailed) {
+      profileUpdate.cv_parsed_data = parsedData
     }
 
     // Update profile with CV URL and parsed data
-    // Also reset cv_is_generated to false since user uploaded their own CV
     const { error: updateError } = await supabase
       .from('profiles')
-      .upsert({
-        id: user.id,
-        cv_url: cvUrl,
-        cv_parsed_data: parsedData,
-        cv_is_generated: false,
-        updated_at: new Date().toISOString(),
-      })
+      .upsert(profileUpdate)
 
     if (updateError) {
       console.error('Update error:', updateError)
+      // Clean up newly uploaded file if profile update failed
+      if (file && cvUrl && cvUrl !== oldCvUrl) {
+        try {
+          await supabase.storage.from('cvs').remove([cvUrl])
+        } catch {
+          console.warn('Failed to clean up orphaned upload:', cvUrl)
+        }
+      }
       return NextResponse.json(
         { error: 'Failed to update profile' },
         { status: 400 }
       )
     }
 
+    // Profile updated successfully — clean up old file if it was replaced
+    if (file && oldCvUrl && oldCvUrl !== cvUrl) {
+      try {
+        await supabase.storage.from('cvs').remove([oldCvUrl])
+      } catch {
+        console.warn('Failed to delete old CV file:', oldCvUrl)
+      }
+    }
+
     return NextResponse.json({
       cv_url: cvUrl,
       parsed_data: parsedData,
+      parsing_failed: parsingFailed,
     })
   } catch (error) {
     console.error('CV upload error:', error)
@@ -167,25 +202,13 @@ export async function DELETE() {
       .eq('id', user.id)
       .single()
 
-    // Delete file from storage if it exists (ignore errors)
-    if (profile?.cv_url) {
-      try {
-        await supabase.storage
-          .from('cvs')
-          .remove([profile.cv_url])
-      } catch (e) {
-        // Ignore storage deletion errors
-        console.warn('Failed to delete CV from storage:', e)
-      }
-    }
-
-    // Update profile to remove CV URL
-    // Note: cv_is_generated might not exist if migration hasn't been run
+    // Update profile to remove CV data (single atomic update)
     const { error: updateError } = await supabase
       .from('profiles')
       .update({
         cv_url: null,
         cv_parsed_data: null,
+        cv_is_generated: false,
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id)
@@ -198,14 +221,15 @@ export async function DELETE() {
       )
     }
 
-    // Try to update cv_is_generated separately (may fail if column doesn't exist yet)
-    try {
-      await supabase
-        .from('profiles')
-        .update({ cv_is_generated: false })
-        .eq('id', user.id)
-    } catch {
-      // Silently ignore if column doesn't exist
+    // Delete file from storage after DB update succeeds
+    if (profile?.cv_url) {
+      try {
+        await supabase.storage
+          .from('cvs')
+          .remove([profile.cv_url])
+      } catch (e) {
+        console.warn('Failed to delete CV from storage:', e)
+      }
     }
 
     return NextResponse.json({ success: true })

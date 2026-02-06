@@ -74,6 +74,13 @@ export async function POST() {
     // Parse CV with AI
     const parsedData = await parseCV(textContent)
 
+    if (!parsedData) {
+      return NextResponse.json(
+        { error: 'AI parsing failed. Please try again later.' },
+        { status: 502 }
+      )
+    }
+
     // Check if we got better results this time
     const hasExperience = parsedData.experience && parsedData.experience.length > 0
     const hasEducation = parsedData.education && parsedData.education.length > 0

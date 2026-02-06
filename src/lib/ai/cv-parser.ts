@@ -12,8 +12,26 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 import AdmZip from 'adm-zip'
-// pdf-parse v2+ uses named export
-import { PDFParse } from 'pdf-parse'
+/**
+ * Sanitize CV text for AI prompt — preserves newlines (critical for CV structure)
+ * while still blocking prompt injection patterns.
+ */
+function sanitizeCVText(input: string | null | undefined, maxLength: number = 15000): string {
+  if (!input || typeof input !== 'string') return ''
+  return input
+    .slice(0, maxLength)
+    // Remove prompt injection patterns
+    .replace(/\b(ignore|disregard|forget)\s+(all\s+)?(previous|above|prior)\s+(instructions?|prompts?|rules?)/gi, '')
+    // Remove code block attempts
+    .replace(/```/g, '')
+    // Remove HTML tags
+    .replace(/<[^>]+>/g, ' ')
+    // Normalize excessive blank lines but preserve single newlines
+    .replace(/\n{4,}/g, '\n\n\n')
+    // Collapse runs of spaces (not newlines)
+    .replace(/[^\S\n]+/g, ' ')
+    .trim()
+}
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -41,11 +59,18 @@ export interface ParsedCV {
   }
 }
 
-export async function parseCV(cvText: string): Promise<ParsedCV> {
+export async function parseCV(cvText: string): Promise<ParsedCV | null> {
+  // Sanitize CV text to prevent prompt injection while preserving structure
+  const sanitizedText = sanitizeCVText(cvText)
+  if (!sanitizedText) {
+    console.error('CV text was empty after sanitization')
+    return null
+  }
+
   const prompt = `Parse this CV/resume and extract structured information. Be thorough in extracting ALL skills mentioned, including soft skills (communication, leadership, teamwork) and industry-specific skills (customer service, project management, etc.), not just technical skills.
 
 CV TEXT:
-${cvText}
+${sanitizedText}
 
 Respond in JSON format:
 {
@@ -93,18 +118,7 @@ Include both technical skills (programming, software, tools) AND soft skills (co
     return JSON.parse(content) as ParsedCV
   } catch (error) {
     console.error('Error parsing CV:', error)
-    return {
-      skills: [],
-      experience: [],
-      education: [],
-      summary: '',
-      contact: {
-        name: '',
-        email: '',
-        phone: '',
-        location: '',
-      },
-    }
+    return null
   }
 }
 
@@ -223,21 +237,14 @@ export async function extractTextFromPDFAdobe(pdfBuffer: Buffer): Promise<string
  */
 export async function extractTextFromPDFBasic(pdfBuffer: Buffer): Promise<string> {
   try {
-    // pdf-parse v2 uses class-based API
-    const parser = new PDFParse({ data: new Uint8Array(pdfBuffer) })
-    const result = await parser.getText()
+    const pdfParse = (await import('pdf-parse')).default
+    const result = await pdfParse(pdfBuffer)
     const text = result.text || ''
-    parser.destroy()
     console.log('pdf-parse extraction successful, extracted', text.length, 'characters')
     return text.trim()
   } catch (error) {
     console.error('pdf-parse extraction failed:', error)
-    // Ultimate fallback - try raw text extraction
-    const rawText = pdfBuffer.toString('utf-8')
-      .replace(/[^\x20-\x7E\n\r]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-    return rawText.length > 100 ? rawText : ''
+    return ''
   }
 }
 
@@ -299,8 +306,10 @@ export async function extractTextFromFile(
     case '.docx':
       return extractTextFromDOCX(buffer)
     case '.doc':
-      // .doc files are harder to parse, try basic extraction
-      return buffer.toString('utf-8').replace(/[^\x20-\x7E\n\r]/g, ' ').trim()
+      // .doc (OLE2 binary) cannot be reliably parsed server-side — return empty
+      // Users should upload .docx or .pdf instead
+      console.warn('.doc format not supported for text extraction, recommend .docx or .pdf')
+      return ''
     case '.txt':
       return buffer.toString('utf-8')
     default:
