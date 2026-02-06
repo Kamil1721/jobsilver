@@ -11,9 +11,18 @@ export const metadata: Metadata = {
   openGraph: {
     siteName: "JobSilver",
     type: "website",
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'JobSilver - AI-Powered Job Search Assistant',
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
+    images: ['/og-image.png'],
   },
 }
 
