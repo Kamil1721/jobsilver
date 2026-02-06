@@ -104,7 +104,7 @@ BEGIN
   RETURN EXISTS (
     SELECT 1 FROM profiles
     WHERE id = auth.uid()
-    AND (is_admin = TRUE OR email = 'admin@example.com')
+    AND is_admin = TRUE
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -201,10 +201,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Set initial admin user
 -- ============================================
 
--- Make admin@example.com an admin
-UPDATE profiles
-SET is_admin = TRUE
-WHERE email = 'admin@example.com';
+-- Set initial admin user (configure ADMIN_EMAILS env var for admin access)
+-- Admin is granted via ADMIN_EMAILS environment variable at runtime
 
 -- Comments
 COMMENT ON TABLE api_usage IS 'Monthly API usage tracking for RapidAPI fantastic.jobs';

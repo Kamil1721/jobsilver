@@ -58,3 +58,6 @@ supabase/.temp
 *.seed
 
 .vercel
+
+# Project instructions (contains internal architecture details)
+CLAUDE.md
