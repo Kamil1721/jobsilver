@@ -5,8 +5,16 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { CookieConsentBanner } from "@/components/cookie-consent"
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://jobsilver.com'),
   title: "JobSilver - AI-Powered Job Search",
   description: "Find and apply to jobs that match your skills with AI-powered matching",
+  openGraph: {
+    siteName: "JobSilver",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
 }
 
 export default function RootLayout({
