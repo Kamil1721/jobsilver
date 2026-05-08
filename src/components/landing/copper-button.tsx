@@ -100,7 +100,7 @@ export function CopperButton({
     <span
       ref={surfaceRef}
       className={cn(
-        "js-shimmer-host inline-flex items-center gap-2 rounded-full font-medium text-white",
+        "js-shimmer-host overflow-hidden inline-flex items-center gap-2 rounded-full font-medium text-white",
         "transition-transform duration-150 active:scale-[0.985]",
         sizeStyles[size],
         className,

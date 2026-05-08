@@ -726,6 +726,12 @@
 .js-shimmer-host {
   position: relative;
   overflow: hidden;
+  /* `contain: paint` clips painted descendants (incl. transformed pseudo-
+     elements with mix-blend-mode) to the padding box, which respects the
+     element's border-radius. overflow:hidden alone can leak past rounded
+     corners under Safari + mix-blend-mode. The host is expected to set
+     its own border-radius at the call site (e.g. via rounded-full). */
+  contain: paint;
   isolation: isolate;
 }
 .js-shimmer-host::after {
