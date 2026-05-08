@@ -44,7 +44,7 @@ export function Hero() {
             className="font-serif font-semibold text-balance"
             style={{
               fontSize: "clamp(48px, 7.4vw, 112px)",
-              lineHeight: 0.98,
+              lineHeight: 1.04,
               letterSpacing: "-0.025em",
               fontVariationSettings: "'opsz' 144",
             }}
@@ -89,8 +89,8 @@ export function Hero() {
             className="mt-7 text-[12px]"
             style={{ color: "var(--fg-3)" }}
           >
-            Three-day free trial on Pro. No card to start. Cancel from your
-            dashboard.
+            Free tier requires no card. Three-day Pro trial, then $3.99/week.
+            Cancel anytime from your dashboard.
           </p>
         </div>
       </div>

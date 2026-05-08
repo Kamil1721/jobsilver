@@ -679,6 +679,11 @@
   -webkit-background-clip: text;
           background-clip: text;
   color: transparent;
+  /* Grow the painted box past cap height + descender so background-clip:text
+     doesn't crop ascenders/descenders on display-size Fraunces (opsz 144). */
+  display: inline-block;
+  line-height: 1;
+  padding-block: 0.08em;
   animation: js-chrome-sweep var(--loop-chrome, 6s) linear infinite;
 }
 

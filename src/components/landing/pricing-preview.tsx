@@ -129,12 +129,12 @@ export function PricingPreview() {
           <Dot />
           <span className="inline-flex items-center gap-2">
             <CreditCard className="h-4 w-4" strokeWidth={1.6} aria-hidden="true" />
-            No credit card to start
+            Free tier, no card needed
           </span>
           <Dot />
           <span className="inline-flex items-center gap-2">
             <Lock className="h-4 w-4" strokeWidth={1.6} aria-hidden="true" />
-            Secure payment via Stripe
+            Secure billing via Stripe
           </span>
         </div>
       </div>

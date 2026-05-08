@@ -13,7 +13,7 @@ export function LiquidChromeText({
   as: Tag = "span",
 }: LiquidChromeTextProps) {
   return (
-    <Tag className={cn("js-chrome-sweep-text inline-block", className)}>
+    <Tag className={cn("js-chrome-sweep-text", className)}>
       {children}
     </Tag>
   )
