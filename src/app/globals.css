@@ -680,10 +680,11 @@
           background-clip: text;
   color: transparent;
   /* Grow the painted box past cap height + descender so background-clip:text
-     doesn't crop ascenders/descenders on display-size Fraunces (opsz 144). */
+     doesn't crop ascenders/descenders on display-size Fraunces (opsz 144).
+     Fraunces' OS/2 ascent + descent is ~1.3em; line-height 1.5 adds a
+     ~0.15em buffer on each side so j/p/y/T render in full. */
   display: inline-block;
-  line-height: 1;
-  padding-block: 0.08em;
+  line-height: 1.5;
   animation: js-chrome-sweep var(--loop-chrome, 6s) linear infinite;
 }
 
