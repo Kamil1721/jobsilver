@@ -69,7 +69,8 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+        sans: ["var(--font-inter)", "Inter", "system-ui", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+        serif: ["var(--font-fraunces)", "Fraunces", "Times New Roman", "Georgia", "serif"],
       },
       fontSize: {
         "2xs": ["0.625rem", { lineHeight: "1rem" }],
@@ -83,6 +84,9 @@ const config: Config = {
         "fade-in": "fade-in 0.2s ease-out forwards",
         "fade-in-up": "fade-in-up 0.3s ease-out forwards",
         "slide-in-right": "slide-in-right 0.2s ease-out forwards",
+        "js-mesh-drift": "js-mesh-drift 90s ease-in-out infinite",
+        "js-chrome-sweep": "js-chrome-sweep 6s linear infinite",
+        "js-deal": "js-deal 600ms cubic-bezier(0.16, 1, 0.3, 1) both",
       },
       keyframes: {
         "pulse-subtle": {
@@ -100,6 +104,18 @@ const config: Config = {
         "slide-in-right": {
           from: { opacity: "0", transform: "translateX(8px)" },
           to: { opacity: "1", transform: "translateX(0)" },
+        },
+        "js-mesh-drift": {
+          "0%, 100%": { transform: "translate(0%, 0%) rotate(0deg) scale(1)" },
+          "50%": { transform: "translate(-5%, 4%) rotate(2.5deg) scale(1.04)" },
+        },
+        "js-chrome-sweep": {
+          "0%": { backgroundPosition: "0% 50%" },
+          "100%": { backgroundPosition: "200% 50%" },
+        },
+        "js-deal": {
+          "0%": { opacity: "0", transform: "translateY(28px) scale(0.98)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
         },
       },
       transitionDuration: {

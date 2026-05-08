@@ -1,8 +1,22 @@
 import type { Metadata } from "next"
+import { Fraunces, Inter } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { ThemeProvider } from "@/components/theme-provider"
 import { CookieConsentBanner } from "@/components/cookie-consent"
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-fraunces",
+  display: "swap",
+  axes: ["opsz"],
+})
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+})
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://jobsilver.com'),
@@ -60,7 +74,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-screen bg-background antialiased">
+      <body className={`${inter.variable} ${fraunces.variable} min-h-screen bg-background antialiased`}>
         <ThemeProvider defaultTheme="dark">
           {children}
           <Toaster />
