@@ -726,11 +726,17 @@
 .js-shimmer-host {
   position: relative;
   overflow: hidden;
-  /* `contain: paint` clips painted descendants (incl. transformed pseudo-
-     elements with mix-blend-mode) to the padding box, which respects the
-     element's border-radius. overflow:hidden alone can leak past rounded
-     corners under Safari + mix-blend-mode. The host is expected to set
-     its own border-radius at the call site (e.g. via rounded-full). */
+  /* clip-path is the only reliable way to confine a transformed pseudo-
+     element with mix-blend-mode to a rounded shape — overflow:hidden
+     and contain:paint both leak the shimmer past rounded corners in
+     Safari and (intermittently) Chrome when the ::after is translated
+     past the host's bounds. clip-path runs at paint time and respects
+     the inset() rounding regardless of descendant transforms.
+     Default radius is pill (9999px) since shimmer-host is primarily a
+     CTA pattern. Consumers with a different shape can override via
+     --shimmer-clip-radius (e.g. style={{"--shimmer-clip-radius":"14px"}}). */
+  clip-path: inset(0 round var(--shimmer-clip-radius, 9999px));
+  -webkit-clip-path: inset(0 round var(--shimmer-clip-radius, 9999px));
   contain: paint;
   isolation: isolate;
 }
