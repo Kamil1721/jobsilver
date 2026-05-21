@@ -43,20 +43,15 @@ This plan implements **only** the curation → extraction wiring. In scope:
   `npm run lint` + `npm run build`, plus the manual dev-server run in Task 6. Do **not**
   scaffold a test runner.
 
-## ⚠️ Pre-flight: the dev server uses the PRODUCTION database
+## Environment: local Supabase on OrbStack
 
-`.env.local` line 1 declares the Supabase project as **production** (`pjgdcasgyxjooqwihivh`).
-A local `npm run dev` therefore reads/writes production data. Consequences:
+This plan runs entirely against a **local Supabase stack** (Docker on OrbStack) — no
+production schema change, no test jobs on a live dashboard. Task 0 sets it up.
 
-- The Task 1 migration must be applied to the **production** Supabase project for the
-  code to build/run. It is **additive only** (one nullable column, one column with a
-  default + CHECK) — low risk and reversible, but it is a real production schema change.
-- The Task 5 dev route inserts real `jobs` rows for a real user — they will appear on
-  that user's live dashboard.
-
-**Before executing, the operator must choose** (raised at plan handoff): proceed against
-production, or first point `.env.local` at a separate Supabase (local `supabase start`
-or a Supabase branch). The plan code is identical either way; only the target DB differs.
+Constraint discovered 2026-05-21: the repo's `supabase/migrations/` are all incremental
+`alter`s — **none creates the base `jobs`/`profiles` tables**, and `supabase/schema.sql`
+is stale. A fresh local DB therefore cannot be built from migrations alone; Task 0
+imports the real schema via a one-time **read-only** dump of the production project.
 
 ## File Structure
 
@@ -67,6 +62,115 @@ or a Supabase branch). The plan code is identical either way; only the target DB
 | `src/lib/auto-apply/curation-extraction.ts` | Create | Shared, never-throwing extract-and-record function. |
 | `src/app/api/cron/daily-curation/route.ts` | Modify | Call the wiring function after each job is saved. |
 | `src/app/api/dev/auto-apply-curation/route.ts` | Create | Dev-only trigger: fetch from fantastic.jobs → store → extract → JSON summary. |
+
+---
+
+### Task 0: Stand up local Supabase on OrbStack
+
+**Files:**
+- Create: `supabase/config.toml` (via `supabase init`)
+- Create: `supabase/baseline_schema.sql` (prod schema dump — gitignored, not committed)
+- Modify: `.env.local` (repoint at the local stack; prod values kept as comments)
+
+This task is **interactive** — two steps need the operator to run a command themselves
+(CLI login, DB password). Drive it in the main session, not a subagent.
+
+- [ ] **Step 1: Initialise Supabase config**
+
+Run: `supabase init`
+If it prompts for editor settings, answer `n` to each. Expected: `supabase/config.toml` created.
+
+- [ ] **Step 2: Authenticate the Supabase CLI** *(operator runs this)*
+
+The operator runs: `supabase login`
+This opens a browser / prompts for an access token. Cannot be automated.
+
+- [ ] **Step 3: Link the production project** *(operator runs this)*
+
+The operator runs: `supabase link --project-ref pjgdcasgyxjooqwihivh`
+Prompts for the database password. Linking is required to dump the schema.
+
+- [ ] **Step 4: Dump the production schema (read-only)**
+
+Run: `supabase db dump -f supabase/baseline_schema.sql`
+This is **read-only** — it only reads DDL from prod. Expected: `baseline_schema.sql`
+contains `create table public.jobs ...`, `create table public.profiles ...`, etc.
+Add `supabase/baseline_schema.sql` to `.gitignore` — it is a local artifact, not source.
+
+- [ ] **Step 5: Start the local stack**
+
+Run: `supabase start`
+Expected: Docker images pull (first run is slow) and the command prints `API URL`
+(`http://127.0.0.1:54321`), `DB URL` (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`),
+`anon key`, and `service_role key`. Record these four values.
+
+- [ ] **Step 6: Load the schema into the local DB**
+
+Run: `psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -f supabase/baseline_schema.sql`
+Expected: tables create without error. Verify:
+`psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -c '\dt public.*'` lists `jobs`, `profiles`, etc.
+
+- [ ] **Step 7: Apply the in-progress branch migrations not yet in prod**
+
+The dump reflects current prod, which predates this branch's auto-apply tables. Check:
+`psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -c '\dt public.job_application_questions'`.
+If it is **absent**, apply the branch migrations in timestamp order:
+
+```bash
+for m in 20260521000000_add_auto_apply_questions \
+         20260521010000_add_application_skyvern_fields \
+         20260521020000_add_resume_override; do
+  psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -f "supabase/migrations/${m}.sql"
+done
+```
+
+If `job_application_questions` is already present, skip — prod already has them.
+
+- [ ] **Step 8: Repoint `.env.local` at the local stack**
+
+Edit `.env.local`: comment out the three production Supabase lines (keep them for later
+restore) and add the local values from Step 5:
+
+```
+# --- Production Supabase (restore to deploy / re-link) ---
+# NEXT_PUBLIC_SUPABASE_URL=https://pjgdcasgyxjooqwihivh.supabase.co
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=<prod anon key>
+# SUPABASE_SERVICE_ROLE_KEY=<prod service role key>
+# --- Local Supabase (OrbStack) ---
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<local anon key from Step 5>
+SUPABASE_SERVICE_ROLE_KEY=<local service_role key from Step 5>
+```
+
+Leave `RAPIDAPI_KEY`, `RAPIDAPI_PLAN`, `OPENAI_API_KEY`, and the `SKYVERN_*` lines unchanged.
+
+- [ ] **Step 9: Seed one user so the dev route has an owner**
+
+The dev route (Task 5) attaches jobs to a profile. A fresh local DB has none. Create one
+auth user — the `handle_new_user` trigger auto-creates its `profiles` row:
+
+```sql
+-- run against postgresql://postgres:postgres@127.0.0.1:54322/postgres
+insert into auth.users (id, instance_id, aud, role, email, encrypted_password,
+                        email_confirmed_at, created_at, updated_at)
+values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated',
+        'authenticated', 'dev@local.test', crypt('devpassword123', gen_salt('bf')),
+        now(), now(), now());
+```
+
+Verify a profile now exists:
+`psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -c 'select id, email from public.profiles;'`
+Record the profile `id` — it is the `userId` for Task 6 Step 3. If the trigger did not
+create the profile, insert one directly: `insert into public.profiles (id, email) select id, email from auth.users;`
+
+- [ ] **Step 10: Commit the config (not the dump)**
+
+```bash
+git add supabase/config.toml .gitignore
+git commit -m "chore(auto-apply): add local Supabase config for OrbStack dev"
+```
+
+`.env.local` is gitignored; `baseline_schema.sql` is gitignored — neither is committed.
 
 ---
 
@@ -107,14 +211,12 @@ end $$;
 create index if not exists jobs_posting_key_idx on public.jobs (posting_key);
 ```
 
-- [ ] **Step 2: Apply the migration**
+- [ ] **Step 2: Apply the migration to the local DB**
 
-Apply against the linked Supabase project. Either:
-- Supabase MCP: `apply_migration` with name `add_jobs_questions_status` and the SQL above, **or**
-- CLI: `supabase db push`
+Run: `psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -f supabase/migrations/20260521030000_add_jobs_questions_status.sql`
 
-Expected: migration applies cleanly; `jobs` now has `posting_key` and `questions_status`.
-Verify: `select column_name from information_schema.columns where table_name = 'jobs' and column_name in ('posting_key','questions_status');` returns both rows.
+Expected: applies cleanly; `jobs` now has `posting_key` and `questions_status`.
+Verify: `psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -c "select column_name from information_schema.columns where table_name = 'jobs' and column_name in ('posting_key','questions_status');"` returns both rows.
 
 Do **not** edit any existing file in `supabase/migrations/` — only add this new one.
 
@@ -543,19 +645,19 @@ result shows `questionsStatus` of `ready` / `unsupported` / `failed`. Most jobs 
 `unsupported` (not a Greenhouse/Lever/Ashby ATS) — that is expected (see "Reality" above).
 At least the Greenhouse/Lever/Ashby ones should be `ready` with a non-zero `questionCount`.
 
-- [ ] **Step 4: Verify the data landed in the database**
+- [ ] **Step 4: Verify the data landed in the local database**
 
-Via Supabase MCP `execute_sql` (or the SQL editor):
+Run against the local DB:
 
-```sql
+```bash
+psql 'postgresql://postgres:postgres@127.0.0.1:54322/postgres' -c "
 select j.title, j.company, j.questions_status, j.posting_key,
        count(q.id) as question_count
 from jobs j
 left join job_application_questions q on q.posting_key = j.posting_key
-where j.questions_status is not null
 group by j.id
 order by j.created_at desc
-limit 20;
+limit 20;"
 ```
 
 Expected: rows with `questions_status` populated; `ready` rows have a matching
