@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -13,11 +13,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { Loader2 } from 'lucide-react'
 import { PhoneField } from '@/components/auto-apply/phone-field'
 import type { PrefilledQuestion } from '@/lib/auto-apply/types'
 
 interface ApplicationFormProps {
   jobId: string
+  company?: string
 }
 
 type UnsupportedReason = 'no_url' | 'unsupported_ats' | 'extraction_failed'
@@ -34,6 +47,24 @@ interface QuestionsResponse {
 type AnswerValue = string | string[]
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+
+/** Submission status as reported by the apply/status endpoint. */
+type SubmissionStatus =
+  | 'none'
+  | 'draft'
+  | 'submitting'
+  | 'applied'
+  | 'failed'
+  | 'failed_verification'
+
+interface StatusResponse {
+  status: SubmissionStatus
+  screenshotUrl?: string | null
+  failureReason?: string | null
+  appUrl?: string | null
+}
+
+const POLL_INTERVAL_MS = 5000
 
 const UNSUPPORTED_MESSAGES: Record<UnsupportedReason, string> = {
   no_url: 'No application link for this job.',
@@ -61,7 +92,7 @@ function seedAnswer(
   return Array.isArray(raw) ? raw.join(', ') : raw
 }
 
-export function ApplicationForm({ jobId }: ApplicationFormProps) {
+export function ApplicationForm({ jobId, company }: ApplicationFormProps) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [response, setResponse] = useState<QuestionsResponse | null>(null)
@@ -69,6 +100,13 @@ export function ApplicationForm({ jobId }: ApplicationFormProps) {
 
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
+
+  // --- Submission (apply) state ---------------------------------------------
+  const [submission, setSubmission] = useState<StatusResponse | null>(null)
+  /** True from click until the first status response — guards against double-submit. */
+  const [submitPending, setSubmitPending] = useState(false)
+  const [applyError, setApplyError] = useState<string | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // --- Load questions on mount ---------------------------------------------
   useEffect(() => {
@@ -137,11 +175,9 @@ export function ApplicationForm({ jobId }: ApplicationFormProps) {
     setSaveState('idle')
   }
 
-  // --- Save -----------------------------------------------------------------
-  const handleSave = useCallback(async () => {
-    setSaveState('saving')
-    setSaveError(null)
-
+  // --- Persist answers (shared by Save and Apply flows) ---------------------
+  /** Serialize the current answers and PUT them. Returns true on success. */
+  const persistAnswers = useCallback(async (): Promise<boolean> => {
     // File-type questions are excluded; multiselect arrays are sent as-is (JSON arrays).
     const fileKeys = new Set(
       questions.filter((q) => q.fieldType === 'file').map((q) => q.fieldKey),
@@ -156,13 +192,21 @@ export function ApplicationForm({ jobId }: ApplicationFormProps) {
       }
     }
 
+    const res = await fetch(`/api/auto-apply/${jobId}/answers`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: serialized }),
+    })
+    return res.ok
+  }, [answers, jobId, questions])
+
+  // --- Save -----------------------------------------------------------------
+  const handleSave = useCallback(async () => {
+    setSaveState('saving')
+    setSaveError(null)
     try {
-      const res = await fetch(`/api/auto-apply/${jobId}/answers`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers: serialized }),
-      })
-      if (!res.ok) {
+      const ok = await persistAnswers()
+      if (!ok) {
         setSaveState('error')
         setSaveError('Failed to save your answers — try again.')
         return
@@ -172,7 +216,108 @@ export function ApplicationForm({ jobId }: ApplicationFormProps) {
       setSaveState('error')
       setSaveError('Network error while saving — try again.')
     }
-  }, [answers, jobId, questions])
+  }, [persistAnswers])
+
+  // --- Submission status polling -------------------------------------------
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }, [])
+
+  /** Fetch the current submission status once; stop polling on a terminal state. */
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/auto-apply/${jobId}/status`)
+      if (!res.ok) return
+      const data = (await res.json()) as StatusResponse
+      setSubmission(data)
+      if (data.status !== 'submitting') {
+        stopPolling()
+      }
+    } catch {
+      // Transient error — keep polling, the next tick may succeed.
+    }
+  }, [jobId, stopPolling])
+
+  const startPolling = useCallback(() => {
+    if (pollRef.current) return
+    pollRef.current = setInterval(() => {
+      void fetchStatus()
+    }, POLL_INTERVAL_MS)
+  }, [fetchStatus])
+
+  // On mount: read current submission state so an in-flight/finished run shows up.
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadStatus() {
+      try {
+        const res = await fetch(`/api/auto-apply/${jobId}/status`)
+        if (!res.ok || cancelled) return
+        const data = (await res.json()) as StatusResponse
+        if (cancelled) return
+        setSubmission(data)
+        if (data.status === 'submitting') startPolling()
+      } catch {
+        // Non-critical — the user can still trigger Apply.
+      }
+    }
+
+    loadStatus()
+    return () => {
+      cancelled = true
+    }
+  }, [jobId, startPolling])
+
+  // Clean up the poll interval on unmount.
+  useEffect(() => stopPolling, [stopPolling])
+
+  // --- Apply ----------------------------------------------------------------
+  const handleApply = useCallback(async () => {
+    setApplyError(null)
+    setSubmitPending(true)
+    try {
+      // 1. Persist the latest edits before submitting.
+      const saved = await persistAnswers()
+      if (!saved) {
+        setApplyError('Failed to save your answers — try again.')
+        return
+      }
+
+      // 2. Trigger the real Skyvern submission.
+      const res = await fetch(`/api/auto-apply/${jobId}/apply`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (!res.ok || data?.error) {
+        setApplyError(
+          data?.error?.message ?? 'Could not start the application — try again.',
+        )
+        return
+      }
+
+      // 3. Reflect submitting state and begin polling for the result.
+      setSubmission({
+        status: 'submitting',
+        appUrl: data.appUrl ?? null,
+        screenshotUrl: null,
+        failureReason: null,
+      })
+      startPolling()
+    } catch {
+      setApplyError('Network error while submitting — try again.')
+    } finally {
+      setSubmitPending(false)
+    }
+  }, [jobId, persistAnswers, startPolling])
+
+  const submissionStatus = submission?.status ?? 'none'
+  const applyDisabled =
+    submitPending ||
+    submissionStatus === 'submitting' ||
+    submissionStatus === 'applied'
 
   // --- Render: loading ------------------------------------------------------
   if (loading) {
@@ -351,16 +496,129 @@ export function ApplicationForm({ jobId }: ApplicationFormProps) {
                 ? 'Saved'
                 : 'Save'}
           </Button>
-          <Button type="button" variant="secondary" disabled>
-            Apply (coming soon)
-          </Button>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button type="button" variant="secondary" disabled={applyDisabled}>
+                {submissionStatus === 'submitting'
+                  ? 'Submitting…'
+                  : submissionStatus === 'applied'
+                    ? 'Submitted'
+                    : 'Apply with Skyvern'}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Submit this application?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Skyvern will fill out and submit a real application
+                  {company ? ` to ${company}` : ''} on the employer&apos;s website,
+                  using your saved answers and your profile CV. This actually
+                  applies — it can&apos;t be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => void handleApply()}>
+                  Yes, submit
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
           {saveState === 'error' && (
             <span className="text-sm text-destructive">
               {saveError ?? 'Failed to save — try again.'}
             </span>
           )}
+          {applyError && (
+            <span className="text-sm text-destructive">{applyError}</span>
+          )}
         </div>
       </form>
+
+      <SubmissionPanel submission={submission} />
+    </div>
+  )
+}
+
+/** Renders the current submission state below the form. */
+function SubmissionPanel({
+  submission,
+}: {
+  submission: StatusResponse | null
+}) {
+  if (!submission) return null
+  const { status, screenshotUrl, failureReason, appUrl } = submission
+
+  if (status === 'none' || status === 'draft') return null
+
+  const screenshot = screenshotUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={screenshotUrl}
+      alt="Application form screenshot"
+      className="mt-3 w-full rounded-md border border-border"
+    />
+  ) : null
+
+  if (status === 'submitting') {
+    return (
+      <div className="rounded-md border border-border bg-muted/50 px-3 py-3 text-sm">
+        <div className="flex items-center gap-2 text-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          <span>
+            Submitting your application via Skyvern… this can take 1–5 minutes.
+          </span>
+        </div>
+        {appUrl && (
+          <a
+            href={appUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-block text-sm font-medium text-primary underline underline-offset-2"
+          >
+            Watch the run
+          </a>
+        )}
+      </div>
+    )
+  }
+
+  if (status === 'applied') {
+    return (
+      <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-3 text-sm">
+        <p className="font-medium text-emerald-700 dark:text-emerald-400">
+          ✓ Application submitted.
+        </p>
+        {screenshot}
+      </div>
+    )
+  }
+
+  if (status === 'failed_verification') {
+    return (
+      <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm">
+        <p className="font-medium text-amber-700 dark:text-amber-400">
+          Submission stopped — the form could not be verified, so nothing was
+          submitted.
+        </p>
+        {failureReason && (
+          <p className="mt-1 text-muted-foreground">{failureReason}</p>
+        )}
+        {screenshot}
+      </div>
+    )
+  }
+
+  // status === 'failed'
+  return (
+    <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm">
+      <p className="font-medium text-destructive">Submission failed.</p>
+      {failureReason && (
+        <p className="mt-1 text-muted-foreground">{failureReason}</p>
+      )}
+      {screenshot}
     </div>
   )
 }

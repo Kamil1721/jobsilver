@@ -345,7 +345,7 @@ export default function JobDetailPage() {
                 </Button>
               )}
             </div>
-            <ApplicationForm jobId={job.id} />
+            <ApplicationForm jobId={job.id} company={job.company ?? undefined} />
           </div>
         </div>
       </div>
