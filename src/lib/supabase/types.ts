@@ -188,6 +188,9 @@ export interface Database {
           failure_notes: string | null
           // User notes
           notes: string | null
+          // Auto-apply extraction
+          posting_key: string | null
+          questions_status: string
         }
         Insert: {
           id?: string
@@ -230,6 +233,9 @@ export interface Database {
           failure_notes?: string | null
           // User notes
           notes?: string | null
+          // Auto-apply extraction
+          posting_key?: string | null
+          questions_status?: string
         }
         Update: {
           id?: string
@@ -272,6 +278,9 @@ export interface Database {
           failure_notes?: string | null
           // User notes
           notes?: string | null
+          // Auto-apply extraction
+          posting_key?: string | null
+          questions_status?: string
         }
       }
       user_job_quotas: {
