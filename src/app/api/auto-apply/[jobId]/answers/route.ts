@@ -14,7 +14,10 @@ const answersBodySchema = z.object({
   answers: z
     .record(
       z.string().max(MAX_ANSWER_KEY_LENGTH, `Question key must be under ${MAX_ANSWER_KEY_LENGTH} characters`),
-      z.string().max(MAX_ANSWER_VALUE_LENGTH, `Answer must be under ${MAX_ANSWER_VALUE_LENGTH} characters`)
+      z.union([
+        z.string().max(MAX_ANSWER_VALUE_LENGTH, `Answer must be under ${MAX_ANSWER_VALUE_LENGTH} characters`),
+        z.array(z.string().max(MAX_ANSWER_VALUE_LENGTH, `Each answer option must be under ${MAX_ANSWER_VALUE_LENGTH} characters`)),
+      ])
     )
     .refine(
       (obj) => Object.keys(obj).length <= MAX_ANSWER_ENTRIES,
@@ -82,9 +85,19 @@ export async function PUT(
     )
   }
 
-  const postingKey = job.application_url
-    ? computePostingKey(job.application_url)
-    : computePostingKey(jobId)
+  if (!job.application_url) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'NO_APPLICATION_URL',
+          message: 'This job has no application URL — answers cannot be saved.',
+        },
+      },
+      { status: 400 },
+    )
+  }
+
+  const postingKey = computePostingKey(job.application_url)
 
   const { error: upsertError } = await supabase
     .from('job_applications')

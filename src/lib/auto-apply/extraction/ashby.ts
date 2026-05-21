@@ -10,6 +10,19 @@ import type { ApplicationQuestion, FieldType, QuestionOption } from '@/lib/auto-
  * instead — it is the same API that powers the jobs.ashbyhq.com job board
  * UI and requires no authentication.
  *
+ * IMPORTANT — GraphQL schema note: the `fieldEntries.field` field is typed as
+ * `JSON!` (a scalar) in Ashby's schema, NOT as a named object type. This means
+ * it must be selected WITHOUT a sub-selection set (i.e. just `field`, not
+ * `field { id path ... }`). The server returns it as a fully-populated JSON
+ * object at runtime. Attempting to add a sub-selection would cause a
+ * GRAPHQL_VALIDATION_FAILED error.
+ *
+ * The returned `field` object shape (verified against live jobs.ashbyhq.com):
+ *   { id, path, humanReadablePath, title, type, isNullable, isPrivate,
+ *     isDeactivated, isMany, metadata, selectableValues?, __autoSerializationID }
+ * For ValueSelect/Select/MultiSelect, `selectableValues` is an array of
+ *   { label: string; value: string }.
+ *
  * Field type mapping (field.type values observed in the wild):
  *   String    → text
  *   Email     → text   (semanticType classifier will detect 'email')
@@ -18,6 +31,7 @@ import type { ApplicationQuestion, FieldType, QuestionOption } from '@/lib/auto-
  *   LongText  → textarea
  *   File      → file
  *   Select    → select  (with options from selectableValues)
+ *   ValueSelect → select (with options from selectableValues)
  *   MultiSelect → multiselect (with options from selectableValues)
  *   Boolean   → select  (synthesized Yes / No options)
  *   Date      → text
@@ -63,7 +77,8 @@ interface AshbyFieldEntry {
     path: string
     title: string
     type: string
-    selectableValues?: Array<{ id: string; label: string }>
+    /** Populated for Select / ValueSelect / MultiSelect fields. */
+    selectableValues?: Array<{ label: string; value: string }>
   }
   isRequired: boolean
   isHidden: boolean | null
@@ -124,7 +139,7 @@ function buildOptions(entry: AshbyFieldEntry): QuestionOption[] | undefined {
       entry.field.selectableValues.length > 0) {
     return entry.field.selectableValues.map((v) => ({
       label: v.label,
-      value: v.id,
+      value: v.value,
     }))
   }
 

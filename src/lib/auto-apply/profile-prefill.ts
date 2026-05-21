@@ -70,9 +70,22 @@ export function prefillFromProfile(
     else if (keyLower === 'email' || labelLower === 'email') {
       prefilledValue = fill(profile.email)
     }
-    // Phone — matched via semanticType (not label/key), per spec
+    // Phone — prefer structured E.164 from screening_answers; fall back to
+    // profile.phone (free-text) only when the structured fields are absent.
     else if (q.semanticType === 'phone') {
-      prefilledValue = fill(profile.phone)
+      const code = sa?.phone_country_code?.trim()
+      const number = sa?.phone_number?.trim()
+      if (code && number) {
+        // Normalize to E.164: strip leading '+' from code, then prepend '+'
+        const normalizedCode = code.replace(/^\+/, '')
+        const normalizedNumber = number.replace(/\D/g, '')
+        if (normalizedCode && normalizedNumber) {
+          prefilledValue = `+${normalizedCode}${normalizedNumber}`
+        }
+      }
+      if (!prefilledValue) {
+        prefilledValue = fill(profile.phone)
+      }
     }
     // LinkedIn
     else if (keyLower.includes('linkedin') || labelLower.includes('linkedin')) {

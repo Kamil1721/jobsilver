@@ -78,15 +78,17 @@ export async function GET(
     ? prefillFromProfile(questions, profile as Profile)
     : questions.map((q) => ({ ...q, prefilledFromProfile: false as const }))
 
-  // Load any existing draft answers for this (user, job) pair
+  // Load any existing draft answers for this (user, job) pair.
+  // Use maybeSingle() to avoid logging a PGRST116 error for the common no-draft case.
   const { data: draft } = await supabase
     .from('job_applications')
     .select('answers')
     .eq('user_id', user.id)
     .eq('job_id', jobId)
-    .single()
+    .maybeSingle()
 
-  const savedAnswers: Record<string, string> = (draft?.answers as Record<string, string>) ?? {}
+  const savedAnswers: Record<string, string | string[]> =
+    (draft?.answers as Record<string, string | string[]>) ?? {}
 
-  return NextResponse.json({ supported: true, questions: prefilled, savedAnswers })
+  return NextResponse.json({ supported: true, ats: platform, questions: prefilled, savedAnswers })
 }
