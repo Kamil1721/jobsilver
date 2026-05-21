@@ -192,7 +192,9 @@ export async function POST(
       url: job.application_url,
       prompt,
       title: `Apply: ${job.title} @ ${job.company}`,
-      maxSteps: 40,
+      // Hard cap: a stuck run aborts cheaply instead of looping for 30+ min.
+      // ~12 steps is enough for a single-page form; raise only if real runs need it.
+      maxSteps: 12,
       dataExtractionSchema: {
         type: 'object',
         properties: {
