@@ -7,6 +7,7 @@ import type { JobMatch } from '@/lib/email/templates/job-matches'
 import { getDailyJobLimit } from '@/lib/stripe/plans'
 import { checkRateLimit } from '@/lib/security/rate-limit'
 import { sendCronFailureAlert, sendCurationSummary } from '@/lib/email/cron-alerts'
+import { extractAndStoreForJob } from '@/lib/auto-apply/curation-extraction'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes max for Vercel
@@ -467,6 +468,12 @@ async function fetchAndCurateJobs(
 
         jobsCurated++
         existingIds.add(job.external_id)
+
+        // Extract application questions for this posting (auto-apply pipeline).
+        // Best-effort: never throws — failure is recorded on the job row.
+        if (savedJob && job.application_url) {
+          await extractAndStoreForJob(supabase, savedJob.id, job.application_url)
+        }
 
         // Track curated job for email notification (top 3)
         if (curatedJobs.length < 3 && savedJob) {
