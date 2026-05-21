@@ -18,6 +18,7 @@ import { JobAIChat } from "@/components/ai-assistant"
 import { CVGeneratorDialog } from "@/components/cv"
 import { FeatureGate } from "@/components/ui/feature-gate"
 import { JobNotes } from "@/components/job-notes"
+import { ApplicationForm } from "@/components/auto-apply/application-form"
 
 export default function JobDetailPage() {
   const params = useParams()
@@ -307,14 +308,30 @@ export default function JobDetailPage() {
                 </Button>
               </div>
             )}
+
+            {/* AI Application Assistant */}
+            <div className="mt-4">
+              <div className="flex items-center gap-1.5 mb-2">
+                <MessageSquare className="w-3 h-3" />
+                <h2 className="text-xs font-semibold">AI Application Assistant</h2>
+              </div>
+              <JobAIChat job={job} profile={profile} />
+            </div>
+
+            {/* Notes Section */}
+            <JobNotes
+              jobId={job.id}
+              initialNotes={job.notes}
+              onNotesChange={handleNotesChange}
+            />
           </div>
 
-          {/* AI Application Assistant - Right side */}
+          {/* Application Form - Right side */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
-                <MessageSquare className="w-3 h-3" />
-                <h2 className="text-xs font-semibold">AI Application Assistant</h2>
+                <Briefcase className="w-3 h-3" />
+                <h2 className="text-xs font-semibold">Application Questions</h2>
               </div>
               {job.application_url && (
                 <Button
@@ -328,14 +345,7 @@ export default function JobDetailPage() {
                 </Button>
               )}
             </div>
-            <JobAIChat job={job} profile={profile} />
-
-            {/* Notes Section */}
-            <JobNotes
-              jobId={job.id}
-              initialNotes={job.notes}
-              onNotesChange={handleNotesChange}
-            />
+            <ApplicationForm jobId={job.id} />
           </div>
         </div>
       </div>
