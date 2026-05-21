@@ -26,6 +26,8 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Loader2 } from 'lucide-react'
 import { PhoneField } from '@/components/auto-apply/phone-field'
+import { ResumeField } from '@/components/auto-apply/resume-field'
+import type { ResumeInfo } from '@/components/auto-apply/resume-field'
 import type { PrefilledQuestion } from '@/lib/auto-apply/types'
 
 interface ApplicationFormProps {
@@ -41,7 +43,7 @@ interface QuestionsResponse {
   ats?: 'greenhouse' | 'lever' | 'ashby'
   questions?: PrefilledQuestion[]
   savedAnswers?: Record<string, string | string[]>
-  profileCv?: { fileName: string } | null
+  resume?: ResumeInfo | null
 }
 
 type AnswerValue = string | string[]
@@ -458,16 +460,11 @@ export function ApplicationForm({ jobId, company }: ApplicationFormProps) {
                   <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
                     Optional — not included.
                   </p>
-                ) : response?.profileCv ? (
-                  <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground">
-                    <span aria-hidden>✓</span>{' '}
-                    <span className="font-medium">{response.profileCv.fileName}</span>
-                    {' '}— attached from your profile
-                  </p>
                 ) : (
-                  <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                    No CV on your profile — add one in your profile settings.
-                  </p>
+                  <ResumeField
+                    jobId={jobId}
+                    initialResume={response?.resume ?? null}
+                  />
                 )
               ) : (
                 <Input

@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/security/rate-limit'
 import { detectAts } from '@/lib/auto-apply/platform-detector'
 import { getOrExtractQuestions } from '@/lib/auto-apply/questions-store'
 import { prefillFromProfile } from '@/lib/auto-apply/profile-prefill'
 import type { Profile } from '@/lib/supabase/types'
+
+const SIGNED_URL_TTL = 600 // seconds
+
+/** Sign a path in the cvs bucket via the service client. */
+async function signCvPath(path: string): Promise<string | null> {
+  const serviceClient = createServiceClient()
+  const { data, error } = await serviceClient.storage
+    .from('cvs')
+    .createSignedUrl(path, SIGNED_URL_TTL)
+  if (error || !data?.signedUrl) return null
+  return data.signedUrl
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -78,11 +90,11 @@ export async function GET(
     ? prefillFromProfile(questions, profile as Profile)
     : questions.map((q) => ({ ...q, prefilledFromProfile: false as const }))
 
-  // Load any existing draft answers for this (user, job) pair.
+  // Load any existing draft answers + resume override for this (user, job) pair.
   // Use maybeSingle() to avoid logging a PGRST116 error for the common no-draft case.
   const { data: draft } = await supabase
     .from('job_applications')
-    .select('answers')
+    .select('answers, resume_override_path, resume_override_filename')
     .eq('user_id', user.id)
     .eq('job_id', jobId)
     .maybeSingle()
@@ -90,19 +102,45 @@ export async function GET(
   const savedAnswers: Record<string, string | string[]> =
     (draft?.answers as Record<string, string | string[]>) ?? {}
 
-  // The user's CV lives in their profile (cv_url is a storage path like
-  // `{userId}/{timestamp}-{filename}`). Surface just the file basename so the
-  // UI can show it as already attached.
-  const cvUrl = (profile as Profile | null)?.cv_url
-  const profileCv: { fileName: string } | null = cvUrl
-    ? { fileName: cvUrl.split('/').pop() ?? cvUrl }
-    : null
+  // draft is typed as `any` by Supabase (job_applications not yet in generated types)
+  const overridePath: string | null = draft?.resume_override_path ?? null
+  const overrideFilename: string | null = draft?.resume_override_filename ?? null
+
+  // Build the richer `resume` object describing whichever CV is currently in effect.
+  type ResumeInfo = {
+    source: 'profile' | 'override'
+    fileName: string
+    viewUrl: string
+  } | null
+
+  let resume: ResumeInfo = null
+
+  if (overridePath && overrideFilename) {
+    // Per-application override takes priority.
+    const viewUrl = await signCvPath(overridePath)
+    resume = {
+      source: 'override',
+      fileName: overrideFilename,
+      viewUrl: viewUrl ?? '',
+    }
+  } else {
+    // Fall back to the profile CV.
+    const cvUrl = (profile as Profile | null)?.cv_url
+    if (cvUrl) {
+      const viewUrl = await signCvPath(cvUrl)
+      resume = {
+        source: 'profile',
+        fileName: cvUrl.split('/').pop() ?? cvUrl,
+        viewUrl: viewUrl ?? '',
+      }
+    }
+  }
 
   return NextResponse.json({
     supported: true,
     ats: platform,
     questions: prefilled,
     savedAnswers,
-    profileCv,
+    resume,
   })
 }

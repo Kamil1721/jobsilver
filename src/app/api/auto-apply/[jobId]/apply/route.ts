@@ -54,10 +54,10 @@ export async function POST(
     )
   }
 
-  // --- Load draft answers ---
+  // --- Load draft answers + resume override ---
   const { data: draft } = await supabase
     .from('job_applications')
-    .select('answers, status, skyvern_run_id')
+    .select('answers, status, skyvern_run_id, resume_override_path')
     .eq('user_id', user.id)
     .eq('job_id', jobId)
     .maybeSingle()
@@ -99,35 +99,47 @@ export async function POST(
     )
   }
 
-  // --- Load profile and sign CV URL ---
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('cv_url')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.cv_url) {
-    return NextResponse.json(
-      {
-        error: {
-          code: 'NO_CV',
-          message: 'Add a CV to your profile before applying.',
-        },
-      },
-      { status: 400 }
-    )
-  }
+  // --- Resolve and sign CV URL ---
+  // Prefer the per-application resume override; fall back to the profile CV.
+  // draft is typed as `any` by Supabase (job_applications not yet in generated types)
+  const resumeOverridePath: string | null = draft?.resume_override_path ?? null
 
   const serviceClient = createServiceClient()
+  let cvPathToSign: string | null = resumeOverridePath
+
+  if (!cvPathToSign) {
+    // No override — use the profile CV.
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('cv_url')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile?.cv_url) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'NO_CV',
+            message: 'Add a CV to your profile before applying.',
+          },
+        },
+        { status: 400 },
+      )
+    }
+
+    cvPathToSign = profile.cv_url
+  }
+
   const { data: signedData, error: signedError } = await serviceClient.storage
     .from('cvs')
-    .createSignedUrl(profile.cv_url, 3600)
+    // cvPathToSign is guaranteed non-null here — either the override path or profile.cv_url.
+    .createSignedUrl(cvPathToSign as string, 3600)
 
   if (signedError || !signedData?.signedUrl) {
     console.error('[auto-apply/apply] failed to sign CV URL', signedError)
     return NextResponse.json(
       { error: { code: 'CV_SIGN_FAILED', message: 'Failed to prepare your CV for upload.' } },
-      { status: 500 }
+      { status: 500 },
     )
   }
 
