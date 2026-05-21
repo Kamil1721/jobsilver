@@ -29,7 +29,7 @@ export async function extractAndStoreForJob(
   applicationUrl: string,
 ): Promise<ExtractAndStoreResult> {
   const postingKey = computePostingKey(applicationUrl)
-  let status: QuestionsStatus
+  let status: QuestionsStatus = 'failed'
   let questionCount = 0
   let error: string | undefined
 
@@ -59,5 +59,5 @@ export async function extractAndStoreForJob(
     )
   }
 
-  return { postingKey, status: status!, questionCount, error }
+  return { postingKey, status, questionCount, error }
 }

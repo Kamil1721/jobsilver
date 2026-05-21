@@ -16,7 +16,9 @@ export const maxDuration = 120
  *
  *   GET /api/dev/auto-apply-curation?limit=5&userId=<uuid>
  *
- * Returns 404 in production.
+ * Local-development only — returns 404 on every Vercel deployment (production
+ * and preview alike) because Vercel sets NODE_ENV='production' in both
+ * environments. Only reachable via `npm run dev` on a local dev server.
  */
 export async function GET(request: NextRequest) {
   if (process.env.NODE_ENV === 'production') {
