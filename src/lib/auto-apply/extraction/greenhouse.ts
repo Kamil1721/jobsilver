@@ -83,7 +83,17 @@ export async function extractGreenhouseQuestions(url: string): Promise<Applicati
     const label = question.label ?? 'Question'
     const required = question.required === true
 
+    // A Greenhouse "question" (e.g. Resume/CV, Cover Letter) can carry both an
+    // input_file field and a textarea companion (upload OR paste). When a file
+    // field is present, emit only the file field and drop the textarea so the
+    // UI shows a single control for the question.
+    const hasFileField = (question.fields ?? []).some((f) => f.type === 'input_file')
+
     for (const field of question.fields ?? []) {
+      if (hasFileField && field.type === 'textarea') {
+        continue
+      }
+
       const fieldType = FIELD_TYPE_MAP[field.type ?? '']
       if (!fieldType) {
         // Unknown / unsupported field type — skip rather than guess.

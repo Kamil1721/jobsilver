@@ -28,6 +28,7 @@ interface QuestionsResponse {
   ats?: 'greenhouse' | 'lever' | 'ashby'
   questions?: PrefilledQuestion[]
   savedAnswers?: Record<string, string | string[]>
+  profileCv?: { fileName: string } | null
 }
 
 type AnswerValue = string | string[]
@@ -307,10 +308,18 @@ export function ApplicationForm({ jobId }: ApplicationFormProps) {
                     ))}
                   </SelectContent>
                 </Select>
-              ) : q.semanticType === 'file' ? (
-                <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                  Your profile CV will be used as the résumé.
-                </p>
+              ) : q.fieldType === 'file' ? (
+                response?.profileCv ? (
+                  <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-foreground">
+                    <span aria-hidden>✓</span>{' '}
+                    <span className="font-medium">{response.profileCv.fileName}</span>
+                    {' '}— attached from your profile
+                  </p>
+                ) : (
+                  <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                    No CV on your profile — add one in your profile settings.
+                  </p>
+                )
               ) : (
                 <Input
                   id={fieldId}

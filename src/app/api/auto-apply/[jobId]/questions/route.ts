@@ -90,5 +90,19 @@ export async function GET(
   const savedAnswers: Record<string, string | string[]> =
     (draft?.answers as Record<string, string | string[]>) ?? {}
 
-  return NextResponse.json({ supported: true, ats: platform, questions: prefilled, savedAnswers })
+  // The user's CV lives in their profile (cv_url is a storage path like
+  // `{userId}/{timestamp}-{filename}`). Surface just the file basename so the
+  // UI can show it as already attached.
+  const cvUrl = (profile as Profile | null)?.cv_url
+  const profileCv: { fileName: string } | null = cvUrl
+    ? { fileName: cvUrl.split('/').pop() ?? cvUrl }
+    : null
+
+  return NextResponse.json({
+    supported: true,
+    ats: platform,
+    questions: prefilled,
+    savedAnswers,
+    profileCv,
+  })
 }
