@@ -162,6 +162,7 @@ export async function POST(
     '',
     `For the Resume/CV file-upload field, upload the file located at this URL: ${cvSignedUrl}`,
     'Use the file upload control to attach it — do not type the URL into a text field.',
+    'IMPORTANT: Upload the CV file to the Resume/CV field ONLY. If there is a separate Cover Letter upload field, leave it completely empty — do not attach the CV or any other file to it.',
     '',
     'After filling every field:',
     '1. Read back the current value shown in each field and verify it matches the intended value.',
