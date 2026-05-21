@@ -453,6 +453,16 @@ git commit -m "feat(auto-apply): extract questions during daily curation"
 
 ### Task 5: Dev-only trigger route
 
+> **AMENDMENT (2026-05-21, post-run):** The original Task 5 below fetched only from
+> fantastic.jobs. On the first dev run, fantastic.jobs returned **HTTP 429 — BASIC
+> monthly Jobs quota exhausted**. The route was therefore changed to call
+> `searchAllSources()` from `@/lib/job-sources` instead: it pulls from Greenhouse,
+> Lever, and Ashby (free ATS APIs, no quota) **and** fantastic.jobs in parallel,
+> catching per-source errors. Greenhouse/Lever/Ashby jobs are also the ones whose
+> questions the pipeline can actually extract, so this is strictly better for the
+> demo. The fantastic.jobs path rejoins automatically once its quota resets. See
+> Task 5b for the implemented version.
+
 **Files:**
 - Create: `src/app/api/dev/auto-apply-curation/route.ts`
 
