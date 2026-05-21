@@ -1,0 +1,7 @@
+# Supabase local development artifacts
+.branches
+.temp
+.env
+
+# One-time production schema dump for local DB bootstrap (not source).
+baseline_schema.sql
