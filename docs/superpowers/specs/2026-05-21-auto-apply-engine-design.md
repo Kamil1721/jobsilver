@@ -254,6 +254,20 @@ pricing page — needs revisiting.
   shapes are supported and how unsupported shapes degrade (e.g. fall back to
   manual-apply rather than a partial submission).
 
+### 12.4 Email verification codes block full-auto submit (KNOWN GAP — observed 2026-05-21)
+Some application flows (observed on a real Greenhouse submission) require an **email
+verification code** to complete the submit. Skyvern can consume a code via its
+`totp_url` mechanism, but **Skyvern does not read the applicant's inbox** — something
+must retrieve the code and feed it in. Until resolved, full-auto submit cannot
+complete on forms that require email verification.
+Options (deferred — "note it for now" per the owner, 2026-05-21):
+- **Manual hand-off** — Skyvern pauses at the code step; the user enters the code. No
+  email access; ~95% automated. Simplest.
+- **JobSilver reads the user's Gmail** — extend the existing Google OAuth with a Gmail
+  read scope; feed the code to Skyvern's `totp_url`. Fully auto, but requires Google's
+  restricted-scope security review — a real project.
+- **Dedicated inbox / IMAP** — give Skyvern IMAP access to a mailbox where codes land.
+
 ## 13. Success Criteria
 
 - A curated job reaches the dashboard with an accurate, complete question set.
