@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import type { ActiveAnnouncement, SubscriptionPlan } from '@/lib/supabase/types'
 import {
   checkRateLimit,
@@ -81,7 +81,13 @@ export async function GET(request: NextRequest) {
     // P0 FIX: Use parameterized query instead of string interpolation
     // Supabase's .or() with string interpolation can be vulnerable
     // Instead, we'll filter ends_at in application code after fetching
-    const { data: announcements, error } = await supabase
+    //
+    // Service client: the hardening migrations revoked anon privileges on
+    // profiles, and the admin RLS policy on admin_announcements references
+    // profiles in its EXISTS subquery — so an anonymous request errors with
+    // "permission denied for table profiles" before RLS can even filter.
+    // This is a deliberate public read; plan targeting is enforced above.
+    const { data: announcements, error } = await createServiceClient()
       .from('admin_announcements')
       .select('id, message, type, priority, target_plans, ends_at, updated_at')
       .eq('is_active', true)
