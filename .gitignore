@@ -5,6 +5,7 @@ node_modules/
 
 # Build outputs
 .next/
+.next-dev/
 out/
 build/
 dist/
@@ -61,3 +62,12 @@ supabase/.temp
 
 # Project instructions (contains internal architecture details)
 CLAUDE.md
+
+# Tooling output & scratch (not part of the app)
+graphify-out/
+design-refs/
+.debugfix-active
+.debugfix-blocks
+.db-write-allowed
+jobsilver-e2e-*.txt
+jobsilver-e2e-*.pdf
