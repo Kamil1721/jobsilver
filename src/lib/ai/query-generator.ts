@@ -1,10 +1,7 @@
-import OpenAI from 'openai'
+import { openai } from '@/lib/ai/openai-client'
 import type { JobFilters, ScreeningAnswers } from '@/lib/supabase/types'
 import type { ParsedCV } from './cv-parser'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
 
 // =============================================================================
 // TYPES

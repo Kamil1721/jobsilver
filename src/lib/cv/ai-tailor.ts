@@ -3,16 +3,13 @@
  * Uses AI to tailor CV content for specific job applications
  */
 
-import OpenAI from 'openai'
+import { openai } from '@/lib/ai/openai-client'
 import type { CVData } from './pdf-generator'
 import { sanitizeForPrompt, sanitizeAIOutput } from '@/lib/security/validation'
 
 // Re-export sanitizeAIOutput for backwards compatibility
 export { sanitizeAIOutput }
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
 
 // Timeout for OpenAI calls (30 seconds)
 const AI_TIMEOUT_MS = 30000

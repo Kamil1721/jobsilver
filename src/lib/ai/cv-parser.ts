@@ -1,4 +1,4 @@
-import OpenAI from 'openai'
+import { openai } from '@/lib/ai/openai-client'
 import {
   ServicePrincipalCredentials,
   PDFServices,
@@ -33,9 +33,6 @@ function sanitizeCVText(input: string | null | undefined, maxLength: number = 15
     .trim()
 }
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
 
 export interface ParsedCV {
   skills: string[]

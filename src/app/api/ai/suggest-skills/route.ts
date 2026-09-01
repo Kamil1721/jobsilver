@@ -3,13 +3,10 @@ import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit } from '@/lib/security/rate-limit'
 import { sanitizeForPrompt } from '@/lib/security/validation'
 import { canUseAI } from '@/lib/ai/usage-tracker'
-import OpenAI from 'openai'
+import { openai } from '@/lib/ai/openai-client'
 
 export const dynamic = 'force-dynamic'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
 
 // Input validation limits
 const MAX_WORK_HISTORY = 10

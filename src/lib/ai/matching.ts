@@ -1,9 +1,6 @@
-import OpenAI from 'openai'
+import { openai } from '@/lib/ai/openai-client'
 import type { Job, ApplicationQuestion } from '@/lib/supabase/types'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
 
 /**
  * Sanitize text for AI prompts to prevent prompt injection attacks

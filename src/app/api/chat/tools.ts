@@ -1,12 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { SubscriptionPlan } from '@/lib/supabase/types'
 import OpenAI from 'openai'
+import { openai } from '@/lib/ai/openai-client'
 import { canAccessFeature } from '@/lib/features/config'
 import { canUseAI, incrementUsage } from '@/lib/ai/usage-tracker'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
 
 // Tool definitions for OpenAI
 export const chatTools: OpenAI.Chat.ChatCompletionTool[] = [

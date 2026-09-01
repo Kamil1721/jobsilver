@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import OpenAI from 'openai'
+import { openai } from '@/lib/ai/openai-client'
 import { chatTools, handleToolCall } from './tools'
 import {
   buildUserContext,
@@ -22,9 +23,6 @@ if (!process.env.OPENAI_API_KEY) {
   console.error('OPENAI_API_KEY environment variable is required')
 }
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
 
 // Configuration
 const MAX_MESSAGE_LENGTH = 4000
