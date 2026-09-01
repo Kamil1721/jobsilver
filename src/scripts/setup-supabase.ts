@@ -35,35 +35,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   }
 });
 
-async function executeSQLViaAPI(sql: string): Promise<{ success: boolean; error?: string; data?: unknown }> {
-  try {
-    // Try the Supabase SQL API endpoint (available in newer versions)
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_SERVICE_ROLE_KEY,
-        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      },
-      body: JSON.stringify({ sql })
-    });
-
-    if (response.status === 404) {
-      return { success: false, error: 'SQL API not available' };
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { success: false, error: errorText };
-    }
-
-    const data = await response.json();
-    return { success: true, data };
-  } catch (error) {
-    return { success: false, error: String(error) };
-  }
-}
-
 async function verifyTableExists(tableName: string): Promise<boolean> {
   try {
     const response = await fetch(

@@ -6,7 +6,7 @@
  * eliminating the need for separate scraping.
  */
 
-import type { Job, ScrapedQuestion, FormStructure, PlatformType } from '@/lib/supabase/types'
+import type { Job, ScrapedQuestion, FormStructure } from '@/lib/supabase/types'
 
 // Greenhouse
 import {

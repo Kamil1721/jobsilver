@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Checkbox } from "@/components/ui/checkbox"
 import { JobCard, JobCardSkeleton } from "./job-card"
-import type { Job, JobStatus } from "@/lib/supabase/types"
+import type { Job } from "@/lib/supabase/types"
 
 // 3-column system status types
 type ColumnStatus = "discovered" | "applied" | "offer"
@@ -23,8 +23,6 @@ interface KanbanColumnProps {
   count: number
   isLoading?: boolean
   onDiscardJob?: (jobId: string) => void
-  onFavoriteToggle?: (jobId: string, favorited: boolean) => void
-  onReviewSubmit?: (jobId: string) => void
   // Selection props for bulk actions
   isSelectable?: boolean
   selectedJobIds?: Set<string>
@@ -32,27 +30,17 @@ interface KanbanColumnProps {
   onSelectAllInColumn?: (jobIds: string[], selected: boolean) => void
   // Job limit warning (only for Free users in New Matches column)
   jobLimitWarning?: {
-    show: boolean
     currentCount: number
     maxCount: number
     atLimit: boolean
   }
 }
 
-// Status colors for the 3-column system - metallic theme with subtle dots
-const statusColors: Record<ColumnStatus, { dot: string; accent: string }> = {
-  discovered: {
-    dot: "bg-zinc-500 dark:bg-zinc-400",
-    accent: "group-hover:border-zinc-400/30 dark:group-hover:border-white/[0.08]",
-  },
-  applied: {
-    dot: "bg-zinc-600 dark:bg-zinc-300",
-    accent: "group-hover:border-zinc-400/30 dark:group-hover:border-white/[0.08]",
-  },
-  offer: {
-    dot: "bg-emerald-500 dark:bg-emerald-400",
-    accent: "group-hover:border-emerald-500/30 dark:group-hover:border-emerald-500/20",
-  },
+// Status dot colors for the 3-column system
+const statusColors: Record<ColumnStatus, string> = {
+  discovered: "bg-[hsl(var(--status-new))]",
+  applied: "bg-[hsl(var(--status-applied))]",
+  offer: "bg-[hsl(var(--status-offer))]",
 }
 
 // Animation variants
@@ -78,8 +66,6 @@ export function KanbanColumn({
   count,
   isLoading,
   onDiscardJob,
-  onFavoriteToggle,
-  onReviewSubmit,
   isSelectable = false,
   selectedJobIds,
   onSelectionChange,
@@ -94,7 +80,7 @@ export function KanbanColumn({
     },
   })
 
-  const colors = statusColors[id] || statusColors.discovered
+  const dotColor = statusColors[id]
 
   // Calculate selection state for this column
   const columnJobIds = jobs.map(j => j.id)
@@ -109,14 +95,17 @@ export function KanbanColumn({
   return (
     <div
       className={cn(
-        "group flex flex-col flex-1 min-w-[300px] rounded-xl border transition-all duration-200",
-        "bg-white/50 dark:bg-white/[0.02] border-zinc-200 dark:border-white/[0.04]",
-        "hover:border-zinc-300 dark:hover:border-white/[0.08]",
-        isOver && "border-zinc-400 dark:border-white/[0.12] bg-zinc-50 dark:bg-white/[0.04]"
+        "group flex min-w-[calc(100vw-2rem)] snap-start flex-col rounded-2xl border transition-all duration-200 sm:min-w-[320px] lg:min-w-0",
+        "bg-card/60 dark:bg-white/[0.02] border-border dark:border-white/[0.04]",
+        "hover:border-border dark:hover:border-white/[0.08]",
+        id === "discovered"
+          ? "lg:flex-[1.2] border-[var(--coral)]/30 bg-card shadow-[0_16px_40px_-32px_rgba(201,68,37,0.55)]"
+          : "lg:flex-1",
+        isOver && "border-[var(--coral)] dark:border-white/[0.12] bg-muted dark:bg-white/[0.04]"
       )}
     >
       {/* Column header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-white/[0.04]">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border dark:border-white/[0.04]">
         <div className="flex items-center gap-2">
           {/* Select All checkbox */}
           {isSelectable && jobs.length > 0 && (
@@ -132,21 +121,21 @@ export function KanbanColumn({
               aria-label={`Select all jobs in ${title}`}
             />
           )}
-          <div className={cn("w-2 h-2 rounded-full", colors.dot)} />
-          <h3 className="text-xs font-semibold tracking-wider text-zinc-600 dark:text-zinc-400 uppercase">{title}</h3>
+          <div className={cn("w-2 h-2 rounded-full", dotColor)} />
+          <h3 className={cn("text-sm font-semibold", id === "discovered" ? "text-foreground" : "text-muted-foreground dark:text-zinc-400")}>{title}</h3>
         </div>
-        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-500 px-1.5 py-0.5 bg-zinc-100 dark:bg-white/[0.05] rounded">
+        <span className="text-xs font-medium tabular-nums text-center min-w-[1.5rem] text-muted-foreground dark:text-zinc-500 px-1.5 py-0.5 bg-muted dark:bg-white/[0.05] rounded-md">
           {count}
         </span>
       </div>
 
       {/* Job limit warning - only shown for Free users in New Matches column */}
-      {id === "discovered" && jobLimitWarning?.show && (
+      {id === "discovered" && jobLimitWarning && (
         <div className={cn(
           "mx-2 mt-2 px-3 py-2 rounded-lg text-xs",
           jobLimitWarning.atLimit
             ? "bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400"
-            : "bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-blue-700 dark:text-blue-400"
+            : "bg-[var(--coral-soft)] border border-[var(--coral)]/20 text-[var(--coral)]"
         )}>
           <div className="flex items-start gap-2">
             <span className="mt-0.5">
@@ -205,8 +194,6 @@ export function KanbanColumn({
                     <JobCard
                       job={job}
                       onDiscard={onDiscardJob}
-                      onFavoriteToggle={onFavoriteToggle}
-                      onReviewSubmit={onReviewSubmit}
                       isSelectable={isSelectable}
                       isSelected={selectedJobIds?.has(job.id) || false}
                       onSelectionChange={onSelectionChange}
@@ -216,19 +203,27 @@ export function KanbanColumn({
               </AnimatePresence>
             ) : (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex flex-col items-center justify-center h-32 text-center px-4"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col items-center justify-center h-40 text-center px-6"
               >
-                <p className="text-sm text-zinc-500 dark:text-zinc-500">
-                  No jobs yet
-                </p>
-                <p className="text-xs text-zinc-400 dark:text-zinc-600 mt-1">
+                <div
+                  aria-hidden
+                  className="w-9 h-9 rounded-full border border-dashed border-border dark:border-white/[0.10] mb-3"
+                />
+                <p className="text-sm font-medium text-foreground dark:text-zinc-400">
                   {id === "discovered"
-                    ? "Search to find new matches"
+                    ? "Nothing new yet"
                     : id === "applied"
-                    ? "Drag jobs here when you apply"
-                    : "Move jobs here when you get an offer"}
+                    ? "No applications yet"
+                    : "No offers yet"}
+                </p>
+                <p className="text-xs text-muted-foreground dark:text-zinc-600 mt-1 max-w-[190px] leading-relaxed">
+                  {id === "discovered"
+                    ? "Run a search and fresh matches will land here."
+                    : id === "applied"
+                    ? "Drag a job across once you've applied."
+                    : "Move a job here when an offer comes in."}
                 </p>
               </motion.div>
             )}

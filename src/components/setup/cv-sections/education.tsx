@@ -106,7 +106,8 @@ function DegreeCombobox({
 
   // Sync inputValue with value prop
   React.useEffect(() => {
-    setInputValue(value)
+    const timeoutId = window.setTimeout(() => setInputValue(value), 0)
+    return () => window.clearTimeout(timeoutId)
   }, [value])
 
   // Close dropdown when clicking outside
@@ -192,9 +193,9 @@ function DegreeCombobox({
             <button
               type="button"
               onClick={() => handleSelect(inputValue)}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-white/[0.05] flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800"
+              className="w-full px-3 py-2 text-left text-sm hover:bg-accent dark:hover:bg-white/[0.05] flex items-center gap-2 border-b border-border dark:border-zinc-800"
             >
-              <Plus className="w-4 h-4 text-emerald-500" />
+              <Plus className="w-4 h-4 text-[var(--coral-lo)]" />
               <span>Use &quot;{inputValue}&quot;</span>
             </button>
           )}
@@ -206,7 +207,7 @@ function DegreeCombobox({
 
             return (
               <div key={region}>
-                <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-zinc-50 dark:bg-white/[0.02] sticky top-0">
+                <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted dark:bg-white/[0.02] sticky top-0">
                   {region === "Secondary" && "Secondary Education"}
                   {region === "Vocational" && "Vocational / Technical"}
                   {region === "Bachelor" && "Bachelor's Degrees"}
@@ -219,13 +220,13 @@ function DegreeCombobox({
                     type="button"
                     onClick={() => handleSelect(option.value)}
                     className={cn(
-                      "w-full px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-white/[0.05] flex items-center justify-between",
-                      value === option.value && "bg-zinc-100 dark:bg-white/[0.05]"
+                      "w-full px-3 py-2 text-left text-sm hover:bg-accent dark:hover:bg-white/[0.05] flex items-center justify-between",
+                      value === option.value && "bg-secondary dark:bg-white/[0.05]"
                     )}
                   >
                     <span>{option.label}</span>
                     {value === option.value && (
-                      <Check className="w-4 h-4 text-emerald-500" />
+                      <Check className="w-4 h-4 text-[var(--coral-lo)]" />
                     )}
                   </button>
                 ))}
@@ -279,9 +280,9 @@ export function EducationSection({ data, onUpdate }: EducationSectionProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <GraduationCap className="w-4 h-4 text-zinc-500" />
+          <GraduationCap className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Education</h3>
-          <span className="text-xs text-amber-600 font-medium">Required</span>
+          <span className="text-xs font-medium text-[var(--coral-lo)]">Required</span>
         </div>
         <span className="text-xs text-muted-foreground">{education.length}/2 entries</span>
       </div>
@@ -296,7 +297,7 @@ export function EducationSection({ data, onUpdate }: EducationSectionProps) {
           return (
             <div
               key={index}
-              className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden"
+              className="border border-border dark:border-zinc-700 rounded-xl overflow-hidden"
             >
               {/* Header - always visible */}
               <button
@@ -305,8 +306,8 @@ export function EducationSection({ data, onUpdate }: EducationSectionProps) {
                 className={cn(
                   "w-full flex items-center justify-between p-4 text-left transition-colors",
                   isExpanded
-                    ? "bg-zinc-50 dark:bg-white/[0.02]"
-                    : "hover:bg-zinc-50 dark:hover:bg-white/[0.02]"
+                    ? "bg-muted dark:bg-white/[0.02]"
+                    : "hover:bg-muted dark:hover:bg-white/[0.02]"
                 )}
               >
                 <div className="flex-1 min-w-0">
@@ -333,7 +334,7 @@ export function EducationSection({ data, onUpdate }: EducationSectionProps) {
                         e.stopPropagation()
                         removeEntry(index)
                       }}
-                      className="h-8 w-8 p-0 text-zinc-500 hover:text-red-600 hover:bg-red-50"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -348,7 +349,7 @@ export function EducationSection({ data, onUpdate }: EducationSectionProps) {
 
               {/* Expanded Content */}
               {isExpanded && (
-                <div className="p-4 pt-0 space-y-4 border-t border-zinc-100 dark:border-zinc-800">
+                <div className="p-4 pt-0 space-y-4 border-t border-border dark:border-zinc-800">
                   {/* Institution */}
                   <div className="space-y-2 pt-4">
                     <Label>Institution *</Label>
@@ -397,7 +398,7 @@ export function EducationSection({ data, onUpdate }: EducationSectionProps) {
                     </div>
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
-                        <MapPin className="w-3.5 h-3.5 text-zinc-500" />
+                        <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
                         Location
                       </Label>
                       <Input
@@ -448,8 +449,8 @@ export function EducationSection({ data, onUpdate }: EducationSectionProps) {
       )}
 
       {education.length === 0 && (
-        <p className="text-sm text-amber-600 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+        <p className="flex items-center gap-2 text-sm text-[var(--coral-lo)]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--coral)]" />
           At least one education entry is required
         </p>
       )}

@@ -1,0 +1,86 @@
+.shell {
+  position: relative;
+  min-height: calc(100dvh - 4rem);
+  overflow: clip;
+  color: var(--dawn-ink);
+  background:
+    radial-gradient(circle at 100% 0%, var(--coral-soft) 0, transparent 24rem),
+    var(--dawn-bg);
+}
+
+.shell::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  opacity: 0.24;
+  background-image: radial-gradient(var(--dawn-line-2) 0.5px, transparent 0.5px);
+  background-size: 10px 10px;
+  mask-image: linear-gradient(to bottom, black, transparent 32rem);
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 64rem);
+  margin-inline: auto;
+  padding: clamp(1.75rem, 4vw, 3.5rem) var(--dawn-gutter) 5rem;
+}
+
+.shell :global(input),
+.shell :global(textarea),
+.shell :global(select),
+.shell :global([role="combobox"]) {
+  border-color: var(--dawn-line-2);
+  background: var(--dawn-surface);
+  border-radius: 0.65rem;
+}
+
+.shell :global(input:focus-visible),
+.shell :global(textarea:focus-visible),
+.shell :global(select:focus-visible),
+.shell :global(button:focus-visible) {
+  outline: 2px solid var(--coral);
+  outline-offset: 2px;
+}
+
+.shell :global(button) {
+  transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.shell :global(button:active:not(:disabled)) {
+  transform: translateY(1px);
+}
+
+.shell :global(.text-blue-700),
+.shell :global(.text-blue-400),
+.shell :global(.text-amber-700),
+.shell :global(.text-amber-400),
+.shell :global(.text-emerald-400) {
+  color: var(--coral-lo) !important;
+}
+
+.shell :global(.bg-gradient-to-br),
+.shell :global(.bg-gradient-to-r) {
+  background-image: none !important;
+}
+
+@media (max-width: 400px) {
+  .content {
+    padding-inline: 1rem;
+  }
+
+  .shell :global(.grid-cols-2) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell :global(*) {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+

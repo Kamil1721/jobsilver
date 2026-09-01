@@ -31,9 +31,9 @@ export function MessageList({ messages, isStreaming }: MessageListProps) {
         {messages.length === 0 ? (
           <div className="text-center py-8">
             <div className="relative flex h-12 w-12 items-center justify-center rounded-xl mx-auto mb-3 overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-zinc-400 via-zinc-500 to-zinc-600" />
-              <div className="absolute inset-[1px] rounded-[10px] bg-gradient-to-br from-zinc-700 via-zinc-800 to-zinc-900" />
-              <Bot className="relative z-10 h-6 w-6 text-zinc-300" />
+              <div className="absolute inset-0 bg-border" />
+              <div className="absolute inset-[1px] rounded-[10px] bg-secondary" />
+              <Bot className="relative z-10 h-6 w-6 text-muted-foreground" />
             </div>
             <p className="text-sm text-foreground font-medium">
               JobSilver AI Assistant

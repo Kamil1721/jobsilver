@@ -358,28 +358,6 @@ export function generateStandardAshbyQuestions(): ScrapedQuestion[] {
 }
 
 /**
- * Determine remote type from Ashby posting
- */
-function detectRemoteType(posting: AshbyJobPosting): 'fully_remote' | 'hybrid' | 'onsite' {
-  // Ashby has explicit remote flag
-  if (posting.isRemote || posting.location?.isRemote) {
-    // Check for hybrid indicators in description
-    const description = (posting.description || '').toLowerCase()
-    const hybridPatterns = [
-      /hybrid/i,
-      /\d+\s*days?\s*(in|at)\s*(the\s+)?office/i,
-    ]
-
-    if (hybridPatterns.some(p => p.test(description))) {
-      return 'hybrid'
-    }
-    return 'fully_remote'
-  }
-
-  return 'onsite'
-}
-
-/**
  * Build location string from Ashby location object
  */
 function buildLocationString(location: AshbyLocation): string {

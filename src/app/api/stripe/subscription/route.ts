@@ -17,10 +17,15 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(request: NextRequest) {
   try {
+    const optionalAuth = request.nextUrl.searchParams.get('optionalAuth') === '1'
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
+      if (optionalAuth) {
+        return NextResponse.json({ data: { authenticated: false } })
+      }
+
       return NextResponse.json(
         { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } },
         { status: 401 }
@@ -76,6 +81,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       data: {
+        authenticated: true,
         plan,
         limits,
         isTester: profile?.is_tester || false,

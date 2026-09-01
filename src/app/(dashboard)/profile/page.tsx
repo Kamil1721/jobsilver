@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Suspense } from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
@@ -44,15 +44,19 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { PhoneInput } from "@/components/ui/phone-input"
-import type { Profile, JobFilters, ScreeningAnswers, NotificationPreferences } from "@/lib/supabase/types"
+import type { Profile, JobFilters, NotificationPreferences } from "@/lib/supabase/types"
 import { SubscriptionManagement } from "@/components/profile/SubscriptionManagement"
 import { CVGeneratorDialog } from "@/components/cv"
+import styles from "./dawn-profile.module.css"
 
 // Loading fallback for Suspense
 function ProfileLoading() {
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
-      <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+    <div className={`${styles.shell} flex items-center justify-center`}>
+      <div className="w-full max-w-md space-y-4 px-6" role="status" aria-label="Loading profile">
+        <div className="h-10 w-2/3 animate-pulse rounded-lg bg-[var(--dawn-cream)]" />
+        <div className="h-48 w-full animate-pulse rounded-2xl border border-[var(--dawn-line)] bg-[var(--dawn-surface)]" />
+      </div>
     </div>
   )
 }
@@ -66,6 +70,7 @@ export default function ProfilePage() {
 }
 
 function ProfilePageContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const tabFromUrl = searchParams.get("tab")
   const validTabs = ["profile", "cv", "preferences", "subscription"]
@@ -75,6 +80,7 @@ function ProfilePageContent() {
   const [isLoading, setIsLoading] = React.useState(true)
   const [isSaving, setIsSaving] = React.useState(false)
   const [isUploading, setIsUploading] = React.useState(false)
+  const [isDeletingCv, setIsDeletingCv] = React.useState(false)
   const [dragActive, setDragActive] = React.useState(false)
   const [uploadedFileName, setUploadedFileName] = React.useState<string | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -94,6 +100,7 @@ function ProfilePageContent() {
   const [isLoadingCv, setIsLoadingCv] = React.useState(false)
   // CV generator dialog state
   const [showCvGenerator, setShowCvGenerator] = React.useState(false)
+  const [signInEmail, setSignInEmail] = React.useState("")
   const { toast } = useToast()
   const supabase = createClient()
 
@@ -101,7 +108,6 @@ function ProfilePageContent() {
   const [formData, setFormData] = React.useState({
     first_name: "",
     surname: "",
-    email: "",
     phone: "",
     location: "",
   })
@@ -111,6 +117,7 @@ function ProfilePageContent() {
     const fetchProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+      setSignInEmail(user.email || "")
 
       const { data, error } = await supabase
         .from("profiles")
@@ -135,7 +142,6 @@ function ProfilePageContent() {
         setFormData({
           first_name: firstName,
           surname: surname,
-          email: data.email || user.email || "",
           phone: data.phone || "",
           location: data.location || "",
         })
@@ -144,8 +150,6 @@ function ProfilePageContent() {
         setNotificationPrefs({
           job_matches: prefs.job_matches ?? false,
         })
-      } else {
-        setFormData((prev) => ({ ...prev, email: user.email || "" }))
       }
       setIsLoading(false)
     }
@@ -166,7 +170,6 @@ function ProfilePageContent() {
       const { error } = await supabase.from("profiles").upsert({
         id: user.id,
         full_name,
-        email: formData.email,
         phone: formData.phone,
         location: formData.location,
         updated_at: new Date().toISOString(),
@@ -178,7 +181,7 @@ function ProfilePageContent() {
         title: "Profile saved",
         description: "Your changes have been saved successfully",
       })
-    } catch (error) {
+    } catch {
       toast({
         variant: "destructive",
         title: "Error",
@@ -191,16 +194,16 @@ function ProfilePageContent() {
 
   // Handle file upload
   const handleFileUpload = async (file: File) => {
-    // Accept PDF, DOC, DOCX, and TXT files
-    const validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']
-    const validExtensions = ['.pdf', '.doc', '.docx', '.txt']
+    // Accept PDF, DOCX, and TXT files
+    const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']
+    const validExtensions = ['.pdf', '.docx', '.txt']
     const fileExt = '.' + (file.name.split('.').pop()?.toLowerCase() || '')
 
     if (!validTypes.includes(file.type) && !validExtensions.includes(fileExt)) {
       toast({
         variant: "destructive",
         title: "Invalid file type",
-        description: "Please upload a PDF, DOC, DOCX, or TXT file",
+        description: "Please upload a PDF, DOCX, or TXT file",
       })
       return
     }
@@ -241,7 +244,7 @@ function ProfilePageContent() {
         title: "CV uploaded",
         description: "Your CV has been processed successfully",
       })
-    } catch (error) {
+    } catch {
       toast({
         variant: "destructive",
         title: "Upload failed",
@@ -269,6 +272,33 @@ function ProfilePageContent() {
     setDragActive(false)
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleFileUpload(e.dataTransfer.files[0])
+    }
+  }
+
+  const handleDeleteCv = async () => {
+    setIsDeletingCv(true)
+    try {
+      const response = await fetch("/api/cv/upload", { method: "DELETE" })
+      if (!response.ok) throw new Error("Delete failed")
+
+      setProfile((previous) => previous
+        ? { ...previous, cv_url: null, cv_parsed_data: null }
+        : previous
+      )
+      setUploadedFileName(null)
+      setCvViewUrl(null)
+      toast({
+        title: "CV removed",
+        description: "Your CV has been deleted",
+      })
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Delete failed",
+        description: "Failed to remove CV",
+      })
+    } finally {
+      setIsDeletingCv(false)
     }
   }
 
@@ -415,7 +445,7 @@ function ProfilePageContent() {
 
       // Sign out and redirect to home page
       await supabase.auth.signOut()
-      window.location.href = "/"
+      router.push("/")
     } catch (error) {
       toast({
         variant: "destructive",
@@ -428,39 +458,36 @@ function ProfilePageContent() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[calc(100vh-4rem)]">
-        <Loader2 className="w-8 h-8 animate-spin text-zinc-600 dark:text-zinc-400" />
-      </div>
-    )
+    return <ProfileLoading />
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-zinc-50 dark:bg-[#0a0a0b]">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main className={styles.shell}>
+      <div className={styles.content}>
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-white">Profile Settings</h1>
-          <p className="text-zinc-500 dark:text-zinc-400 mt-1">
-            Manage your personal information and job preferences
+        <header className="mb-8 max-w-2xl">
+          <p className="mb-3 text-[13px] font-semibold uppercase tracking-[0.09em] text-[var(--coral-lo)]">Your workspace</p>
+          <h1 className="text-balance text-[clamp(2.2rem,5vw,3.6rem)] font-semibold leading-[0.98] tracking-[-0.04em] text-[var(--dawn-ink)]">Profile settings</h1>
+          <p className="mt-4 max-w-[58ch] text-pretty leading-7 text-[var(--dawn-ink-2)]">
+            Keep your details, CV, search preferences, and subscription in one place.
           </p>
-        </div>
+        </header>
 
         <Tabs defaultValue={defaultTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="profile" className="gap-2">
+            <TabsTrigger value="profile" aria-label="Profile" className="gap-2">
               <User className="w-4 h-4" />
               <span className="hidden sm:inline">Profile</span>
             </TabsTrigger>
-            <TabsTrigger value="cv" className="gap-2">
+            <TabsTrigger value="cv" aria-label="CV" className="gap-2">
               <FileText className="w-4 h-4" />
               <span className="hidden sm:inline">CV</span>
             </TabsTrigger>
-            <TabsTrigger value="preferences" className="gap-2">
+            <TabsTrigger value="preferences" aria-label="Preferences" className="gap-2">
               <Briefcase className="w-4 h-4" />
               <span className="hidden sm:inline">Preferences</span>
             </TabsTrigger>
-            <TabsTrigger value="subscription" className="gap-2">
+            <TabsTrigger value="subscription" aria-label="Subscription" className="gap-2">
               <CreditCard className="w-4 h-4" />
               <span className="hidden sm:inline">Subscription</span>
             </TabsTrigger>
@@ -476,14 +503,14 @@ function ProfilePageContent() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="first_name">First Name</Label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground dark:text-zinc-500" />
                       <Input
                         id="first_name"
-                        placeholder="John"
+                        placeholder="Maya"
                         value={formData.first_name}
                         onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
                         className="pl-10"
@@ -494,10 +521,10 @@ function ProfilePageContent() {
                   <div className="space-y-2">
                     <Label htmlFor="surname">Surname</Label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground dark:text-zinc-500" />
                       <Input
                         id="surname"
-                        placeholder="Doe"
+                        placeholder="Nowak"
                         value={formData.surname}
                         onChange={(e) => setFormData({ ...formData, surname: e.target.value })}
                         className="pl-10"
@@ -506,24 +533,27 @@ function ProfilePageContent() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="email">Verified sign-in email</Label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground dark:text-zinc-500" />
                       <Input
                         id="email"
                         type="email"
-                        placeholder="your@email.com"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="pl-10"
+                        value={signInEmail}
+                        readOnly
+                        aria-describedby="email-help"
+                        className="cursor-text bg-[var(--dawn-cream)] pl-10 text-[var(--dawn-ink-2)]"
                       />
                     </div>
+                    <p id="email-help" className="text-xs leading-5 text-[var(--dawn-ink-3)]">
+                      This address comes from your sign-in account and can&apos;t be changed here.
+                    </p>
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="location">Location</Label>
                     <div className="relative">
-                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
+                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground dark:text-zinc-500" />
                       <Input
                         id="location"
                         placeholder="City, Country"
@@ -545,13 +575,13 @@ function ProfilePageContent() {
                   </div>
                 </div>
 
-                <div className="flex justify-between pt-4">
-                  <div className="flex gap-2">
+                <div className="flex flex-col gap-3 border-t border-border pt-6 mt-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-2 sm:flex-row">
                     <Button
                       variant="outline"
                       onClick={handleExportData}
                       disabled={isExporting}
-                      className="border-zinc-300 dark:border-zinc-700"
+                      className="border-border dark:border-white/[0.06]"
                     >
                       {isExporting ? (
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -572,7 +602,7 @@ function ProfilePageContent() {
                   <Button
                     onClick={handleSave}
                     disabled={isSaving}
-                    className="bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white/10 dark:text-white dark:hover:bg-white/20 dark:border dark:border-white/10"
+                    className="bg-[var(--coral)] text-[var(--coral-ink)] hover:bg-[var(--coral-hi)] dark:bg-white/10 dark:text-white dark:hover:bg-white/20 dark:border dark:border-white/10"
                   >
                     {isSaving ? (
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -590,7 +620,7 @@ function ProfilePageContent() {
           <TabsContent value="cv">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <CardTitle>CV / Resume</CardTitle>
                     <CardDescription>
@@ -619,10 +649,10 @@ function ProfilePageContent() {
                 {/* Upload area */}
                 <div
                   className={cn(
-                    "border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200",
+                    "rounded-2xl border border-dashed p-5 text-left transition-colors duration-200 sm:p-7",
                     dragActive
-                      ? "border-zinc-400 bg-zinc-100 dark:border-white/[0.12] dark:bg-white/[0.03]"
-                      : "border-zinc-300 dark:border-white/[0.08] hover:border-zinc-400 dark:hover:border-white/[0.12]",
+                      ? "border-[var(--coral)] bg-[var(--coral-soft)]"
+                      : "border-[var(--dawn-line-2)] bg-[var(--dawn-cream)] hover:border-[var(--coral)]/50",
                     isUploading && "pointer-events-none opacity-60"
                   )}
                   onDragEnter={handleDrag}
@@ -633,7 +663,7 @@ function ProfilePageContent() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".pdf,.doc,.docx,.txt"
+                    accept=".pdf,.docx,.txt"
                     className="hidden"
                     onChange={(e) => {
                       if (e.target.files?.[0]) {
@@ -643,25 +673,25 @@ function ProfilePageContent() {
                   />
 
                   {isUploading ? (
-                    <div className="flex flex-col items-center gap-3">
-                      <Loader2 className="w-10 h-10 text-zinc-600 dark:text-zinc-400 animate-spin" />
-                      <p className="text-sm text-zinc-500 dark:text-zinc-400">Uploading and parsing your CV...</p>
+                    <div className="flex min-h-32 flex-col items-center justify-center gap-3 text-center" role="status">
+                      <Loader2 className="h-8 w-8 animate-spin text-[var(--coral-lo)]" />
+                      <p className="text-sm text-[var(--dawn-ink-2)]">Uploading and parsing your CV...</p>
                     </div>
                   ) : profile?.cv_url ? (
                     <div className="flex flex-col items-center gap-4 w-full">
-                      <div className="flex items-center justify-between w-full gap-4">
+                      <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <CheckCircle2 className="w-6 h-6 text-emerald-500 shrink-0" />
+                          <CheckCircle2 className="h-6 w-6 shrink-0 text-[var(--coral-lo)]" />
                           <div className="min-w-0">
-                            <p className="font-medium text-zinc-900 dark:text-white truncate" title={uploadedFileName || profile.cv_url.split('/').pop()?.replace(/^\d+-/, '') || 'CV Document'}>
+                            <p className="font-medium text-foreground dark:text-white truncate" title={uploadedFileName || profile.cv_url.split('/').pop()?.replace(/^\d+-/, '') || 'CV Document'}>
                               {uploadedFileName || profile.cv_url.split('/').pop()?.replace(/^\d+-/, '') || 'CV Document'}
                             </p>
-                            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                            <p className="text-sm text-muted-foreground dark:text-zinc-400">
                               Ready for job matching
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                           {cvViewUrl && (
                             <Button
                               variant="outline"
@@ -680,44 +710,58 @@ function ProfilePageContent() {
                             <Upload className="w-4 h-4 mr-2" />
                             Replace
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleDeleteCv}
+                            disabled={isDeletingCv}
+                            className="text-red-700 hover:bg-red-50 hover:text-red-800"
+                          >
+                            {isDeletingCv ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="mr-2 h-4 w-4" />
+                            )}
+                            Delete
+                          </Button>
                         </div>
                       </div>
 
                       {/* CV Preview - only for PDF files */}
                       {profile.cv_url?.toLowerCase().endsWith('.pdf') ? (
                         isLoadingCv ? (
-                          <div className="w-full h-[350px] flex items-center justify-center bg-zinc-100 dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800">
-                            <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+                          <div className="w-full h-[350px] flex items-center justify-center bg-muted dark:bg-white/[0.02] rounded-lg border border-border dark:border-white/[0.06]">
+                            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                           </div>
                         ) : cvViewUrl ? (
-                          <div className="w-full rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800">
+                          <div className="w-full rounded-lg overflow-hidden border border-border dark:border-white/[0.06]">
                             <iframe
                               src={`${cvViewUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`}
-                              className="w-full h-[350px] bg-white"
+                              className="w-full h-[350px] bg-card"
                               title="CV Preview"
                             />
                           </div>
                         ) : null
                       ) : (
-                        <div className="w-full py-8 flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800">
-                          <FileText className="w-12 h-12 text-zinc-400 mb-3" />
-                          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                        <div className="w-full py-8 flex flex-col items-center justify-center bg-muted dark:bg-white/[0.02] rounded-lg border border-border dark:border-white/[0.06]">
+                          <FileText className="w-12 h-12 text-muted-foreground mb-3" />
+                          <p className="text-sm text-muted-foreground dark:text-zinc-400">
                             Preview not available for this file type
                           </p>
-                          <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">
+                          <p className="text-xs text-muted-foreground dark:text-zinc-500 mt-1">
                             Click &quot;Open&quot; to view the document
                           </p>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-zinc-100 dark:bg-white/[0.05] flex items-center justify-center">
-                        <Upload className="w-6 h-6 text-zinc-600 dark:text-zinc-400" />
+                    <div className="flex min-h-44 flex-col items-center justify-center gap-3 text-center">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--coral-soft)]">
+                        <Upload className="h-6 w-6 text-[var(--coral-lo)]" />
                       </div>
                       <div>
-                        <p className="font-medium text-zinc-900 dark:text-white">Upload your CV</p>
-                        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+                        <p className="font-medium text-[var(--dawn-ink)]">Upload your CV</p>
+                        <p className="mt-1 text-sm text-[var(--dawn-ink-2)]">
                           Drag and drop your file here, or click to browse
                         </p>
                       </div>
@@ -728,21 +772,21 @@ function ProfilePageContent() {
                       >
                         Select File
                       </Button>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-500">PDF, DOC, DOCX, or TXT files, max 10MB</p>
+                      <p className="text-xs text-[var(--dawn-ink-3)]">PDF, DOCX, or TXT files, max 10MB</p>
                     </div>
                   )}
                 </div>
 
                 {/* Parsed data preview */}
                 {profile?.cv_parsed_data && (
-                  <div className="p-4 bg-zinc-50 dark:bg-white/[0.02] rounded-xl border border-zinc-200 dark:border-white/[0.06] space-y-3">
-                    <h4 className="font-medium flex items-center gap-2 text-zinc-900 dark:text-white">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <div className="p-4 bg-muted dark:bg-white/[0.02] rounded-xl border border-border dark:border-white/[0.06] space-y-3">
+                    <h4 className="font-medium flex items-center gap-2 text-foreground dark:text-white">
+                      <CheckCircle2 className="w-4 h-4 text-[var(--coral-lo)]" />
                       Extracted Information
                     </h4>
                     {(profile.cv_parsed_data as { skills?: string[] }).skills && (
                       <div>
-                        <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1.5">Skills Detected</p>
+                        <p className="text-xs font-medium text-muted-foreground dark:text-zinc-400 mb-1.5">Skills Detected</p>
                         <div className="flex flex-wrap gap-1.5">
                           {((profile.cv_parsed_data as { skills?: string[] }).skills || []).slice(0, 10).map((skill) => (
                             <Badge key={skill} variant="secondary" className="text-xs">
@@ -759,8 +803,8 @@ function ProfilePageContent() {
                     )}
                     {(profile.cv_parsed_data as { summary?: string }).summary && (
                       <div>
-                        <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Summary</p>
-                        <p className="text-sm text-zinc-600 dark:text-zinc-400 line-clamp-2">
+                        <p className="text-xs font-medium text-muted-foreground dark:text-zinc-400 mb-1">Summary</p>
+                        <p className="text-sm text-muted-foreground dark:text-zinc-400 line-clamp-2">
                           {(profile.cv_parsed_data as { summary?: string }).summary}
                         </p>
                       </div>
@@ -779,7 +823,7 @@ function ProfilePageContent() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <Bell className="w-5 h-5 text-blue-500" />
+                      <Bell className="w-5 h-5 text-[var(--coral-lo)]" />
                       Email Notifications
                     </CardTitle>
                     <CardDescription>
@@ -787,10 +831,10 @@ function ProfilePageContent() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-white/[0.02] rounded-xl border border-zinc-200 dark:border-white/[0.06]">
+                    <div className="flex items-center justify-between p-4 bg-muted dark:bg-white/[0.02] rounded-xl border border-border dark:border-white/[0.06]">
                       <div className="space-y-1">
-                        <p className="font-medium text-zinc-900 dark:text-white">New Job Matches</p>
-                        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                        <p className="font-medium text-foreground dark:text-white">New Job Matches</p>
+                        <p className="text-sm text-muted-foreground dark:text-zinc-400">
                           Receive daily digest of jobs matching your criteria
                         </p>
                       </div>
@@ -816,10 +860,10 @@ function ProfilePageContent() {
                   {/* Summary of current preferences */}
                   {profile?.job_filters ? (
                     <div className="space-y-4">
-                      <div className="p-4 bg-zinc-50 dark:bg-white/[0.02] rounded-xl border border-zinc-200 dark:border-white/[0.06]">
+                      <div className="p-4 bg-muted dark:bg-white/[0.02] rounded-xl border border-border dark:border-white/[0.06]">
                         <div className="flex items-center gap-2 mb-3">
-                          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                          <span className="font-medium text-zinc-900 dark:text-white">Preferences Configured</span>
+                          <CheckCircle2 className="w-5 h-5 text-[var(--coral-lo)]" />
+                          <span className="font-medium text-foreground dark:text-white">Preferences Configured</span>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {(profile.job_filters as JobFilters).job_titles?.slice(0, 3).map((title) => (
@@ -832,12 +876,12 @@ function ProfilePageContent() {
                       </div>
                     </div>
                   ) : (
-                    <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800">
+                  <div className="rounded-xl border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-4">
                       <div className="flex items-center gap-2 mb-2">
-                        <Settings className="w-5 h-5 text-amber-600" />
-                        <span className="font-medium text-amber-800 dark:text-amber-200">Not Configured</span>
+                        <Settings className="w-5 h-5 text-[var(--coral-lo)]" />
+                        <span className="font-medium text-[var(--dawn-ink)]">Not Configured</span>
                       </div>
-                      <p className="text-sm text-amber-700 dark:text-amber-300">
+                      <p className="text-sm text-[var(--dawn-ink-2)]">
                         Set up your job preferences to get personalized job matches
                       </p>
                     </div>
@@ -846,7 +890,7 @@ function ProfilePageContent() {
                   {/* Configure button */}
                   <Link href={profile?.job_filters ? "/setup?edit=true" : "/setup"}>
                     <Button
-                      className="w-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white/10 dark:text-white dark:hover:bg-white/20 dark:border dark:border-white/10"
+                      className="w-full bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-white/10 dark:text-white dark:hover:bg-white/20 dark:border dark:border-white/10"
                       size="lg"
                     >
                       <Settings className="w-4 h-4 mr-2" />
@@ -855,7 +899,7 @@ function ProfilePageContent() {
                     </Button>
                   </Link>
 
-                  <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
+                  <p className="text-center text-sm text-muted-foreground dark:text-zinc-400">
                     Configure your job search filters, screening questions, and application preferences.
                   </p>
                 </CardContent>
@@ -893,7 +937,7 @@ function ProfilePageContent() {
                 This action is <span className="font-semibold text-red-600 dark:text-red-400">permanent and irreversible</span>.
                 All your data will be permanently deleted, including:
               </p>
-              <ul className="list-disc list-inside text-sm space-y-1 text-zinc-600 dark:text-zinc-400">
+              <ul className="list-disc list-inside text-sm space-y-1 text-muted-foreground dark:text-zinc-400">
                 <li>Your profile information</li>
                 <li>All saved jobs and application history</li>
                 <li>Your CV and uploaded documents</li>
@@ -901,8 +945,8 @@ function ProfilePageContent() {
                 <li>Subscription and billing information</li>
               </ul>
               <div className="pt-2">
-                <p className="text-sm font-medium text-zinc-900 dark:text-white mb-2">
-                  Type <span className="font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">confirm</span> to delete your account:
+                <p className="text-sm font-medium text-foreground dark:text-white mb-2">
+                  Type <span className="font-mono bg-muted dark:bg-zinc-800 px-1.5 py-0.5 rounded">confirm</span> to delete your account:
                 </p>
                 <Input
                   value={deleteConfirmation}
@@ -946,6 +990,6 @@ function ProfilePageContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </main>
   )
 }

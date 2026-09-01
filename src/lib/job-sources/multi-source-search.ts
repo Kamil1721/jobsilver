@@ -10,8 +10,7 @@ import {
   searchAllSources,
   JOB_SOURCES,
   deduplicateJobs,
-  getCountryCode,
-  ADZUNA_COUNTRIES
+  getCountryCode
 } from './index'
 
 // =============================================================================

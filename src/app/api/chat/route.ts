@@ -13,7 +13,7 @@ import { canAccessFeature } from '@/lib/features/config'
 import { canUseAI, incrementUsage } from '@/lib/ai/usage-tracker'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/security/rate-limit'
 import { getHelpForPage, getGeneralHelp } from '@/lib/ai/website-documentation'
-import type { SubscriptionPlan, AllSubscriptionPlans } from '@/lib/supabase/types'
+import type { SubscriptionPlan } from '@/lib/supabase/types'
 
 export const dynamic = 'force-dynamic'
 

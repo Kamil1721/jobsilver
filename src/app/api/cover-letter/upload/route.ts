@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
 }
 
 // DELETE endpoint to remove cover letter
-export async function DELETE(request: NextRequest) {
+export async function DELETE() {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()

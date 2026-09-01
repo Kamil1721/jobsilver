@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import type { SubscriptionPlan } from "@/lib/supabase/types"
-import { getPlanLimits, formatPlanName } from "@/lib/stripe/plans"
+import { formatPlanName } from "@/lib/stripe/plans"
 
 // Downgrade reason options
 export const DOWNGRADE_REASONS = [
@@ -163,8 +163,14 @@ export function PlanChangeDialog({
 
   // Reset reason when dialog opens
   React.useEffect(() => {
+    let cancelled = false
     if (open) {
-      setSelectedReason("")
+      queueMicrotask(() => {
+        if (!cancelled) setSelectedReason("")
+      })
+    }
+    return () => {
+      cancelled = true
     }
   }, [open])
 
@@ -192,9 +198,9 @@ export function PlanChangeDialog({
           <AlertDialogDescription asChild>
             <div className="space-y-4 text-left">
               {/* Access period info */}
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              <p className="text-sm text-muted-foreground">
                 You&apos;ll keep {formatPlanName(currentPlan)} access until{" "}
-                <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                <span className="font-medium text-foreground">
                   {formattedEndDate}
                 </span>
                 .
@@ -203,14 +209,14 @@ export function PlanChangeDialog({
               {/* Features being lost */}
               {lostFeatures.length > 0 && (
                 <div>
-                  <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                  <p className="text-sm font-medium text-foreground mb-2">
                     After that, you&apos;ll lose access to:
                   </p>
                   <ul className="space-y-1.5">
                     {lostFeatures.map((feature, index) => (
                       <li
                         key={index}
-                        className="flex items-start gap-2 text-sm text-zinc-600 dark:text-zinc-400"
+                        className="flex items-start gap-2 text-sm text-muted-foreground"
                       >
                         <X className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
                         <span>{feature}</span>
@@ -221,16 +227,16 @@ export function PlanChangeDialog({
               )}
 
               {/* Data preservation notice */}
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-zinc-100 dark:bg-zinc-800/50">
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-secondary">
                 <Check className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                <p className="text-sm text-muted-foreground">
                   Your saved jobs and favorites will be preserved.
                 </p>
               </div>
 
               {/* Reason selector */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                <label className="text-sm font-medium text-foreground">
                   Help us improve: Why are you downgrading?{" "}
                   <span className="text-red-500">*</span>
                 </label>

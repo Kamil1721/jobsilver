@@ -173,7 +173,7 @@ function generateBasicTailoredContent(
     || `Experienced professional seeking ${safeTitle} position${safeCompany ? ` at ${safeCompany}` : ''}.`
 
   // Try to prioritize skills that appear in the job description
-  let orderedSkills = [...cvData.skills]
+  const orderedSkills = [...cvData.skills]
   if (safeDescription) {
     const descLower = safeDescription.toLowerCase()
     orderedSkills.sort((a, b) => {

@@ -81,7 +81,13 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
 
   // Fetch on mount
   React.useEffect(() => {
-    fetchSubscription()
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) void fetchSubscription()
+    })
+    return () => {
+      cancelled = true
+    }
   }, [fetchSubscription])
 
   // Auto-refresh subscription data only when page is visible

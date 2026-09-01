@@ -5,11 +5,9 @@ import {
   useCurrentFrame,
   spring,
   useVideoConfig,
-  Easing,
 } from 'remotion'
 import { colors } from '../../theme/colors'
 import { fonts } from '../../theme/fonts'
-import { borderRadius, spacing } from '../../theme/styles'
 
 /**
  * AI Matching Demo - 5 second loop

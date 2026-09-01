@@ -17,6 +17,11 @@ export function ChatButton() {
   const dragStartRef = React.useRef({ x: 0, y: 0, moved: false })
   const [showWelcome, setShowWelcome] = React.useState(false)
 
+  const dismissWelcome = React.useCallback(() => {
+    setShowWelcome(false)
+    localStorage.setItem(WELCOME_STORAGE_KEY, 'true')
+  }, [])
+
   // Show welcome bubble after delay if user hasn't seen it
   React.useEffect(() => {
     const hasSeen = localStorage.getItem(WELCOME_STORAGE_KEY)
@@ -28,10 +33,16 @@ export function ChatButton() {
 
   // Dismiss welcome when chat opens
   React.useEffect(() => {
+    let cancelled = false
     if (isOpen && showWelcome) {
-      dismissWelcome()
+      queueMicrotask(() => {
+        if (!cancelled) dismissWelcome()
+      })
     }
-  }, [isOpen, showWelcome])
+    return () => {
+      cancelled = true
+    }
+  }, [isOpen, showWelcome, dismissWelcome])
 
   // Escape key to dismiss welcome
   React.useEffect(() => {
@@ -42,15 +53,15 @@ export function ChatButton() {
     }
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
-  }, [showWelcome])
+  }, [showWelcome, dismissWelcome])
 
-  const dismissWelcome = () => {
-    setShowWelcome(false)
-    localStorage.setItem(WELCOME_STORAGE_KEY, 'true')
-  }
-
-  // Hide the floating chat button on job detail pages (they have their own embedded AI chat)
-  if (pathname.startsWith('/jobs/')) {
+  // Keep focused flows clear of floating controls. Job details have their own
+  // embedded assistant, while onboarding needs unobstructed form controls.
+  if (
+    pathname.startsWith('/jobs/') ||
+    pathname.startsWith('/setup') ||
+    pathname.startsWith('/choose-plan')
+  ) {
     return null
   }
 
@@ -103,9 +114,6 @@ export function ChatButton() {
         }
 
         setPosition(newPosition)
-      } else {
-        // It was a click, not a drag
-        toggleChat()
       }
 
       setIsDragging(false)
@@ -116,6 +124,16 @@ export function ChatButton() {
     document.addEventListener('mouseup', handleMouseUp)
   }
 
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (dragStartRef.current.moved) {
+      e.preventDefault()
+      dragStartRef.current.moved = false
+      return
+    }
+
+    toggleChat()
+  }
+
   // Custom styles when dragging
   const dragStyles: React.CSSProperties = dragPos && isDragging
     ? { left: dragPos.x, top: dragPos.y, right: 'auto', bottom: 'auto' }
@@ -123,7 +141,6 @@ export function ChatButton() {
 
   // Determine bubble position based on button position
   const isButtonOnRight = position.includes('right')
-  const isButtonOnTop = position.includes('top')
 
   // Bubble positioning classes
   const bubblePositionClasses = {
@@ -140,16 +157,17 @@ export function ChatButton() {
         <div
           className={cn(
             'fixed z-[74] max-w-xs p-3 pr-8 rounded-lg',
-            'bg-zinc-100 border border-zinc-300 text-zinc-900',
-            'shadow-xl shadow-black/30',
+            'bg-card border border-border text-foreground',
+            'shadow-elevated',
             'animate-fade-in',
             bubblePositionClasses[position],
             isButtonOnRight ? 'bubble-tail-right' : 'bubble-tail-left'
           )}
         >
           <button
+            type="button"
             onClick={dismissWelcome}
-            className="absolute top-2 right-2 p-0.5 rounded hover:bg-zinc-200 text-zinc-500 hover:text-zinc-700 transition-colors"
+            className="absolute top-2 right-2 p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
             aria-label="Dismiss welcome message"
           >
             <X className="h-3.5 w-3.5" />
@@ -161,23 +179,25 @@ export function ChatButton() {
       )}
 
       <button
+        type="button"
         onMouseDown={handleMouseDown}
+        onClick={handleClick}
         className={cn(
           'fixed z-[75] flex h-12 w-12 items-center justify-center rounded-full overflow-hidden',
-          // Metallic silver gradient
-          'bg-gradient-to-br from-zinc-400 via-zinc-500 to-zinc-600 text-zinc-900',
-          'hover:from-zinc-300 hover:via-zinc-400 hover:to-zinc-500',
-          // Shadow and glow effect
-          'shadow-lg shadow-zinc-500/25 hover:shadow-xl hover:shadow-zinc-400/40',
+          // Coral launcher — the single inviting action
+          'bg-[var(--coral)] text-[var(--coral-ink)]',
+          'hover:bg-[var(--coral-hi)]',
+          // Coral-tinted shadow and glow
+          'shadow-lg shadow-[var(--coral)]/25 hover:shadow-xl hover:shadow-[var(--coral)]/35',
           // Focus ring
-          'focus:outline-none focus:ring-2 focus:ring-zinc-400/50 focus:ring-offset-2 focus:ring-offset-background',
+          'focus:outline-none focus:ring-2 focus:ring-[var(--coral)] focus:ring-offset-2 focus:ring-offset-background',
           // Position - use fixed position when not dragging
           !isDragging && positionClasses[position],
           // Smooth transition when snapping (not during drag)
           !isDragging && 'transition-all duration-300 ease-out',
           // Dragging state
-          isDragging && 'cursor-grabbing scale-110 shadow-2xl shadow-zinc-400/50',
-          !isDragging && 'cursor-grab hover:scale-105'
+          isDragging && 'cursor-grabbing scale-110 shadow-2xl shadow-[var(--coral)]/40',
+          !isDragging && 'cursor-grab hover:scale-105 active:scale-95'
         )}
         style={dragStyles}
         aria-label={isOpen ? 'Close chat' : 'Open chat assistant'}

@@ -2,13 +2,13 @@
 
 import * as React from "react"
 import Link from "next/link"
-import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { motion } from "framer-motion"
+import { motion, MotionConfig } from "framer-motion"
 import { createClient } from "@/lib/supabase/client"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
+import { useGoogleAuthEnabled } from "@/hooks/use-google-auth-enabled"
 import {
   Mail,
   Lock,
@@ -18,7 +18,8 @@ import {
   Loader2,
   FlaskConical,
 } from "lucide-react"
-import { PublicFooter } from "@/components/public-footer"
+import { Nav } from "@/components/landing/nav"
+import { Footer } from "@/components/landing/dawn-footer"
 
 export default function TesterLoginPage() {
   const [isLoading, setIsLoading] = React.useState(false)
@@ -27,15 +28,23 @@ export default function TesterLoginPage() {
   const router = useRouter()
   const { toast } = useToast()
   const supabase = createClient()
+  const googleAuthEnabled = useGoogleAuthEnabled()
 
   // Check for invite code in URL on mount
   React.useEffect(() => {
+    let cancelled = false
     const params = new URLSearchParams(window.location.search)
     const code = params.get("code")
     if (code) {
-      setInviteCode(code)
       // Store for OAuth callback
       localStorage.setItem("tester_invite_code", code)
+      queueMicrotask(() => {
+        if (!cancelled) setInviteCode(code)
+      })
+    }
+
+    return () => {
+      cancelled = true
     }
   }, [])
 
@@ -119,7 +128,7 @@ export default function TesterLoginPage() {
     }
 
     toast({
-      title: "Welcome, Tester!",
+      title: "Welcome, tester",
       description: "You now have full access to all features.",
     })
 
@@ -175,7 +184,7 @@ export default function TesterLoginPage() {
         return
       }
       toast({
-        title: "Welcome, Tester!",
+        title: "Welcome, tester",
         description: "Account created with full feature access.",
       })
       router.push("/dashboard")
@@ -187,7 +196,7 @@ export default function TesterLoginPage() {
     localStorage.setItem("pending_tester_auto", "true")
     localStorage.setItem("tester_invite_code", inviteCode)
     toast({
-      title: "Account created!",
+      title: "Account created",
       description: "Check your email to verify, then you'll have full tester access.",
     })
 
@@ -196,6 +205,8 @@ export default function TesterLoginPage() {
   }
 
   const handleGoogleAuth = async () => {
+    if (!googleAuthEnabled) return
+
     if (!inviteCode) {
       toast({
         variant: "destructive",
@@ -228,151 +239,135 @@ export default function TesterLoginPage() {
     }
   }
 
+  // Shared Dawn field styling for the shadcn Input primitive.
+  const fieldClass =
+    "h-11 min-h-[44px] pl-10 rounded-[12px] bg-[var(--dawn-surface)] border-[var(--dawn-line-2)] text-[var(--dawn-ink)] placeholder:text-[var(--dawn-ink-3)] focus:border-[var(--coral)] focus:ring-2 focus:ring-[var(--coral)]"
+  const labelClass = "text-[13px] font-medium text-[var(--dawn-ink)]"
+
   return (
-    <div className="min-h-screen bg-[#0a0a0b] text-white overflow-hidden">
-      {/* Ambient Background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        {/* Purple/violet gradient orbs for tester theme */}
-        <div className="absolute top-[-20%] left-[10%] w-[600px] h-[600px] rounded-full bg-gradient-to-br from-violet-900/30 via-purple-900/20 to-transparent blur-[120px]" />
-        <div className="absolute top-[40%] right-[-10%] w-[500px] h-[500px] rounded-full bg-gradient-to-bl from-purple-700/20 via-transparent to-transparent blur-[100px]" />
-        <div className="absolute bottom-[-10%] left-[30%] w-[400px] h-[400px] rounded-full bg-gradient-to-t from-violet-800/20 via-transparent to-transparent blur-[80px]" />
+    <div
+      className="min-h-screen overflow-x-hidden"
+      style={{ background: "var(--dawn-bg)", color: "var(--dawn-ink)" }}
+    >
+      <Nav />
 
-        {/* Metallic grid */}
-        <div
-          className="absolute inset-0 opacity-[0.02]"
-          style={{
-            backgroundImage: `
-              linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px),
-              linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)
-            `,
-            backgroundSize: '60px 60px',
-          }}
-        />
-      </div>
+      <MotionConfig reducedMotion="user">
+        <main className="relative flex min-h-screen flex-col items-center justify-center px-[var(--dawn-gutter)] pt-24 pb-20">
+          {/* Soft coral wash — decorative, low-key, never a hard gradient block */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px]"
+            style={{
+              background:
+                "radial-gradient(60% 100% at 50% 0%, var(--coral-soft) 0%, rgba(252,233,226,0) 70%)",
+            }}
+          />
 
-      {/* Navigation */}
-      <nav className="fixed top-0 z-50 w-full">
-        <div className="absolute inset-0 bg-[#0a0a0b]/80 backdrop-blur-xl border-b border-violet-500/10" />
-        <div className="relative max-w-7xl mx-auto flex h-16 items-center justify-between px-6">
-          <Link href="/" className="flex items-center group">
-            <Image
-              src="/logo-dark.svg"
-              alt="JobSilver"
-              width={160}
-              height={32}
-              className="h-8 w-auto"
-              priority
-            />
-          </Link>
-        </div>
-      </nav>
+          <div className="w-full max-w-md">
+            {/* Header */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+              className="mb-8 text-center"
+            >
+              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--dawn-line)] bg-[var(--coral-soft)] px-3.5 py-1.5">
+                <FlaskConical className="h-3.5 w-3.5 text-[var(--coral-lo)]" aria-hidden="true" />
+                <span className="text-[13px] font-semibold uppercase tracking-[0.09em] text-[var(--coral-lo)]">
+                  Beta Tester Access
+                </span>
+              </div>
 
-      {/* Main Content */}
-      <main className="relative min-h-screen flex flex-col items-center justify-center px-4 pt-16">
-        <div className="w-full max-w-md">
-          {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-8"
-          >
-            {/* Tester Badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-500/10 border border-violet-500/20 mb-4">
-              <FlaskConical className="w-4 h-4 text-violet-400" />
-              <span className="text-sm font-medium text-violet-300">Beta Tester Access</span>
-            </div>
+              <h1 className="text-balance text-[clamp(28px,3.6vw,38px)] font-semibold leading-[1.03] tracking-[-0.02em] text-[var(--dawn-ink)]">
+                {activeTab === "login" ? "Welcome back, tester" : "Join as a beta tester"}
+              </h1>
+              <p className="mx-auto mt-3 max-w-[46ch] text-[clamp(15px,1.1vw,17px)] leading-[1.6] text-[var(--dawn-ink-2)]">
+                {activeTab === "login"
+                  ? "Sign in to pick up where you left off. Every feature, unlocked."
+                  : "A quiet corner of JobSilver where you get the whole toolkit, early."}
+              </p>
+            </motion.div>
 
-            <h1 className="text-3xl font-semibold tracking-tight text-white mb-2">
-              {activeTab === "login" ? "Welcome back, Tester" : "Join as a Beta Tester"}
-            </h1>
-            <p className="text-zinc-400">
-              {activeTab === "login"
-                ? "Sign in to access all features"
-                : "Get full access to all premium features"
-              }
-            </p>
-          </motion.div>
-
-          {/* Auth Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            className="relative rounded-2xl overflow-hidden"
-          >
-            {/* Card background with violet tint */}
-            <div className="absolute inset-0 bg-gradient-to-b from-violet-900/20 via-zinc-900/80 to-zinc-900" />
-            <div className="absolute inset-[1px] rounded-2xl bg-gradient-to-b from-violet-500/[0.08] via-transparent to-transparent" />
-
-            {/* Shine line */}
-            <div className="absolute top-0 left-1/4 w-1/2 h-px bg-gradient-to-r from-transparent via-violet-400/30 to-transparent" />
-
-            <div className="relative z-10 p-8">
+            {/* Auth Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+              className="rounded-[16px] border border-[var(--dawn-line)] bg-[var(--dawn-surface)] p-7 shadow-[0_1px_2px_rgba(31,27,24,0.04)] sm:p-8"
+            >
               {/* Features Banner */}
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-violet-500/10 to-purple-500/10 border border-violet-500/20 mb-6">
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-violet-400" />
+              <div className="mb-6 flex items-center gap-3 rounded-[12px] border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-3.5">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[10px] bg-[var(--coral-soft)]">
+                  <Sparkles className="h-5 w-5 text-[var(--coral-lo)]" aria-hidden="true" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-violet-300">
-                    Full Feature Access
+                <div className="min-w-0 flex-1">
+                  <p className="text-[14px] font-semibold text-[var(--dawn-ink)]">
+                    Full feature access
                   </p>
-                  <p className="text-xs text-violet-400/70">
-                    Unlimited AI responses, cover letters, CV optimization, and more
+                  <p className="text-[12.5px] leading-[1.45] text-[var(--dawn-ink-2)]">
+                    Unlimited AI responses, cover letters, CV optimization, and more.
                   </p>
                 </div>
               </div>
 
               {/* Animated Tab Indicator */}
-              <div className="inline-flex items-center p-1.5 rounded-xl bg-white/[0.03] border border-white/[0.06] mb-6 w-full">
+              <div
+                role="group"
+                aria-label="Authentication mode"
+                className="mb-6 inline-flex w-full items-center rounded-[12px] border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-1.5"
+              >
                 {(["signup", "login"] as const).map((tab) => (
                   <button
                     key={tab}
+                    type="button"
+                    aria-pressed={activeTab === tab}
                     onClick={() => setActiveTab(tab)}
-                    className="relative flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors duration-200"
+                    className="relative min-h-[44px] flex-1 rounded-[9px] px-4 py-2.5 text-[14px] font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-cream)]"
                   >
                     {activeTab === tab && (
                       <motion.div
                         layoutId="tester-tab-indicator"
-                        className="absolute inset-0 bg-violet-500/20 rounded-lg border border-violet-500/20"
-                        transition={{
-                          type: "spring",
-                          bounce: 0.15,
-                          duration: 0.5,
-                        }}
+                        className="absolute inset-0 rounded-[9px] bg-[var(--dawn-surface)] shadow-[0_1px_2px_rgba(31,27,24,0.06)] ring-1 ring-[var(--dawn-line-2)]"
+                        transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
                       />
                     )}
                     <span
                       className={`relative z-10 ${
-                        activeTab === tab ? "text-violet-200" : "text-zinc-500"
+                        activeTab === tab
+                          ? "text-[var(--dawn-ink)]"
+                          : "text-[var(--dawn-ink-3)]"
                       }`}
                     >
-                      {tab === "login" ? "Sign In" : "Sign Up"}
+                      {tab === "login" ? "Sign in" : "Sign up"}
                     </span>
                   </button>
                 ))}
               </div>
 
               {/* Invite Code Input */}
-              <div className="space-y-2 mb-4">
-                <Label htmlFor="invite-code" className="text-zinc-300">
-                  Invite Code <span className="text-red-400">*</span>
+              <div className="mb-4 space-y-2">
+                <Label htmlFor="invite-code" className={labelClass}>
+                  Invite code <span className="text-[var(--coral-lo)]">*</span>
                 </Label>
                 <div className="relative">
-                  <FlaskConical className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                  <FlaskConical
+                    className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--dawn-ink-3)]"
+                    aria-hidden="true"
+                  />
                   <Input
                     id="invite-code"
                     type="text"
+                    autoComplete="off"
+                    aria-describedby="tester-invite-help"
                     placeholder="Enter your invite code"
                     value={inviteCode}
                     onChange={(e) => setInviteCode(e.target.value)}
                     required
-                    className="pl-10 bg-white/[0.02] border-violet-500/20 text-white placeholder:text-zinc-600 focus:border-violet-500/40 focus:ring-violet-500/20 uppercase"
+                    className={`${fieldClass} uppercase`}
                   />
                 </div>
-                <p className="text-xs text-zinc-500">
-                  Contact us to get a tester invite code
+                <p id="tester-invite-help" className="text-[12.5px] text-[var(--dawn-ink-2)]">
+                  Contact us to get a tester invite code.
                 </p>
               </div>
 
@@ -380,35 +375,43 @@ export default function TesterLoginPage() {
               {activeTab === "login" ? (
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="login-email" className="text-zinc-300">
+                    <Label htmlFor="login-email" className={labelClass}>
                       Email
                     </Label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                      <Mail
+                        className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--dawn-ink-3)]"
+                        aria-hidden="true"
+                      />
                       <Input
                         id="login-email"
                         name="email"
                         type="email"
+                        autoComplete="email"
                         placeholder="you@example.com"
                         required
-                        className="pl-10 bg-white/[0.02] border-violet-500/20 text-white placeholder:text-zinc-600 focus:border-violet-500/40 focus:ring-violet-500/20"
+                        className={fieldClass}
                         disabled={isLoading}
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="login-password" className="text-zinc-300">
+                    <Label htmlFor="login-password" className={labelClass}>
                       Password
                     </Label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                      <Lock
+                        className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--dawn-ink-3)]"
+                        aria-hidden="true"
+                      />
                       <Input
                         id="login-password"
                         name="password"
                         type="password"
+                        autoComplete="current-password"
                         placeholder="Enter your password"
                         required
-                        className="pl-10 bg-white/[0.02] border-violet-500/20 text-white placeholder:text-zinc-600 focus:border-violet-500/40 focus:ring-violet-500/20"
+                        className={fieldClass}
                         disabled={isLoading}
                       />
                     </div>
@@ -416,162 +419,167 @@ export default function TesterLoginPage() {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="relative w-full h-11 rounded-xl overflow-hidden group disabled:opacity-50"
+                    className="group flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full bg-[var(--coral)] px-6 text-[14px] font-medium text-[var(--coral-ink)] transition-[background-color,transform] duration-200 hover:bg-[var(--coral-hi)] active:scale-[0.985] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-surface)]"
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-violet-500 to-purple-500 transition-transform duration-300 group-hover:scale-[1.02]" />
-                    <span className="relative z-10 text-white font-medium flex items-center justify-center gap-2">
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Signing in...
-                        </>
-                      ) : (
-                        <>
-                          Sign In as Tester
-                          <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-                        </>
-                      )}
-                    </span>
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        Signing in...
+                      </>
+                    ) : (
+                      <>
+                        Sign in as tester
+                        <ArrowRight
+                          className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+                          aria-hidden="true"
+                        />
+                      </>
+                    )}
                   </button>
                 </form>
               ) : (
                 <form onSubmit={handleSignUp} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="signup-name" className="text-zinc-300">
-                      Full Name
+                    <Label htmlFor="signup-name" className={labelClass}>
+                      Full name
                     </Label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                      <User
+                        className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--dawn-ink-3)]"
+                        aria-hidden="true"
+                      />
                       <Input
                         id="signup-name"
                         name="fullName"
                         type="text"
-                        placeholder="John Doe"
+                        autoComplete="name"
+                        placeholder="Jane Doe"
                         required
-                        className="pl-10 bg-white/[0.02] border-violet-500/20 text-white placeholder:text-zinc-600 focus:border-violet-500/40 focus:ring-violet-500/20"
+                        className={fieldClass}
                         disabled={isLoading}
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="signup-email" className="text-zinc-300">
+                    <Label htmlFor="signup-email" className={labelClass}>
                       Email
                     </Label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                      <Mail
+                        className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--dawn-ink-3)]"
+                        aria-hidden="true"
+                      />
                       <Input
                         id="signup-email"
                         name="email"
                         type="email"
+                        autoComplete="email"
                         placeholder="you@example.com"
                         required
-                        className="pl-10 bg-white/[0.02] border-violet-500/20 text-white placeholder:text-zinc-600 focus:border-violet-500/40 focus:ring-violet-500/20"
+                        className={fieldClass}
                         disabled={isLoading}
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="signup-password" className="text-zinc-300">
+                    <Label htmlFor="signup-password" className={labelClass}>
                       Password
                     </Label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                      <Lock
+                        className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--dawn-ink-3)]"
+                        aria-hidden="true"
+                      />
                       <Input
                         id="signup-password"
                         name="password"
                         type="password"
+                        autoComplete="new-password"
+                        aria-describedby="tester-password-help"
                         placeholder="Create a password"
                         required
                         minLength={6}
-                        className="pl-10 bg-white/[0.02] border-violet-500/20 text-white placeholder:text-zinc-600 focus:border-violet-500/40 focus:ring-violet-500/20"
+                        className={fieldClass}
                         disabled={isLoading}
                       />
                     </div>
-                    <p className="text-xs text-zinc-600">
-                      Must be at least 6 characters
+                    <p id="tester-password-help" className="text-[12.5px] text-[var(--dawn-ink-2)]">
+                      Must be at least 6 characters.
                     </p>
                   </div>
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="relative w-full h-11 rounded-xl overflow-hidden group disabled:opacity-50"
+                    className="group flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full bg-[var(--coral)] px-6 text-[14px] font-medium text-[var(--coral-ink)] transition-[background-color,transform] duration-200 hover:bg-[var(--coral-hi)] active:scale-[0.985] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-surface)]"
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-violet-500 to-purple-500 transition-transform duration-300 group-hover:scale-[1.02]" />
-                    <span className="relative z-10 text-white font-medium flex items-center justify-center gap-2">
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Creating account...
-                        </>
-                      ) : (
-                        <>
-                          <FlaskConical className="w-4 h-4" />
-                          Join as Tester
-                        </>
-                      )}
-                    </span>
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        Creating account...
+                      </>
+                    ) : (
+                      <>
+                        <FlaskConical className="h-4 w-4" aria-hidden="true" />
+                        Join as tester
+                      </>
+                    )}
                   </button>
                 </form>
               )}
 
-              {/* Divider */}
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-violet-500/10" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="px-3 text-zinc-600 bg-zinc-900">
-                    Or continue with
-                  </span>
-                </div>
-              </div>
+              {googleAuthEnabled ? (
+                <>
+                  <div className="relative my-6">
+                    <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                      <div className="w-full border-t border-[var(--dawn-line)]" />
+                    </div>
+                    <div className="relative flex justify-center">
+                      <span className="bg-[var(--dawn-surface)] px-3 text-[12px] uppercase tracking-[0.09em] text-[var(--dawn-ink-3)]">
+                        Or continue with
+                      </span>
+                    </div>
+                  </div>
 
-              {/* Google Login */}
-              <button
-                type="button"
-                disabled={isLoading}
-                onClick={handleGoogleAuth}
-                className="w-full h-11 rounded-xl border border-violet-500/20 bg-white/[0.02] hover:bg-violet-500/10 hover:border-violet-500/30 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-3"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="currentColor"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="currentColor"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                  />
-                  <path
-                    fill="currentColor"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  />
-                </svg>
-                <span className="text-sm text-zinc-300">Continue with Google</span>
-              </button>
+                  <button
+                    type="button"
+                    disabled={isLoading}
+                    onClick={handleGoogleAuth}
+                    className="flex min-h-[44px] w-full items-center justify-center gap-3 rounded-full border border-[var(--dawn-line-2)] bg-[var(--dawn-surface)] text-[14px] font-medium text-[var(--dawn-ink)] transition-colors duration-200 hover:border-[var(--coral)] hover:text-[var(--coral-lo)] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-surface)]"
+                  >
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                    </svg>
+                    <span>Continue with Google</span>
+                  </button>
+                </>
+              ) : null}
 
               {/* Terms */}
-              <p className="text-center text-xs text-zinc-600 mt-6">
+              <p className="mt-6 text-center text-[12.5px] leading-[1.5] text-[var(--dawn-ink-2)]">
                 By continuing, you agree to our{" "}
-                <Link href="/terms" className="text-violet-400 hover:text-violet-300 transition-colors">
+                <Link
+                  href="/terms"
+                  className="rounded-[4px] text-[var(--coral-lo)] underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-surface)]"
+                >
                   Terms
                 </Link>{" "}
                 and{" "}
-                <Link href="/privacy" className="text-violet-400 hover:text-violet-300 transition-colors">
+                <Link
+                  href="/privacy"
+                  className="rounded-[4px] text-[var(--coral-lo)] underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-surface)]"
+                >
                   Privacy Policy
                 </Link>
               </p>
-            </div>
-          </motion.div>
-        </div>
-      </main>
+            </motion.div>
+          </div>
+        </main>
+      </MotionConfig>
 
-      {/* Footer */}
-      <PublicFooter />
+      <Footer />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
  * 1. Same application_url
  * 2. Same company + same title (case-insensitive)
  */
-export async function POST(request: NextRequest) {
+export async function POST() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Find company+title duplicates (groups with more than 1 job)
-    for (const [key, jobs] of Array.from(companyTitleGroups.entries())) {
+    for (const jobs of companyTitleGroups.values()) {
       if (jobs.length > 1) {
         // Keep the first (oldest), delete the rest
         const [keep, ...duplicates] = jobs

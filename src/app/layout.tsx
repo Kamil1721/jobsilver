@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Fraunces, Inter } from "next/font/google"
 import "./globals.css"
+import { geist, geistMono } from "@/components/landing/fonts"
 import { Toaster } from "@/components/ui/toaster"
 import { ThemeProvider } from "@/components/theme-provider"
 import { CookieConsentBanner } from "@/components/cookie-consent"
@@ -53,29 +54,22 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
+                // Dawn is a light-only product. Hard-lock to light so any
+                // previously persisted 'dark' preference can never win.
                 try {
-                  var theme = localStorage.getItem('jobsilver-theme');
-                  if (theme === 'light') {
-                    document.documentElement.classList.add('light');
-                  } else if (theme === 'system') {
-                    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-                      document.documentElement.classList.add('dark');
-                    } else {
-                      document.documentElement.classList.add('light');
-                    }
-                  } else {
-                    document.documentElement.classList.add('dark');
-                  }
+                  document.documentElement.classList.remove('dark');
+                  document.documentElement.classList.add('light');
+                  localStorage.setItem('jobsilver-theme', 'light');
                 } catch (e) {
-                  document.documentElement.classList.add('dark');
+                  document.documentElement.classList.add('light');
                 }
               })();
             `,
           }}
         />
       </head>
-      <body className={`${inter.variable} ${fraunces.variable} min-h-screen bg-background antialiased`}>
-        <ThemeProvider defaultTheme="dark">
+      <body className={`${geist.variable} ${geistMono.variable} ${inter.variable} ${fraunces.variable} min-h-screen bg-background antialiased`}>
+        <ThemeProvider defaultTheme="light">
           {children}
           <Toaster />
           <CookieConsentBanner />

@@ -4,10 +4,10 @@ import { createServiceClient } from '@/lib/supabase/server'
 import type { JobFilters, Job, CurationLogStatus, AllSubscriptionPlans } from '@/lib/supabase/types'
 import { notifyNewMatches } from '@/lib/email/triggers'
 import type { JobMatch } from '@/lib/email/templates/job-matches'
+import { getEffectivePlan } from '@/lib/features/config'
 import { getDailyJobLimit } from '@/lib/stripe/plans'
 import { checkRateLimit } from '@/lib/security/rate-limit'
 import { sendCronFailureAlert, sendCurationSummary } from '@/lib/email/cron-alerts'
-import { extractAndStoreForJob } from '@/lib/auto-apply/curation-extraction'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes max for Vercel
@@ -79,7 +79,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<CurationSu
     // Get all users with production mode enabled
     const { data: productionUsers, error: usersError } = await supabase
       .from('profiles')
-      .select('id, email, production_mode, job_filters, cv_url, subscription_plan')
+      .select('id, production_mode, job_filters, cv_url, subscription_plan, is_tester, is_admin')
       .eq('production_mode', true)
 
     if (usersError) {
@@ -238,18 +238,20 @@ async function curateJobsForUser(
   supabase: ReturnType<typeof createServiceClient>,
   user: {
     id: string
-    email: string | null
     production_mode: boolean
     job_filters: JobFilters | null
     cv_url: string | null
     subscription_plan: string | null
+    is_tester: boolean
+    is_admin: boolean
   }
 ): Promise<UserCurationResult> {
   // Calculate per-user job target based on subscription plan
-  const userPlan = (user.subscription_plan || 'free') as AllSubscriptionPlans
-  const jobTarget = getDailyJobLimit(userPlan) // 3 for free, 15 for pro, 35 for ultra
+  const billingPlan = (user.subscription_plan || 'free') as AllSubscriptionPlans
+  const effectivePlan = getEffectivePlan(billingPlan, user.is_tester || user.is_admin)
+  const jobTarget = getDailyJobLimit(effectivePlan) // 3 for free, 15 for pro, 35 for ultra/elevated users
 
-  console.log(`[Daily Curation] User ${user.id}: plan=${userPlan}, jobTarget=${jobTarget}`)
+  console.log(`[Daily Curation] User ${user.id}: plan=${billingPlan}, effectivePlan=${effectivePlan}, jobTarget=${jobTarget}`)
 
   // Create curation log entry
   const { data: logEntry, error: logError } = await supabase
@@ -260,7 +262,7 @@ async function curateJobsForUser(
       jobs_target: jobTarget,
       jobs_curated: 0,
       jobs_failed: 0,
-      metadata: { triggered_by: 'cron', plan: userPlan },
+      metadata: { triggered_by: 'cron', plan: billingPlan },
     })
     .select()
     .single()
@@ -288,10 +290,8 @@ async function curateJobsForUser(
       }
     }
 
-    // Use database function with transaction isolation to prevent race conditions
-    // This locks the user's profile row and atomically checks/reserves quota
-    let jobsNeeded: number
-
+    // Calculate today's remaining capacity against the caller-validated plan
+    // target. The RPC locks the profile row while reading the current count.
     const { data: quotaResult, error: quotaError } = await supabase
       .rpc('check_and_reserve_daily_quota', {
         p_user_id: user.id,
@@ -299,20 +299,14 @@ async function curateJobsForUser(
       })
 
     if (quotaError) {
-      console.warn(`[Daily Curation] Quota function failed for user ${user.id}, falling back to query:`, quotaError.message)
-      // Fallback to the old method if the function doesn't exist yet
-      const today = new Date().toISOString().split('T')[0]
-      const { count: existingJobsCount } = await supabase
-        .from('jobs')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .gte('created_at', `${today}T00:00:00`)
-        .in('status', ['discovered', 'saved'])
-
-      jobsNeeded = Math.max(0, jobTarget - (existingJobsCount || 0))
-    } else {
-      jobsNeeded = quotaResult as number
+      throw new Error(`Daily quota check failed: ${quotaError.message}`)
     }
+
+    if (!Number.isInteger(quotaResult) || quotaResult < 0 || quotaResult > jobTarget) {
+      throw new Error('Daily quota check returned an invalid capacity')
+    }
+
+    const jobsNeeded = quotaResult
 
     if (jobsNeeded === 0) {
       console.log(`[Daily Curation] User ${user.id} already has daily quota`)
@@ -320,7 +314,7 @@ async function curateJobsForUser(
         status: 'success',
         jobs_target: jobTarget,
         jobs_curated: 0,
-        metadata: { reason: 'daily_quota_met', plan: userPlan },
+        metadata: { reason: 'daily_quota_met', plan: billingPlan },
       })
       return {
         userId: user.id,
@@ -405,15 +399,19 @@ async function fetchAndCurateJobs(
   searchUserId: string
 ): Promise<{ jobsCurated: number; jobsFailed: number; curatedJobs: JobMatch[] }> {
   let jobsCurated = 0
-  let jobsFailed = 0
+  const jobsFailed = 0
   let attempts = 0
   const curatedJobs: JobMatch[] = []
 
   // Get existing job external IDs to avoid duplicates
-  const { data: existingJobs } = await supabase
+  const { data: existingJobs, error: existingJobsError } = await supabase
     .from('jobs')
     .select('external_id')
     .eq('user_id', userId)
+
+  if (existingJobsError) {
+    throw new Error(`Failed to load existing jobs: ${existingJobsError.message}`)
+  }
 
   const existingIds = new Set(existingJobs?.map(j => j.external_id) || [])
 
@@ -430,65 +428,20 @@ async function fetchAndCurateJobs(
     for (const job of jobs) {
       if (jobsCurated >= targetCount) break
 
-      try {
-        // Save job to database
-        const { data: savedJob, error: saveError } = await supabase
-          .from('jobs')
-          .insert({
-            user_id: userId,
-            external_id: job.external_id,
-            source: job.source,
-            title: job.title,
-            company: job.company,
-            company_logo_url: job.company_logo_url,
-            location: job.location,
-            salary_min: job.salary_min,
-            salary_max: job.salary_max,
-            salary_currency: job.salary_currency,
-            job_type: job.job_type,
-            remote: job.remote ?? false,
-            remote_type: job.remote_type,
-            description: job.description,
-            application_url: job.application_url,
-            match_score: job.match_score,
-            status: 'discovered',
-            platform_detected: job.platform_detected,
-            auto_apply_status: 'manual',
-            ats_source: job.ats_source,
-            ats_job_id: job.ats_job_id,
-          })
-          .select()
-          .single()
+      // /api/jobs/search persists jobs before returning them. Treat its rows as
+      // the source of truth instead of attempting a second INSERT.
+      jobsCurated++
+      existingIds.add(job.external_id)
 
-        if (saveError) {
-          console.error(`[Daily Curation] Failed to save job:`, saveError)
-          jobsFailed++
-          continue
-        }
-
-        jobsCurated++
-        existingIds.add(job.external_id)
-
-        // Extract application questions for this posting (auto-apply pipeline).
-        // Best-effort: never throws — failure is recorded on the job row.
-        if (savedJob && job.application_url) {
-          await extractAndStoreForJob(supabase, savedJob.id, job.application_url)
-        }
-
-        // Track curated job for email notification (top 3)
-        if (curatedJobs.length < 3 && savedJob) {
-          curatedJobs.push({
-            id: savedJob.id,
-            title: savedJob.title,
-            company: savedJob.company,
-            location: savedJob.location || 'Remote',
-            matchScore: savedJob.match_score || undefined,
-            remote: savedJob.remote,
-          })
-        }
-      } catch (err) {
-        console.error(`[Daily Curation] Error processing job:`, err)
-        jobsFailed++
+      if (curatedJobs.length < 3 && job.id && job.title && job.company) {
+        curatedJobs.push({
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          location: job.location || 'Remote',
+          matchScore: job.match_score || undefined,
+          remote: job.remote ?? false,
+        })
       }
     }
   }
@@ -531,32 +484,35 @@ async function fetchJobsFromSearch(
       },
       body: JSON.stringify({
         useProfileFilters: true,
-        skipQuota: true, // Internal curation doesn't count against user quota
         userId, // Pass the user ID for proper context
+        limit: count,
       }),
       signal: controller.signal,
     })
 
     if (response.ok) {
       const data = await response.json()
-      const newJobs = (data.jobs || []).filter(
+      if (!Array.isArray(data.jobs)) {
+        throw new Error('Search API returned an invalid jobs payload')
+      }
+      const newJobs = data.jobs.filter(
         (j: Job) => !existingIds.has(j.external_id)
       )
       return newJobs.slice(0, count)
-    } else {
-      console.warn(`[Daily Curation] Search API returned ${response.status}`)
     }
+
+    throw new Error(`Search API returned ${response.status}`)
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
       console.error(`[Daily Curation] Request timed out`)
-    } else {
-      console.error(`[Daily Curation] Error fetching jobs:`, err)
+      throw new Error('Search API request timed out')
     }
+
+    console.error(`[Daily Curation] Error fetching jobs:`, err)
+    throw err instanceof Error ? err : new Error('Search API request failed')
   } finally {
     clearTimeout(timeoutId)
   }
-
-  return []
 }
 
 /**

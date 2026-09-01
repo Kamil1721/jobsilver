@@ -7,11 +7,6 @@ interface ChatResponse {
   result?: string
 }
 
-interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
-}
-
 /**
  * Send a chat message and handle streaming response
  */

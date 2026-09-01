@@ -35,13 +35,6 @@ export const AnimatedCursor: React.FC<AnimatedCursorProps> = ({
 
     if (next && frame >= current.frame && frame < next.frame) {
       // Interpolate between current and next keyframe
-      const progress = interpolate(
-        frame,
-        [current.frame, next.frame],
-        [0, 1],
-        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
-      )
-
       // Apply smooth easing
       const easedProgress = spring({
         frame: frame - current.frame,

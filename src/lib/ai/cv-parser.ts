@@ -237,11 +237,17 @@ export async function extractTextFromPDFAdobe(pdfBuffer: Buffer): Promise<string
  */
 export async function extractTextFromPDFBasic(pdfBuffer: Buffer): Promise<string> {
   try {
-    const pdfParse = (await import('pdf-parse')).default
-    const result = await pdfParse(pdfBuffer)
-    const text = result.text || ''
-    console.log('pdf-parse extraction successful, extracted', text.length, 'characters')
-    return text.trim()
+    const { PDFParse } = await import('pdf-parse')
+    const parser = new PDFParse({ data: new Uint8Array(pdfBuffer) })
+
+    try {
+      const result = await parser.getText()
+      const text = result.text || ''
+      console.log('pdf-parse extraction successful, extracted', text.length, 'characters')
+      return text.trim()
+    } finally {
+      await parser.destroy()
+    }
   } catch (error) {
     console.error('pdf-parse extraction failed:', error)
     return ''
@@ -305,11 +311,6 @@ export async function extractTextFromFile(
       return extractTextFromPDF(buffer)
     case '.docx':
       return extractTextFromDOCX(buffer)
-    case '.doc':
-      // .doc (OLE2 binary) cannot be reliably parsed server-side — return empty
-      // Users should upload .docx or .pdf instead
-      console.warn('.doc format not supported for text extraction, recommend .docx or .pdf')
-      return ''
     case '.txt':
       return buffer.toString('utf-8')
     default:

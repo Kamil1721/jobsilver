@@ -1,0 +1,108 @@
+.shell {
+  min-height: calc(100dvh - 4rem);
+  color: var(--dawn-ink);
+  background:
+    radial-gradient(circle at 100% 0%, var(--coral-soft) 0, transparent 25rem),
+    var(--dawn-bg);
+}
+
+.content {
+  width: min(100%, 67rem);
+  margin-inline: auto;
+  padding: clamp(2rem, 4vw, 3.5rem) var(--dawn-gutter) 5rem;
+}
+
+.shell :global([role="tablist"]) {
+  height: auto;
+  padding: 0.3rem;
+  border: 1px solid var(--dawn-line);
+  border-radius: 0.85rem;
+  background: var(--dawn-cream);
+}
+
+.shell :global([role="tab"]) {
+  min-height: 2.75rem;
+  border-radius: 0.62rem;
+  color: var(--dawn-ink-2);
+}
+
+.shell :global([role="tab"][data-state="active"]) {
+  color: var(--dawn-ink);
+  background: var(--dawn-surface);
+  box-shadow: 0 8px 22px -18px rgba(31, 27, 24, 0.55);
+}
+
+.shell :global([data-slot="card"]),
+.shell :global(.rounded-xl.border.bg-card) {
+  border-color: var(--dawn-line);
+  background: color-mix(in srgb, var(--dawn-surface) 95%, var(--dawn-cream));
+  box-shadow: 0 24px 64px -52px rgba(31, 27, 24, 0.5);
+}
+
+.shell :global(input),
+.shell :global(textarea),
+.shell :global(select) {
+  border-color: var(--dawn-line-2);
+  background: var(--dawn-surface);
+  border-radius: 0.65rem;
+}
+
+.shell :global(button) {
+  transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.shell :global(button:active:not(:disabled)) {
+  transform: translateY(1px);
+}
+
+.shell :global(button:focus-visible),
+.shell :global(input:focus-visible) {
+  outline: 2px solid var(--coral);
+  outline-offset: 2px;
+}
+
+.shell :global(.text-blue-500),
+.shell :global(.text-blue-600),
+.shell :global(.text-violet-600),
+.shell :global(.text-amber-800),
+.shell :global(.text-amber-700),
+.shell :global(.text-amber-600),
+.shell :global(.text-emerald-600),
+.shell :global(.text-emerald-500) {
+  color: var(--coral-lo) !important;
+}
+
+.shell :global(.bg-blue-100),
+.shell :global(.bg-violet-100),
+.shell :global(.bg-amber-50),
+.shell :global(.bg-amber-100),
+.shell :global(.bg-emerald-100) {
+  background: var(--coral-soft) !important;
+}
+
+.shell :global(.border-blue-200),
+.shell :global(.border-violet-200),
+.shell :global(.border-amber-200),
+.shell :global(.border-amber-300) {
+  border-color: color-mix(in srgb, var(--coral) 28%, transparent) !important;
+}
+
+@media (max-width: 400px) {
+  .content {
+    padding-inline: 1rem;
+  }
+
+  .shell :global([role="tab"]) {
+    min-width: 0;
+    padding-inline: 0.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell :global(*) {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+

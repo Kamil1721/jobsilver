@@ -62,7 +62,13 @@ export function FavoriteButton({
 
   // Sync with initial state
   React.useEffect(() => {
-    setIsFavorited(initialFavorited)
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) setIsFavorited(initialFavorited)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [initialFavorited])
 
   const handleToggle = async (e: React.MouseEvent) => {
@@ -136,9 +142,10 @@ export function FavoriteButton({
       title=""
       className={cn(
         "relative flex items-center justify-center rounded-lg transition-all duration-200",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         config.button,
         isPremium
-          ? "hover:bg-zinc-100 dark:hover:bg-white/[0.05] cursor-pointer"
+          ? "hover:bg-accent dark:hover:bg-white/[0.05] cursor-pointer"
           : "cursor-not-allowed opacity-60",
         className
       )}
@@ -151,7 +158,7 @@ export function FavoriteButton({
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
-            className="absolute inset-0 rounded-lg bg-gradient-to-br from-rose-500/10 via-pink-500/10 to-rose-500/10 dark:from-rose-500/20 dark:via-pink-500/20 dark:to-rose-500/20"
+            className="absolute inset-0 rounded-lg bg-[var(--coral-soft)]"
           />
         )}
       </AnimatePresence>
@@ -169,12 +176,12 @@ export function FavoriteButton({
               config.icon,
               "transition-all duration-200",
               isFavorited
-                ? "fill-rose-500 text-rose-500 dark:fill-rose-400 dark:text-rose-400"
-                : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-400"
+                ? "fill-[var(--coral)] text-[var(--coral)]"
+                : "text-muted-foreground hover:text-foreground"
             )}
           />
         ) : (
-          <Lock aria-hidden="true" className={cn(config.icon, "text-zinc-400 dark:text-zinc-600")} />
+          <Lock aria-hidden="true" className={cn(config.icon, "text-muted-foreground")} />
         )}
       </motion.div>
 
@@ -196,7 +203,7 @@ export function FavoriteButton({
                 transition={{ duration: 0.5, ease: "easeOut" }}
                 className="absolute"
               >
-                <Sparkles className="w-2 h-2 text-rose-400 dark:text-rose-300" />
+                <Sparkles className="w-2 h-2 text-[var(--coral)]" />
               </motion.div>
             ))}
           </>
@@ -211,7 +218,7 @@ export function FavoriteButton({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <div className="w-3 h-3 border border-zinc-400 border-t-transparent rounded-full animate-spin" />
+          <div className="w-3 h-3 border border-muted-foreground border-t-transparent rounded-full animate-spin" />
         </motion.div>
       )}
     </motion.button>

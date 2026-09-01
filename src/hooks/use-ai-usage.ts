@@ -118,10 +118,16 @@ export function useAIUsage(): UseAIUsageResult {
   }, [])
 
   React.useEffect(() => {
-    fetchUsage()
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) void fetchUsage()
+    })
     // Refresh usage every 60 seconds
     const interval = setInterval(fetchUsage, 60000)
-    return () => clearInterval(interval)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [fetchUsage])
 
   // Compute derived values

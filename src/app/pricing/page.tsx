@@ -1,29 +1,36 @@
 "use client"
 
 import * as React from "react"
-import { Suspense, useRef } from "react"
-import Link from "next/link"
-import Image from "next/image"
+import { Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { motion, useScroll, useTransform, useInView } from "framer-motion"
 import {
-  ArrowRight,
-  Check,
-  X,
-  Sparkles,
-  Loader2,
-  Zap,
-  Rocket,
-  Crown,
-  ChevronDown,
-} from "lucide-react"
+  motion,
+  MotionConfig,
+  useReducedMotion,
+  useScroll,
+  useTransform,
+} from "framer-motion"
+import { ArrowRight, Check, X, Sparkles, Loader2, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Nav } from "@/components/landing/nav"
+import { CtaButton } from "@/components/landing/cta-button"
 import { PublicFooter } from "@/components/public-footer"
 import { createCheckoutSession } from "@/lib/stripe/browser"
 import { useToast } from "@/hooks/use-toast"
 
 // Types
 type BillingCycle = "weekly" | "monthly"
+type AuthStatus = "checking" | "anonymous" | "authenticated"
+
+interface SubscriptionProbeData {
+  authenticated: boolean
+  plan?: string
+  isTester?: boolean
+  isAdmin?: boolean
+  subscription?: {
+    status?: string
+  } | null
+}
 
 interface PricingFeature {
   name: string
@@ -140,7 +147,7 @@ const PLANS: Plan[] = [
 const FAQ_ITEMS = [
   {
     question: "How does the 3-day free trial work?",
-    answer: "The Pro plan includes a 3-day free trial. Start instantly, no charge for 3 days. Cancel anytime before the trial ends and you won't be billed. After the trial, you'll be charged based on your selected billing cycle. Note: Ultra has no trial and charges immediately.",
+    answer: "Pro starts with three free days. Billing begins after the trial on your selected cycle, and you can cancel before then. Ultra billing starts immediately.",
   },
   {
     question: "What's the difference between the plans?",
@@ -152,7 +159,7 @@ const FAQ_ITEMS = [
   },
   {
     question: "What payment methods do you accept?",
-    answer: "We accept all major credit cards through Stripe. Your payment information is encrypted and never stored on our servers.",
+    answer: "We accept all major credit cards through Stripe. Stripe processes your encrypted payment information outside JobSilver's servers.",
   },
   {
     question: "How does the AI assistant help?",
@@ -160,17 +167,27 @@ const FAQ_ITEMS = [
   },
   {
     question: "What counts as a 'discovered job'?",
-    answer: "Each day, new jobs matching your preferences are automatically discovered and added to your board. Each new job counts toward your daily limit. Jobs you've already seen don't count again. Free: 3/day, Pro: 15/day, Ultra: 35/day.",
+    answer: "Each day, new jobs matching your preferences are added to your board. Only newly discovered jobs count toward the daily limit. Free includes 3 per day, Pro 15, and Ultra 35.",
   },
 ]
 
-// Loading fallback
+const EASE = [0.16, 1, 0.3, 1] as const
+
+function getCheckoutLoginPath(planId: string, cycle: BillingCycle) {
+  const checkoutPath = `/checkout-redirect?plan=${planId}&cycle=${cycle}`
+  return `/login?next=${encodeURIComponent(checkoutPath)}`
+}
+
+// Loading fallback — Dawn light
 function PricingLoading() {
   return (
-    <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center">
-      <div className="relative">
-        <div className="w-12 h-12 rounded-full border-2 border-zinc-800" />
-        <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-transparent border-t-zinc-400 animate-spin" />
+    <div
+      className="min-h-screen flex items-center justify-center"
+      style={{ background: "var(--dawn-bg)" }}
+    >
+      <div className="relative h-10 w-10">
+        <div className="absolute inset-0 rounded-full border-2 border-[var(--dawn-line-2)]" />
+        <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-[var(--coral)] animate-spin" />
       </div>
     </div>
   )
@@ -191,44 +208,79 @@ function PricingPageContent() {
   const [billingCycle, setBillingCycle] = React.useState<BillingCycle>("monthly")
   const [loadingPlan, setLoadingPlan] = React.useState<string | null>(null)
   const [currentPlan, setCurrentPlan] = React.useState<string | null>(null)
-  const [isLoggedIn, setIsLoggedIn] = React.useState(false)
+  const [authStatus, setAuthStatus] = React.useState<AuthStatus>("checking")
   const [openFaq, setOpenFaq] = React.useState<number | null>(null)
+  const accountStateProbe = React.useRef<Promise<SubscriptionProbeData> | null>(null)
+  const shouldReduceMotion = useReducedMotion() ?? false
 
-  const containerRef = useRef<HTMLDivElement>(null)
-  const { scrollYProgress } = useScroll({
-    target: containerRef,
-    offset: ["start start", "end end"]
-  })
+  const { scrollYProgress } = useScroll()
 
-  const backgroundY = useTransform(scrollYProgress, [0, 1], ["0%", "50%"])
+  const backgroundY = useTransform(scrollYProgress, [0, 1], ["0%", "40%"])
 
   React.useEffect(() => {
     const subscription = searchParams.get("subscription")
     if (subscription === "canceled") {
       toast({
         title: "Checkout canceled",
-        description: "No worries! Subscribe whenever you're ready.",
+        description: "Subscribe whenever you're ready.",
       })
     }
   }, [searchParams, toast])
 
   React.useEffect(() => {
-    async function fetchSubscription() {
+    let canceled = false
+
+    async function loadAccountState() {
       try {
-        const response = await fetch("/api/stripe/subscription")
-        if (response.ok) {
-          const data = await response.json()
-          setIsLoggedIn(true)
-          if (data.data?.plan && data.data?.status === 'active') {
-            setCurrentPlan(data.data.plan)
+        accountStateProbe.current ??= fetch(
+          "/api/stripe/subscription?optionalAuth=1"
+        ).then(async (response) => {
+          const result = await response.json()
+
+          if (!response.ok) {
+            throw new Error(
+              result.error?.message || "Failed to check account status"
+            )
           }
+
+          return result.data as SubscriptionProbeData
+        })
+
+        const data = await accountStateProbe.current
+
+        if (canceled) return
+
+        if (!data.authenticated) {
+          setAuthStatus("anonymous")
+          setCurrentPlan(null)
+          return
+        }
+
+        setAuthStatus("authenticated")
+        const subscriptionStatus = data.subscription?.status
+        const hasCurrentAccess =
+          data.plan === "free" ||
+          data.isTester === true ||
+          data.isAdmin === true ||
+          subscriptionStatus === "active" ||
+          subscriptionStatus === "trialing"
+
+        if (data.plan && hasCurrentAccess) {
+          setCurrentPlan(data.plan)
         }
       } catch {
-        setIsLoggedIn(false)
-        setCurrentPlan(null)
+        if (!canceled) {
+          setAuthStatus("anonymous")
+          setCurrentPlan(null)
+        }
       }
     }
-    fetchSubscription()
+
+    void loadAccountState()
+
+    return () => {
+      canceled = true
+    }
   }, [])
 
   const handleSelectPlan = async (planId: string, cycle: BillingCycle) => {
@@ -237,18 +289,24 @@ function PricingPageContent() {
       return
     }
 
+    if (authStatus === "checking") return
+
+    if (authStatus === "anonymous") {
+      router.push(getCheckoutLoginPath(planId, cycle))
+      return
+    }
+
     setLoadingPlan(planId)
 
     try {
       await createCheckoutSession(planId, cycle)
     } catch (error) {
-      console.error("Checkout error:", error)
-
       if (error instanceof Error && error.message.includes("Authentication")) {
-        // Redirect to login with checkout intent in URL
-        router.push(`/login?next=${encodeURIComponent(`/checkout-redirect?plan=${planId}&cycle=${cycle}`)}`)
+        router.push(getCheckoutLoginPath(planId, cycle))
         return
       }
+
+      console.error("Checkout error:", error)
 
       toast({
         title: "Something went wrong",
@@ -261,307 +319,273 @@ function PricingPageContent() {
   }
 
   return (
-    <div ref={containerRef} className="min-h-screen bg-[#0a0a0b] text-white overflow-x-hidden">
-      {/* Ambient Background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
-        <motion.div
-          style={{ y: backgroundY }}
-          className="absolute top-[-20%] left-[10%] w-[800px] h-[800px] rounded-full bg-gradient-to-br from-zinc-800/30 via-zinc-900/20 to-transparent blur-[120px]"
-        />
-        <motion.div
-          style={{ y: backgroundY }}
-          className="absolute top-[30%] right-[-10%] w-[600px] h-[600px] rounded-full bg-gradient-to-bl from-zinc-700/20 via-transparent to-transparent blur-[100px]"
-        />
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: `
-              linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px),
-              linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)
-            `,
-            backgroundSize: '60px 60px',
-          }}
-        />
-      </div>
+    <MotionConfig reducedMotion="user">
+      <div
+        className="min-h-screen overflow-x-hidden"
+        style={{ background: "var(--dawn-bg)", color: "var(--dawn-ink)" }}
+      >
+        <Nav />
 
-      {/* Navigation */}
-      <nav className="fixed top-0 z-50 w-full">
-        <div className="absolute inset-0 bg-[#0a0a0b]/80 backdrop-blur-xl border-b border-white/[0.04]" />
-        <div className="relative max-w-7xl mx-auto flex h-16 items-center justify-between px-6">
-          <Link href="/" className="flex items-center group">
-            <Image
-              src="/logo-dark.svg"
-              alt="JobSilver"
-              width={160}
-              height={32}
-              className="h-8 w-auto"
-              priority
-            />
-          </Link>
-
-          <div className="hidden md:flex items-center gap-8">
-            {["Features", "How It Works", "Pricing", "FAQ"].map((item) => (
-              <Link
-                key={item}
-                href={item === "Pricing" ? "/pricing" : item === "FAQ" ? "/faq" : `/#${item.toLowerCase().replace(/ /g, "-")}`}
-                className={cn(
-                  "text-sm transition-colors duration-300",
-                  item === "Pricing"
-                    ? "text-white"
-                    : "text-zinc-500 hover:text-zinc-300"
-                )}
-              >
-                {item}
-              </Link>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors duration-300"
-            >
-              Sign In
-            </Link>
-            <Link href="/login">
-              <button className="relative px-5 py-2.5 text-sm font-medium rounded-xl overflow-hidden group">
-                <div className="absolute inset-0 bg-gradient-to-r from-zinc-700 via-zinc-600 to-zinc-700 transition-all duration-500 group-hover:scale-105" />
-                <div className="absolute inset-[1px] bg-gradient-to-b from-zinc-800 to-zinc-900 rounded-[10px]" />
-                <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/5" />
-                <span className="relative z-10 text-zinc-200 group-hover:text-white transition-colors">
-                  Get Started
-                </span>
-              </button>
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section className="relative pt-32 pb-16 md:pt-44 md:pb-24">
-        <div className="max-w-7xl mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 1 }}
-            className="text-center max-w-3xl mx-auto"
-          >
-            {/* Badge */}
+        <main className="pt-20">
+          {/* Hero */}
+          <section className="relative overflow-hidden">
+            {/* Soft warm parallax wash — decorative only */}
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/[0.06] mb-8"
+              aria-hidden="true"
+              style={shouldReduceMotion ? undefined : { y: backgroundY }}
+              className="pointer-events-none absolute -top-24 right-[-8%] h-[520px] w-[520px] rounded-full opacity-60 blur-[120px]"
             >
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-xs font-medium tracking-wide text-zinc-400 uppercase">
-                Pro plan includes 3-day free trial
-              </span>
+              <div
+                className="h-full w-full rounded-full"
+                style={{
+                  background:
+                    "radial-gradient(closest-side, var(--coral-soft), transparent 72%)",
+                }}
+              />
             </motion.div>
 
-            {/* Headline */}
-            <motion.h1
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.3 }}
-              className="text-4xl md:text-6xl lg:text-7xl font-semibold tracking-tight leading-[1.05] mb-6"
-            >
-              <span className="text-white">Simple pricing,</span>
-              <br />
-              <span className="bg-gradient-to-r from-zinc-400 via-zinc-300 to-zinc-500 bg-clip-text text-transparent">
-                powerful results
-              </span>
-            </motion.h1>
-
-            {/* Subheadline */}
-            <motion.p
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.4 }}
-              className="text-lg md:text-xl text-zinc-500 max-w-xl mx-auto mb-12 leading-relaxed"
-            >
-              Discover more jobs and let AI supercharge your applications.
-              Choose the plan that fits your job search.
-            </motion.p>
-
-            {/* Billing Toggle */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.5 }}
-            >
-              <BillingToggle cycle={billingCycle} onChange={setBillingCycle} />
-            </motion.div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Pricing Cards - 3 cards */}
-      <section className="relative py-8 md:py-16">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="grid md:grid-cols-3 gap-6 md:gap-6 items-stretch">
-            {PLANS.map((plan, index) => (
-              <PricingCard
-                key={plan.id}
-                plan={plan}
-                billingCycle={billingCycle}
-                onSelect={handleSelectPlan}
-                isLoading={loadingPlan === plan.id}
-                isCurrentPlan={isLoggedIn && currentPlan === plan.id}
-                index={index}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Features Comparison */}
-      <ComparisonTable billingCycle={billingCycle} />
-
-      {/* FAQ Section */}
-      <section className="relative py-24 md:py-32">
-        <div className="max-w-3xl mx-auto px-6">
-          <SectionHeader
-            title="Questions & Answers"
-            subtitle="Everything you need to know"
-          />
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-            className="mt-16 space-y-3"
-          >
-            {FAQ_ITEMS.map((item, index) => (
-              <FAQItem
-                key={index}
-                question={item.question}
-                answer={item.answer}
-                isOpen={openFaq === index}
-                onToggle={() => setOpenFaq(openFaq === index ? null : index)}
-                index={index}
-              />
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="relative py-24 md:py-32">
-        <div className="max-w-4xl mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-            className="relative rounded-3xl overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/50 via-zinc-900/80 to-zinc-900" />
-            <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-transparent to-transparent" />
-            <div className="absolute inset-[1px] rounded-3xl bg-gradient-to-br from-white/[0.08] via-transparent to-transparent" />
-            <div className="absolute top-0 left-1/4 w-1/2 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-
-            <div className="relative px-8 py-16 md:px-16 md:py-20 text-center">
-              <motion.h2
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: 0.2 }}
-                className="text-3xl md:text-4xl font-semibold text-white mb-4"
-              >
-                Ready to land your next role faster?
-              </motion.h2>
-
-              <motion.p
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: 0.3 }}
-                className="text-zinc-400 text-lg mb-10 max-w-md mx-auto"
-              >
-                Start free with 3 jobs per day. Upgrade to Pro for AI assistance, or Ultra for unlimited power.
-              </motion.p>
-
+            <div className="relative mx-auto max-w-[var(--dawn-content)] px-[var(--dawn-gutter)] pb-[clamp(40px,5vw,72px)] pt-[clamp(56px,7vw,104px)]">
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: 0.4 }}
-                className="flex flex-col sm:flex-row items-center justify-center gap-4"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, ease: EASE }}
+                className="max-w-[62ch]"
               >
-                <Link href="/login">
-                  <button className="group relative px-8 py-4 rounded-2xl overflow-hidden">
-                    <div className="absolute inset-0 bg-white transition-transform duration-300 group-hover:scale-105" />
-                    <span className="relative z-10 text-zinc-900 font-medium flex items-center gap-2">
-                      Start Free Trial
-                      <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
-                    </span>
-                  </button>
-                </Link>
+                <p className="text-[13px] font-semibold uppercase tracking-[0.09em] text-[var(--coral-lo)]">
+                  Pricing
+                </p>
 
-                <Link href="/#features">
-                  <button className="px-8 py-4 rounded-2xl text-zinc-400 hover:text-white transition-colors duration-300">
-                    Learn More
-                  </button>
-                </Link>
+                <h1 className="mt-3 text-balance text-[clamp(34px,5vw,58px)] font-semibold leading-[1.03] tracking-[-0.02em] text-[var(--dawn-ink)]">
+                  Simple pricing for a short, focused job hunt.
+                </h1>
+
+                <p className="mt-5 max-w-[60ch] text-[clamp(16px,1.1vw,18px)] leading-[1.6] text-[var(--dawn-ink-2)]">
+                  Discover more roles and let AI carry the busywork. Start free, upgrade
+                  only when it earns its keep, and cancel the moment you sign the offer.
+                </p>
+
+                <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-[var(--dawn-line)] bg-[var(--dawn-surface)] px-3.5 py-2 shadow-[0_1px_2px_rgba(31,27,24,0.04)]">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--coral)]" aria-hidden="true" />
+                  <span className="text-[13px] font-medium text-[var(--dawn-ink-2)]">
+                    Pro includes a 3-day free trial
+                  </span>
+                </div>
+              </motion.div>
+
+              {/* Billing toggle */}
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.1, ease: EASE }}
+                className="mt-9"
+              >
+                <BillingToggle cycle={billingCycle} onChange={setBillingCycle} />
               </motion.div>
             </div>
-          </motion.div>
-        </div>
-      </section>
+          </section>
 
-      {/* Footer */}
-      <PublicFooter />
-    </div>
+          {/* Plan cards */}
+          <section className="relative">
+            <div className="mx-auto max-w-[var(--dawn-content)] px-[var(--dawn-gutter)] pb-[clamp(48px,6vw,88px)]">
+              <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-3">
+                {PLANS.map((plan, index) => (
+                  <PricingCard
+                    key={plan.id}
+                    plan={plan}
+                    billingCycle={billingCycle}
+                    onSelect={handleSelectPlan}
+                    isLoading={loadingPlan === plan.id}
+                    isCurrentPlan={
+                      authStatus === "authenticated" && currentPlan === plan.id
+                    }
+                    isAuthChecking={authStatus === "checking"}
+                    index={index}
+                  />
+                ))}
+              </div>
+
+              <p className="mt-10 text-[13px] text-[var(--dawn-ink-2)]">
+                The Free plan needs no card. Stripe handles billing, and you can cancel anytime.
+              </p>
+            </div>
+          </section>
+
+          {/* Features Comparison */}
+          <ComparisonTable />
+
+          {/* FAQ Section */}
+          <section
+            className="relative"
+            style={{ background: "var(--dawn-cream)" }}
+          >
+            <div className="mx-auto max-w-[760px] px-[var(--dawn-gutter)] py-[var(--dawn-section)]">
+              <SectionHeader
+                eyebrow="Questions"
+                title="Answers before you commit"
+                subtitle="Everything you need to know about plans and billing."
+              />
+
+              <div className="mt-12 flex flex-col gap-3">
+                {FAQ_ITEMS.map((item, index) => (
+                  <FAQItem
+                    key={index}
+                    question={item.question}
+                    answer={item.answer}
+                    isOpen={openFaq === index}
+                    onToggle={() => setOpenFaq(openFaq === index ? null : index)}
+                    index={index}
+                  />
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* CTA Section */}
+          <section className="relative">
+            <div className="mx-auto max-w-[var(--dawn-content)] px-[var(--dawn-gutter)] py-[var(--dawn-section)]">
+              <motion.div
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-80px" }}
+                transition={{ duration: 0.7, ease: EASE }}
+                className="relative overflow-hidden rounded-[24px] border border-[var(--dawn-line)] bg-[var(--dawn-surface)] px-[clamp(24px,5vw,72px)] py-[clamp(48px,6vw,80px)] text-center shadow-[0_1px_2px_rgba(31,27,24,0.04)]"
+              >
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 top-0 h-[3px]"
+                  style={{ background: "var(--coral)" }}
+                />
+                <h2 className="mx-auto max-w-[20ch] text-balance text-[clamp(28px,3.6vw,42px)] font-semibold leading-[1.1] tracking-[-0.02em] text-[var(--dawn-ink)]">
+                  Ready to land your next role faster?
+                </h2>
+                <p className="mx-auto mt-4 max-w-[46ch] text-pretty text-[clamp(16px,1.1vw,18px)] leading-[1.6] text-[var(--dawn-ink-2)]">
+                  Start free with 3 jobs a day. Move up to Pro for AI assistance, or Ultra
+                  for unlimited AI assistance and saved jobs.
+                </p>
+
+                <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => void handleSelectPlan("pro", billingCycle)}
+                    disabled={
+                      loadingPlan !== null ||
+                      authStatus === "checking" ||
+                      (authStatus === "authenticated" && currentPlan === "pro")
+                    }
+                    aria-busy={
+                      loadingPlan === "pro" || authStatus === "checking"
+                    }
+                    className={cn(
+                      "inline-flex min-h-[52px] items-center justify-center whitespace-nowrap rounded-full border border-[var(--coral)] bg-[var(--coral)] px-7 text-[15px] font-semibold leading-none tracking-[-0.01em] text-[var(--coral-ink)] transition-[background-color,border-color,color,transform] duration-200 hover:border-[var(--coral-hi)] hover:bg-[var(--coral-hi)] active:translate-y-px active:border-[var(--coral-active)] active:bg-[var(--coral-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-bg)] motion-reduce:transition-none sm:px-8",
+                      (loadingPlan !== null ||
+                        authStatus === "checking" ||
+                        (authStatus === "authenticated" && currentPlan === "pro")) &&
+                        "cursor-not-allowed opacity-60"
+                    )}
+                  >
+                    {authStatus === "checking" ? (
+                      <>
+                        <Loader2
+                          className="mr-2 h-4 w-4 animate-spin"
+                          aria-hidden="true"
+                        />
+                        Checking account…
+                      </>
+                    ) : loadingPlan === "pro" ? (
+                      <>
+                        <Loader2
+                          className="mr-2 h-4 w-4 animate-spin"
+                          aria-hidden="true"
+                        />
+                        Processing…
+                      </>
+                    ) : authStatus === "authenticated" && currentPlan === "pro" ? (
+                      "Current plan"
+                    ) : (
+                      <>
+                        Start free trial
+                        <ArrowRight
+                          className="ml-2 h-4 w-4"
+                          aria-hidden="true"
+                        />
+                      </>
+                    )}
+                  </button>
+                  <CtaButton href="/#features" variant="ghost" size="lg">
+                    Learn more
+                  </CtaButton>
+                </div>
+              </motion.div>
+            </div>
+          </section>
+        </main>
+
+        {/* Footer */}
+        <PublicFooter />
+      </div>
+    </MotionConfig>
   )
 }
 
-// Billing Toggle Component
+// Billing Toggle Component — Dawn coral pill
 function BillingToggle({
   cycle,
-  onChange
+  onChange,
 }: {
   cycle: BillingCycle
   onChange: (cycle: BillingCycle) => void
 }) {
   return (
-    <div className="inline-flex items-center p-1.5 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
-      {(["weekly", "monthly"] as const).map((option) => (
-        <button
-          key={option}
-          onClick={() => onChange(option)}
-          className={cn(
-            "relative px-6 py-2.5 text-sm font-medium rounded-xl transition-all duration-300",
-            cycle === option
-              ? "text-white"
-              : "text-zinc-500 hover:text-zinc-300"
-          )}
-        >
-          {cycle === option && (
-            <motion.div
-              layoutId="billing-indicator"
-              className="absolute inset-0 bg-white/[0.08] rounded-xl border border-white/[0.08]"
-              transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
-            />
-          )}
-          <span className="relative z-10 capitalize">{option}</span>
-          {option === "monthly" && (
-            <span className="relative z-10 ml-2 text-xs text-emerald-500">Save 25%</span>
-          )}
-        </button>
-      ))}
+    <div className="flex flex-wrap items-center gap-3">
+      <div
+        role="group"
+        aria-label="Billing period"
+        className="inline-flex items-center gap-1 rounded-full border border-[var(--dawn-line)] bg-[var(--dawn-surface)] p-1 shadow-[0_1px_2px_rgba(31,27,24,0.04)]"
+      >
+        {(["weekly", "monthly"] as const).map((option) => {
+          const active = cycle === option
+          return (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onChange(option)}
+              className={cn(
+                "relative inline-flex min-h-[44px] items-center rounded-full px-5 text-[14px] font-semibold capitalize transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-bg)]",
+                active
+                  ? "text-[var(--coral-ink)]"
+                  : "text-[var(--dawn-ink-2)] hover:text-[var(--dawn-ink)]"
+              )}
+            >
+              {active && (
+                <motion.span
+                  layoutId="billing-pill"
+                  aria-hidden="true"
+                  className="absolute inset-0 rounded-full bg-[var(--coral)]"
+                  transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                />
+              )}
+              <span className="relative z-10">{option}</span>
+            </button>
+          )
+        })}
+      </div>
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--coral-soft)] px-3 py-1.5 text-[12px] font-semibold text-[var(--coral-lo)]">
+        <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+        Monthly saves ~25%
+      </span>
     </div>
   )
 }
 
-// Pricing Card Component
+// Pricing Card Component — Dawn
 function PricingCard({
   plan,
   billingCycle,
   onSelect,
   isLoading,
   isCurrentPlan,
+  isAuthChecking,
   index,
 }: {
   plan: Plan
@@ -569,178 +593,178 @@ function PricingCard({
   onSelect: (planId: string, cycle: BillingCycle) => void
   isLoading: boolean
   isCurrentPlan: boolean
+  isAuthChecking: boolean
   index: number
 }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const isInView = useInView(ref, { once: true, margin: "-50px" })
-
   const price = billingCycle === "weekly" ? plan.weeklyPrice : plan.monthlyPrice
-  const period = billingCycle === "weekly" ? "/week" : "/month"
-
-  const Icon = plan.tier === "free" ? Zap : plan.tier === "ultra" ? Crown : Rocket
+  const period = billingCycle === "weekly" ? "/ week" : "/ month"
 
   return (
     <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 40 }}
-      animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
-      transition={{ duration: 0.6, delay: index * 0.1, ease: [0.21, 0.47, 0.32, 0.98] }}
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.6, delay: index * 0.08, ease: EASE }}
       className={cn(
-        "relative group rounded-2xl overflow-hidden h-full",
-        plan.popular && "md:-mt-4 md:mb-4"
+        "relative flex h-full flex-col rounded-[16px] border bg-[var(--dawn-surface)] p-6 transition-shadow duration-300",
+        plan.popular
+          ? "border-[var(--coral)] shadow-[0_20px_50px_-16px_rgba(240,96,58,0.30)] hover:shadow-[0_28px_62px_-16px_rgba(240,96,58,0.40)]"
+          : "border-[var(--dawn-line)] shadow-[0_1px_2px_rgba(31,27,24,0.04)] hover:shadow-[0_14px_36px_-12px_rgba(31,27,24,0.12)]"
       )}
     >
-      {/* Card background */}
-      <div className={cn(
-        "absolute inset-0 transition-all duration-500",
-        plan.popular
-          ? "bg-gradient-to-b from-zinc-800/80 via-zinc-900/90 to-zinc-900"
-          : "bg-zinc-900/50 group-hover:bg-zinc-900/70"
-      )} />
-
-      {/* Border gradient */}
-      <div className={cn(
-        "absolute inset-0 rounded-2xl transition-opacity duration-500",
-        plan.popular
-          ? "bg-gradient-to-b from-white/20 via-white/5 to-transparent p-px opacity-100"
-          : "bg-gradient-to-b from-white/10 via-white/[0.02] to-transparent p-px opacity-0 group-hover:opacity-100"
-      )}>
-        <div className="absolute inset-[1px] rounded-2xl bg-zinc-900" />
-      </div>
-
-      {/* Shine effect for popular */}
+      {/* Most popular pill */}
       {plan.popular && (
-        <div className="absolute top-0 left-1/4 w-1/2 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
-      )}
-
-      {/* Badge */}
-      {plan.badge && (
-        <div className="absolute -top-px left-1/2 -translate-x-1/2 z-20">
-          <div className="px-4 py-1.5 rounded-b-xl bg-gradient-to-r from-white/10 via-white/20 to-white/10 border-x border-b border-white/10">
-            <span className="text-xs font-semibold tracking-wide text-white">
-              {plan.badge}
-            </span>
-          </div>
+        <div className="absolute -top-3 left-6">
+          <span className="inline-flex items-center rounded-full bg-[var(--coral)] px-3 py-1 text-[12px] font-semibold uppercase leading-none tracking-[0.06em] text-[var(--coral-ink)]">
+            Most popular
+          </span>
         </div>
       )}
 
       {/* Current plan indicator */}
       {isCurrentPlan && (
-        <div className="absolute top-3 right-3 z-20">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-            <Check className="w-3 h-3 text-emerald-400" />
-            <span className="text-xs font-medium text-emerald-400">Current</span>
-          </div>
+        <div className="absolute right-4 top-4">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--coral-soft)] px-2.5 py-1 text-[12px] font-semibold text-[var(--coral-lo)]">
+            <Check className="h-3 w-3" strokeWidth={3} aria-hidden="true" />
+            Current
+          </span>
         </div>
       )}
 
-      <div className="relative z-10 p-6 md:p-8 h-full flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6 h-12">
-          <div className="flex-1 min-w-0">
-            <h3 className="text-xl font-semibold text-white">{plan.name}</h3>
-            <p className="text-sm text-zinc-500 truncate">{plan.description}</p>
-          </div>
-          <div className={cn(
-            "w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 flex-shrink-0 ml-4",
-            plan.popular
-              ? "bg-white/10 text-white"
-              : "bg-white/[0.03] text-zinc-500 group-hover:bg-white/[0.06] group-hover:text-zinc-300"
-          )}>
-            <Icon className="w-6 h-6" />
-          </div>
-        </div>
+      {/* Header */}
+      <div>
+        <h2 className="text-[19px] font-semibold tracking-[-0.01em] text-[var(--dawn-ink)]">
+          {plan.name}
+        </h2>
+        <p className="mt-1.5 text-[15px] leading-[1.5] text-[var(--dawn-ink-2)]">
+          {plan.description}
+        </p>
+      </div>
 
-        {/* Price */}
-        <div className="mb-6">
-          <div className="flex items-baseline gap-1">
-            <span className="text-5xl font-semibold tracking-tight text-white">
+      <div className="mt-6 h-px w-full bg-[var(--dawn-line)]" />
+
+      {/* Price */}
+      <div className="mt-6 min-h-[68px]">
+        <motion.div
+          key={billingCycle}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: EASE }}
+        >
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[clamp(30px,3.4vw,40px)] font-semibold leading-none tracking-[-0.02em] tabular-nums text-[var(--dawn-ink)]">
               {price === 0 ? "Free" : `$${price}`}
             </span>
             {price > 0 && (
-              <span className="text-sm text-zinc-500">{period}</span>
+              <span className="text-[14px] text-[var(--dawn-ink-2)]">{period}</span>
             )}
           </div>
-          {billingCycle === "monthly" && plan.weeklyPrice > 0 && (
-            <p className="text-xs text-emerald-500/80 mt-1">
+          {billingCycle === "monthly" && plan.weeklyPrice > 0 ? (
+            <p className="mt-2 text-[13px] font-medium text-[var(--coral-lo)]">
               Save ${((plan.weeklyPrice * 4) - plan.monthlyPrice).toFixed(0)}/mo vs weekly
             </p>
+          ) : (
+            <p className="mt-2 text-[13px] text-[var(--dawn-ink-2)]">
+              {price === 0 ? "No card required" : "Billed " + billingCycle}
+            </p>
+          )}
+        </motion.div>
+      </div>
+
+      {/* Jobs per day — primary metric */}
+      <div className="mt-6 rounded-[12px] border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-4">
+        <div className="flex items-center justify-between">
+          <span className="text-[13px] text-[var(--dawn-ink-2)]">Jobs discovered</span>
+          <span className="text-[22px] font-semibold tracking-[-0.01em] text-[var(--dawn-ink)]">
+            {plan.jobsPerDay}/day
+          </span>
+        </div>
+        <div className="mt-2 text-[13px]">
+          {plan.hasAI ? (
+            plan.aiResponsesPerDay === -1 ? (
+              <span className="inline-flex items-center gap-1.5 font-medium text-[var(--coral-lo)]">
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                Unlimited AI assistance
+              </span>
+            ) : (
+              <span className="text-[var(--dawn-ink-2)]">
+                {plan.aiResponsesPerDay} AI responses / day
+              </span>
+            )
+          ) : (
+            <span className="text-[var(--dawn-ink-2)]">AI features require Pro or Ultra</span>
           )}
         </div>
+      </div>
 
-        {/* Jobs per day indicator - PRIMARY METRIC */}
-        <div className="mb-6 p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-zinc-400">Jobs discovered</span>
-            <span className="text-2xl font-bold text-white">
-              {plan.jobsPerDay}/day
-            </span>
-          </div>
-          <p className="text-xs text-zinc-500 mt-2">
-            {plan.hasAI ? (
-              plan.aiResponsesPerDay === -1 ? (
-                <span className="flex items-center gap-1.5">
-                  <Sparkles className="w-3 h-3 text-emerald-400" />
-                  <span className="text-emerald-400">Unlimited AI assistance</span>
-                </span>
-              ) : (
-                <span className="text-zinc-400">
-                  {plan.aiResponsesPerDay} AI responses/day
-                </span>
-              )
-            ) : (
-              "AI features require Pro or Ultra"
-            )}
-          </p>
-        </div>
-
-        {/* Features */}
-        <ul className="space-y-3 flex-grow">
-          {plan.features.map((feature, i) => (
-            <li key={i} className="flex items-start gap-3">
-              {feature.included ? (
-                <div className="w-5 h-5 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Check className="w-3 h-3 text-emerald-400" strokeWidth={3} />
-                </div>
-              ) : (
-                <div className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <X className="w-3 h-3 text-zinc-600" strokeWidth={3} />
-                </div>
-              )}
-              <span className={cn(
-                "text-sm",
-                feature.included ? "text-zinc-300" : "text-zinc-600"
-              )}>
-                {feature.name}
+      {/* Features */}
+      <ul className="mt-6 flex flex-grow flex-col gap-3">
+        {plan.features.map((feature, i) => (
+          <li key={i} className="flex items-start gap-2.5">
+            {feature.included ? (
+              <span
+                className="mt-[1px] flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--coral-soft)]"
+                aria-hidden="true"
+              >
+                <Check className="h-3 w-3 text-[var(--coral-lo)]" strokeWidth={3} />
               </span>
-            </li>
-          ))}
-        </ul>
+            ) : (
+              <span
+                className="mt-[1px] flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-[var(--dawn-line-2)]"
+                aria-hidden="true"
+              >
+                <X className="h-2.5 w-2.5 text-[var(--dawn-ink-3)]" strokeWidth={3} />
+              </span>
+            )}
+            <span
+              className={cn(
+                "text-[15px] leading-[1.5]",
+                feature.included ? "text-[var(--dawn-ink-2)]" : "text-[var(--dawn-ink-2)] line-through decoration-[var(--dawn-line-2)]"
+              )}
+            >
+              {feature.name}
+            </span>
+          </li>
+        ))}
+      </ul>
 
-        {/* CTA */}
+      {/* CTA — triggers Stripe checkout / login redirect via handler */}
+      <div className="mt-auto pt-7">
         <button
+          type="button"
           onClick={() => onSelect(plan.id, billingCycle)}
-          disabled={isLoading || isCurrentPlan}
+          disabled={
+            isLoading || isCurrentPlan || (plan.id !== "free" && isAuthChecking)
+          }
+          aria-busy={
+            isLoading || (plan.id !== "free" && isAuthChecking)
+          }
           className={cn(
-            "relative w-full py-4 rounded-xl font-medium text-sm transition-all duration-300 overflow-hidden group/btn mt-8",
+            "inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full px-6 text-[14px] font-medium leading-none tracking-[-0.01em] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-bg)] active:scale-[0.985]",
             plan.popular
-              ? "bg-white text-zinc-900 hover:bg-zinc-100"
-              : "bg-white/[0.05] text-white border border-white/[0.08] hover:bg-white/[0.08] hover:border-white/[0.12]",
-            (isLoading || isCurrentPlan) && "opacity-50 cursor-not-allowed"
+              ? "bg-[var(--coral)] text-[var(--coral-ink)] hover:bg-[var(--coral-hi)]"
+              : "border border-[var(--dawn-line-2)] bg-transparent text-[var(--dawn-ink)] hover:border-[var(--coral)] hover:text-[var(--coral-lo)]",
+            (isLoading || isCurrentPlan || (plan.id !== "free" && isAuthChecking)) &&
+              "cursor-not-allowed opacity-60"
           )}
         >
-          {isLoading ? (
-            <span className="flex items-center justify-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Processing...
-            </span>
+          {plan.id !== "free" && isAuthChecking ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Checking account…
+            </>
+          ) : isLoading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Processing…
+            </>
           ) : isCurrentPlan ? (
-            "Current Plan"
+            "Current plan"
           ) : (
-            <span className="flex items-center justify-center gap-2">
+            <>
               {plan.cta}
-              <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover/btn:translate-x-1" />
-            </span>
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </>
           )}
         </button>
       </div>
@@ -748,28 +772,42 @@ function PricingCard({
   )
 }
 
-// Section Header Component
-function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
+// Section Header Component — Dawn
+function SectionHeader({
+  eyebrow,
+  title,
+  subtitle,
+}: {
+  eyebrow?: string
+  title: string
+  subtitle: string
+}) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 30 }}
+      initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.8 }}
-      className="text-center"
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.6, ease: EASE }}
+      className="max-w-[52ch]"
     >
-      <h2 className="text-2xl md:text-3xl font-semibold text-white mb-3">{title}</h2>
-      <p className="text-zinc-500">{subtitle}</p>
+      {eyebrow && (
+        <p className="text-[13px] font-semibold uppercase tracking-[0.09em] text-[var(--coral-lo)]">
+          {eyebrow}
+        </p>
+      )}
+      <h2 className="mt-3 text-balance text-[clamp(28px,3.6vw,42px)] font-semibold leading-[1.1] tracking-[-0.02em] text-[var(--dawn-ink)]">
+        {title}
+      </h2>
+      <p className="mt-4 max-w-[46ch] text-pretty text-[clamp(16px,1.1vw,18px)] leading-[1.6] text-[var(--dawn-ink-2)]">
+        {subtitle}
+      </p>
     </motion.div>
   )
 }
 
-// Comparison Table - 3 columns
-function ComparisonTable({ billingCycle }: { billingCycle: BillingCycle }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const isInView = useInView(ref, { once: true, margin: "-100px" })
-
-  const rows = [
+// Comparison Table — Dawn, 3 columns, Pro column coral-tinted
+function ComparisonTable() {
+  const rows: { feature: string; values: (string | boolean)[] }[] = [
     { feature: "Jobs discovered/day", values: ["3", "15", "35"] },
     { feature: "AI chat assistance", values: [false, "30/day", "Unlimited"] },
     { feature: "Cover letters", values: [false, "5/day", "Unlimited"] },
@@ -785,75 +823,93 @@ function ComparisonTable({ billingCycle }: { billingCycle: BillingCycle }) {
   ]
 
   return (
-    <section className="relative py-24 md:py-32" ref={ref}>
-      <div className="max-w-4xl mx-auto px-6">
+    <section className="relative">
+      <div className="mx-auto max-w-[var(--dawn-content)] px-[var(--dawn-gutter)] py-[var(--dawn-section)]">
         <SectionHeader
-          title="Compare plans"
-          subtitle="Find the right fit for your job search"
+          eyebrow="Compare"
+          title="Every plan, side by side"
+          subtitle="Find the right fit for the pace of your search."
         />
 
         <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="mt-16 rounded-2xl overflow-hidden border border-white/[0.04] bg-white/[0.01]"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.6, delay: 0.1, ease: EASE }}
+          className="mt-12 overflow-hidden rounded-[16px] border border-[var(--dawn-line)] bg-[var(--dawn-surface)] shadow-[0_1px_2px_rgba(31,27,24,0.04)]"
         >
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div
+            role="region"
+            aria-label="Plan comparison table"
+            tabIndex={0}
+            className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--coral)]"
+          >
+            <table className="w-full border-collapse">
               <thead>
-                <tr className="border-b border-white/[0.04]">
-                  <th className="text-left p-5 text-sm font-medium text-zinc-500 min-w-[160px]">
+                <tr className="border-b border-[var(--dawn-line)]">
+                  <th className="min-w-[170px] p-5 text-left text-[13px] font-semibold uppercase tracking-[0.06em] text-[var(--dawn-ink-3)]">
                     Feature
                   </th>
                   {PLANS.map((plan) => (
                     <th
                       key={plan.id}
                       className={cn(
-                        "p-5 text-center text-sm font-semibold min-w-[120px]",
-                        plan.popular ? "text-white bg-white/[0.02]" : "text-zinc-300"
+                        "min-w-[120px] p-5 text-center text-[15px] font-semibold text-[var(--dawn-ink)]",
+                        plan.popular && "bg-[var(--coral-soft)]"
                       )}
                     >
-                      {plan.name}
+                      <span className="inline-flex items-center gap-2">
+                        {plan.name}
+                        {plan.popular && (
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--coral-lo)]">
+                            Popular
+                          </span>
+                        )}
+                      </span>
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, rowIndex) => (
-                  <motion.tr
+                {rows.map((row) => (
+                  <tr
                     key={row.feature}
-                    initial={{ opacity: 0 }}
-                    animate={isInView ? { opacity: 1 } : { opacity: 0 }}
-                    transition={{ duration: 0.4, delay: 0.3 + rowIndex * 0.05 }}
-                    className="border-b border-white/[0.02] last:border-0"
+                    className="border-b border-[var(--dawn-line)] last:border-0"
                   >
-                    <td className="p-5 text-sm text-zinc-400">
+                    <td className="p-5 text-[14px] text-[var(--dawn-ink-2)]">
                       {row.feature}
                     </td>
                     {row.values.map((value, i) => (
                       <td
                         key={i}
                         className={cn(
-                          "p-5 text-center text-sm",
-                          PLANS[i]?.popular && "bg-white/[0.02]"
+                          "p-5 text-center text-[14px]",
+                          PLANS[i]?.popular && "bg-[var(--coral-soft)]"
                         )}
                       >
                         {typeof value === "boolean" ? (
                           value ? (
-                            <div className="flex justify-center">
-                              <div className="w-5 h-5 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                                <Check className="w-3 h-3 text-emerald-400" />
-                              </div>
-                            </div>
+                            <span className="inline-flex justify-center">
+                              <span
+                                className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--coral-soft)]"
+                                aria-hidden="true"
+                              >
+                                <Check className="h-3 w-3 text-[var(--coral-lo)]" strokeWidth={3} />
+                              </span>
+                              <span className="sr-only">Included</span>
+                            </span>
                           ) : (
-                            <span className="text-zinc-600">&mdash;</span>
+                            <>
+                              <span className="text-[var(--dawn-ink-3)]" aria-hidden="true">–</span>
+                              <span className="sr-only">Not included</span>
+                            </>
                           )
                         ) : (
-                          <span className="font-medium text-zinc-300">{value}</span>
+                          <span className="font-medium text-[var(--dawn-ink)]">{value}</span>
                         )}
                       </td>
                     ))}
-                  </motion.tr>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -864,7 +920,7 @@ function ComparisonTable({ billingCycle }: { billingCycle: BillingCycle }) {
   )
 }
 
-// FAQ Item Component
+// FAQ Item Component — Dawn
 function FAQItem({
   question,
   answer,
@@ -878,37 +934,42 @@ function FAQItem({
   onToggle: () => void
   index: number
 }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const isInView = useInView(ref, { once: true, margin: "-50px" })
+  const answerId = `pricing-faq-answer-${index}`
 
   return (
     <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 20 }}
-      animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-      transition={{ duration: 0.5, delay: index * 0.1 }}
-      className="rounded-xl overflow-hidden border border-white/[0.04] bg-white/[0.01]"
+      initial={{ opacity: 0, y: 14 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-60px" }}
+      transition={{ duration: 0.5, delay: index * 0.05, ease: EASE }}
+      className="overflow-hidden rounded-[16px] border border-[var(--dawn-line)] bg-[var(--dawn-surface)] shadow-[0_1px_2px_rgba(31,27,24,0.04)]"
     >
       <button
+        type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between p-5 text-left hover:bg-white/[0.02] transition-colors duration-300"
+        aria-expanded={isOpen}
+        aria-controls={answerId}
+        className="flex min-h-[44px] w-full items-center justify-between gap-4 p-5 text-left transition-colors duration-200 hover:bg-[var(--dawn-cream)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-inset"
       >
-        <span className="font-medium text-white pr-4">{question}</span>
+        <span className="text-[16px] font-semibold text-[var(--dawn-ink)]">{question}</span>
         <ChevronDown
           className={cn(
-            "w-5 h-5 text-zinc-500 flex-shrink-0 transition-transform duration-300",
+            "h-5 w-5 shrink-0 text-[var(--coral-lo)] transition-transform duration-300",
             isOpen && "rotate-180"
           )}
+          aria-hidden="true"
         />
       </button>
 
       <motion.div
+        id={answerId}
+        aria-hidden={!isOpen}
         initial={false}
         animate={{ height: isOpen ? "auto" : 0, opacity: isOpen ? 1 : 0 }}
-        transition={{ duration: 0.3, ease: [0.21, 0.47, 0.32, 0.98] }}
+        transition={{ duration: 0.3, ease: EASE }}
         className="overflow-hidden"
       >
-        <p className="px-5 pb-5 text-sm text-zinc-400 leading-relaxed">
+        <p className="px-5 pb-5 text-[15px] leading-[1.6] text-[var(--dawn-ink-2)]">
           {answer}
         </p>
       </motion.div>

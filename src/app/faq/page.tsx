@@ -1,12 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { useRef, useState, useMemo } from "react"
+import { useState, useMemo } from "react"
 import Link from "next/link"
-import Image from "next/image"
-import { motion, useScroll, useTransform, useInView } from "framer-motion"
-import { ChevronDown, Search, ArrowRight } from "lucide-react"
+import { motion, MotionConfig } from "framer-motion"
+import { ChevronDown, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Nav } from "@/components/landing/nav"
+import { CtaButton } from "@/components/landing/cta-button"
 import { PublicFooter } from "@/components/public-footer"
 
 // FAQ Data organized by category
@@ -21,7 +22,7 @@ const FAQ_CATEGORIES = [
       },
       {
         question: "Is there a mobile app?",
-        answer: "Not yet — but our website is fully mobile-friendly and works great on any device. You can add it to your home screen for quick access.",
+        answer: "JobSilver works in a mobile browser on any device. Add it to your home screen for quick access.",
       },
       {
         question: "What browsers are supported?",
@@ -46,12 +47,12 @@ const FAQ_CATEGORIES = [
         answer: "Fresh jobs are discovered daily. Your daily discovery limit refreshes each day at midnight UTC, so you'll always have new opportunities to explore.",
       },
       {
-        question: "Why am I seeing jobs that don't match my preferences?",
-        answer: "Try refining your preferences in Settings — adjust your job titles, locations, or salary range. Pro and Ultra users benefit from AI that learns from your activity and improves matches over time.",
+        question: "How can I improve my matches?",
+        answer: "Refine your job titles, locations, or salary range in Settings. Pro and Ultra matching also learns from your activity over time.",
       },
       {
-        question: "Can I search for specific companies?",
-        answer: "Company search isn't available yet — job discovery is based on your role preferences, location, and other criteria rather than specific company names. This helps surface opportunities you might otherwise miss.",
+        question: "How are companies included in discovery?",
+        answer: "Job discovery uses your role preferences, location, and other criteria across many companies. This can surface relevant roles beyond the companies already on your list.",
       },
     ],
   },
@@ -69,11 +70,11 @@ const FAQ_CATEGORIES = [
       },
       {
         question: "Can I move jobs between columns?",
-        answer: "Yes — simply drag and drop job cards between columns, or use the menu on each card to change its status.",
+        answer: "Yes. Drag job cards between columns, or use the menu on each card to change its status.",
       },
       {
         question: "How do I remove a job from my board?",
-        answer: "Click the menu (three dots) on any job card and select \"Discard\". The job will be hidden from your board but won't count against your daily discovery limit again.",
+        answer: "Open the menu on any job card and select \"Discard\". The job stays hidden and remains excluded from future daily discovery counts.",
       },
     ],
   },
@@ -82,16 +83,16 @@ const FAQ_CATEGORIES = [
     title: "Applying to Jobs",
     questions: [
       {
-        question: "Does JobSilver apply to jobs for me?",
-        answer: "No. JobSilver helps you discover and prepare for applications, but you always apply directly on the company's website. We never auto-apply on your behalf — this ensures your applications are personal and high-quality.",
+        question: "How does JobSilver help with applications?",
+        answer: "JobSilver helps you discover roles and prepare tailored application materials. When you are ready, open the employer's site to review and submit.",
       },
       {
         question: "How do I apply to a job?",
-        answer: "Click \"Apply\" on any job card to open the company's application page in a new tab. After you've submitted your application there, move the job to your \"Applied\" column to track it.",
+        answer: "Choose \"Apply\" on a job card to open the employer's application page in a new tab. Review and submit there, then move the job to your \"Applied\" column to track it.",
       },
       {
-        question: "Why manual apply instead of auto-apply?",
-        answer: "Manual applications are more personal and have higher success rates. Our AI helps you craft compelling applications that stand out — you just submit them yourself. Quality over quantity.",
+        question: "Can I review my materials before submitting?",
+        answer: "Yes. JobSilver prepares drafts for you to review and edit. Once they are ready, finish and submit the application on the employer's site.",
       },
     ],
   },
@@ -105,7 +106,7 @@ const FAQ_CATEGORIES = [
       },
       {
         question: "Is the AI chat available to Free users?",
-        answer: "Yes — the floating chat button (bottom corner of the screen) is available to everyone. Free users can ask general questions about using JobSilver. Job-specific AI help like cover letters and CV generation requires a Pro or Ultra subscription.",
+        answer: "Yes. The floating chat button is available to everyone for general questions about JobSilver. Job-specific help with cover letters and CV generation is included with Pro and Ultra.",
       },
       {
         question: "How do I access job-specific AI help?",
@@ -113,11 +114,11 @@ const FAQ_CATEGORIES = [
       },
       {
         question: "Can I upload screenshots of application forms?",
-        answer: "Yes (Pro and Ultra) — you can attach images to your chat messages and the AI will analyze the form fields to help you craft responses. Great for complex application questions.",
+        answer: "Yes, with Pro and Ultra. Attach images to a chat message and the AI will analyze the form fields to help you draft responses.",
       },
       {
         question: "Are my AI conversations private?",
-        answer: "Absolutely. Your conversations are stored securely and only you can access them. We never share your data with employers or third parties.",
+        answer: "Yes. Your conversations are stored securely for your account, and only you can access them.",
       },
       {
         question: "What's the difference between the chat button and job page chat?",
@@ -153,7 +154,7 @@ const FAQ_CATEGORIES = [
     questions: [
       {
         question: "How do I upgrade to Pro or Ultra?",
-        answer: "Go to Pricing and select your plan. Pro ($3.99/week or $12.99/month) includes a 3-day free trial. Ultra ($6.99/week or $19.99/month) has no trial but offers unlimited AI access.",
+        answer: "Go to Pricing and select your plan. Pro ($3.99/week or $12.99/month) includes a 3-day free trial. Ultra ($6.99/week or $19.99/month) starts immediately and includes unlimited AI access.",
       },
       {
         question: "How do I cancel my subscription?",
@@ -178,8 +179,8 @@ const FAQ_CATEGORIES = [
     title: "Privacy & Security",
     questions: [
       {
-        question: "Is my data shared with employers?",
-        answer: "No. Your data is never shared with employers, recruiters, or any third parties. We only use your information to improve your job matches and AI assistance.",
+        question: "Who can access my account data?",
+        answer: "Your account data is private to you. JobSilver uses it to improve your job matches and AI assistance.",
       },
       {
         question: "How is my CV stored?",
@@ -187,23 +188,18 @@ const FAQ_CATEGORIES = [
       },
       {
         question: "Can I download my data?",
-        answer: "Yes — go to Dashboard → Profile and click \"Download My Data\". You'll receive a JSON file containing your profile, job preferences, saved jobs, favorites, AI chat history, and learned preferences. You can export your data once per hour.",
+        answer: "Yes. Go to Dashboard → Profile and click \"Download My Data\". You'll receive a JSON file containing your profile, job preferences, saved jobs, favorites, AI chat history, and learned preferences. You can export your data once per hour.",
       },
     ],
   },
 ]
 
+const faqItemKey = (categoryId: string, question: string) =>
+  `${categoryId}:${question}`
+
 export default function FAQPage() {
-  const containerRef = useRef<HTMLDivElement>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [openItems, setOpenItems] = useState<Record<string, boolean>>({})
-
-  const { scrollYProgress } = useScroll({
-    target: containerRef,
-    offset: ["start start", "end end"],
-  })
-
-  const backgroundY = useTransform(scrollYProgress, [0, 1], ["0%", "50%"])
 
   // Filter questions based on search
   const filteredCategories = useMemo(() => {
@@ -220,8 +216,8 @@ export default function FAQPage() {
     })).filter((category) => category.questions.length > 0)
   }, [searchQuery])
 
-  const toggleItem = (categoryId: string, questionIndex: number) => {
-    const key = `${categoryId}-${questionIndex}`
+  const toggleItem = (categoryId: string, question: string) => {
+    const key = faqItemKey(categoryId, question)
     setOpenItems((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
@@ -230,253 +226,173 @@ export default function FAQPage() {
     0
   )
 
+  // Derived (read-only) count of questions matching the current search
+  const matchCount = useMemo(
+    () =>
+      filteredCategories.reduce((sum, cat) => sum + cat.questions.length, 0),
+    [filteredCategories]
+  )
+
   return (
     <div
-      ref={containerRef}
-      className="min-h-screen bg-[#0a0a0b] text-white overflow-x-hidden"
+      className="min-h-screen overflow-x-hidden"
+      style={{ background: "var(--dawn-bg)", color: "var(--dawn-ink)" }}
     >
-      {/* Ambient Background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
-        <motion.div
-          style={{ y: backgroundY }}
-          className="absolute top-[-20%] left-[10%] w-[800px] h-[800px] rounded-full bg-gradient-to-br from-zinc-800/30 via-zinc-900/20 to-transparent blur-[120px]"
-        />
-        <motion.div
-          style={{ y: backgroundY }}
-          className="absolute top-[30%] right-[-10%] w-[600px] h-[600px] rounded-full bg-gradient-to-bl from-zinc-700/20 via-transparent to-transparent blur-[100px]"
-        />
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: `
-              linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px),
-              linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)
-            `,
-            backgroundSize: "60px 60px",
-          }}
-        />
-      </div>
+      <Nav />
 
-      {/* Navigation */}
-      <nav className="fixed top-0 z-50 w-full">
-        <div className="absolute inset-0 bg-[#0a0a0b]/80 backdrop-blur-xl border-b border-white/[0.04]" />
-        <div className="relative max-w-7xl mx-auto flex h-16 items-center justify-between px-6">
-          <Link href="/" className="flex items-center group">
-            <Image
-              src="/logo-dark.svg"
-              alt="JobSilver"
-              width={160}
-              height={32}
-              className="h-8 w-auto"
-              priority
-            />
-          </Link>
-
-          <div className="hidden md:flex items-center gap-8">
-            {[
-              { label: "Features", href: "/#why-jobsilver" },
-              { label: "How It Works", href: "/#how-it-works" },
-              { label: "Pricing", href: "/pricing" },
-              { label: "FAQ", href: "/faq" },
-            ].map((item) => (
-              <Link
-                key={item.label}
-                href={item.href}
-                className={cn(
-                  "text-sm transition-colors duration-300",
-                  item.label === "FAQ"
-                    ? "text-white"
-                    : "text-zinc-500 hover:text-zinc-300"
-                )}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors duration-300"
-            >
-              Sign In
-            </Link>
-            <Link href="/login">
-              <button className="relative px-5 py-2.5 text-sm font-medium rounded-xl overflow-hidden group">
-                <div className="absolute inset-0 bg-gradient-to-r from-zinc-700 via-zinc-600 to-zinc-700 transition-all duration-500 group-hover:scale-105" />
-                <div className="absolute inset-[1px] bg-gradient-to-b from-zinc-800 to-zinc-900 rounded-[10px]" />
-                <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/5" />
-                <span className="relative z-10 text-zinc-200 group-hover:text-white transition-colors">
-                  Get Started
-                </span>
-              </button>
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section className="relative pt-32 pb-12 md:pt-44 md:pb-16">
-        <div className="max-w-4xl mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 1 }}
-            className="text-center"
+      <MotionConfig reducedMotion="user">
+        <main className="pt-16">
+          {/* Hero */}
+          <section
+            className="mx-auto px-[var(--dawn-gutter)] pb-12 pt-[clamp(56px,9vw,104px)]"
+            style={{ maxWidth: "var(--dawn-content)" }}
           >
-            {/* Headline */}
-            <motion.h1
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-              className="text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.1] mb-6"
-            >
-              <span className="text-white">Frequently Asked</span>
-              <br />
-              <span className="bg-gradient-to-r from-zinc-400 via-zinc-300 to-zinc-500 bg-clip-text text-transparent">
-                Questions
-              </span>
-            </motion.h1>
-
-            {/* Subheadline */}
-            <motion.p
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.3 }}
-              className="text-lg text-zinc-500 max-w-xl mx-auto mb-10"
-            >
-              Everything you need to know about JobSilver.
-              <br className="hidden sm:block" />
-              Can&apos;t find what you&apos;re looking for?{" "}
-              <Link href="/contact" className="text-zinc-300 hover:text-white underline underline-offset-4">
-                Contact us
-              </Link>
-              .
-            </motion.p>
-
-            {/* Search Box */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-              className="max-w-md mx-auto"
-            >
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
-                <input
-                  type="text"
-                  placeholder={`Search ${totalQuestions} questions...`}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3.5 rounded-xl bg-white/[0.03] border border-white/[0.08] text-white placeholder-zinc-500 focus:outline-none focus:border-white/[0.16] focus:bg-white/[0.05] transition-all duration-300"
-                />
-              </div>
-            </motion.div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* FAQ Categories */}
-      <section className="relative py-12 md:py-16">
-        <div className="max-w-3xl mx-auto px-6">
-          {filteredCategories.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-16"
-            >
-              <p className="text-zinc-500 text-lg mb-4">
-                No questions found for &quot;{searchQuery}&quot;
-              </p>
-              <button
-                onClick={() => setSearchQuery("")}
-                className="text-zinc-300 hover:text-white underline underline-offset-4 transition-colors"
-              >
-                Clear search
-              </button>
-            </motion.div>
-          ) : (
-            <div className="space-y-12">
-              {filteredCategories.map((category, categoryIndex) => (
-                <FAQCategory
-                  key={category.id}
-                  category={category}
-                  categoryIndex={categoryIndex}
-                  openItems={openItems}
-                  onToggle={toggleItem}
-                  searchQuery={searchQuery}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="relative py-24 md:py-32">
-        <div className="max-w-4xl mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-            className="relative rounded-3xl overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/50 via-zinc-900/80 to-zinc-900" />
-            <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-transparent to-transparent" />
-            <div className="absolute inset-[1px] rounded-3xl bg-gradient-to-br from-white/[0.08] via-transparent to-transparent" />
-            <div className="absolute top-0 left-1/4 w-1/2 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-
-            <div className="relative px-8 py-16 md:px-16 md:py-20 text-center">
-              <motion.h2
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: 0.2 }}
-                className="text-3xl md:text-4xl font-semibold text-white mb-4"
-              >
-                Still have questions?
-              </motion.h2>
-
+            <div className="max-w-[720px]">
               <motion.p
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: 0.3 }}
-                className="text-zinc-400 text-lg mb-10 max-w-md mx-auto"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+                className="text-[13px] font-semibold uppercase tracking-[0.09em] text-[var(--coral-lo)]"
               >
-                Can&apos;t find what you&apos;re looking for? Our support team is here to help.
+                FAQ
               </motion.p>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: 0.4 }}
-                className="flex flex-col sm:flex-row items-center justify-center gap-4"
+              <motion.h1
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.55, delay: 0.05 }}
+                className="mt-4 text-[clamp(34px,5vw,58px)] font-semibold leading-[1.03] tracking-[-0.02em] text-[var(--dawn-ink)]"
+                style={{ textWrap: "balance" } as React.CSSProperties}
               >
-                <Link href="/contact">
-                  <button className="group relative px-8 py-4 rounded-2xl overflow-hidden">
-                    <div className="absolute inset-0 bg-white transition-transform duration-300 group-hover:scale-105" />
-                    <span className="relative z-10 text-zinc-900 font-medium flex items-center gap-2">
-                      Contact Support
-                      <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
-                    </span>
-                  </button>
-                </Link>
+                Questions, answered
+              </motion.h1>
 
-                <Link href="/pricing">
-                  <button className="px-8 py-4 rounded-2xl text-zinc-400 hover:text-white transition-colors duration-300">
-                    View Pricing
-                  </button>
+              <motion.p
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.55, delay: 0.1 }}
+                className="mt-5 max-w-[58ch] text-[clamp(16px,1.1vw,18px)] leading-[1.6] text-[var(--dawn-ink-2)]"
+              >
+                Everything worth knowing about how JobSilver finds, tracks, and helps you land
+                the right role. Still stuck?{" "}
+                <Link
+                  href="/contact"
+                  className="rounded-sm font-medium text-[var(--coral-lo)] underline decoration-[var(--coral)]/40 underline-offset-4 transition-colors hover:decoration-[var(--coral)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-bg)]"
+                >
+                  Talk to us
                 </Link>
+                .
+              </motion.p>
+
+              {/* Search */}
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.55, delay: 0.15 }}
+                className="mt-8 max-w-[520px]"
+              >
+                <div className="group relative">
+                  <Search
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-[18px] top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[var(--dawn-ink-3)] transition-colors duration-200 group-focus-within:text-[var(--coral-lo)]"
+                  />
+                  <input
+                    type="text"
+                    aria-label="Search frequently asked questions"
+                    placeholder={`Search ${totalQuestions} questions`}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="min-h-[52px] w-full rounded-full border border-[var(--dawn-line-2)] bg-[var(--dawn-surface)] py-3 pl-[46px] pr-5 text-[15px] text-[var(--dawn-ink)] shadow-[0_2px_12px_-6px_rgba(31,27,24,0.14),0_1px_2px_rgba(31,27,24,0.04)] transition-[box-shadow,border-color] duration-200 placeholder:text-[var(--dawn-ink-3)] hover:border-[var(--dawn-ink-3)] focus:border-[var(--coral)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-bg)]"
+                  />
+                </div>
+                {searchQuery.trim() ? (
+                  <p
+                    aria-live="polite"
+                    className="mt-3 pl-1 text-[13px] tabular-nums text-[var(--dawn-ink-2)]"
+                  >
+                    {matchCount === 0
+                      ? "No matches. Try another word."
+                      : `${matchCount} ${matchCount === 1 ? "result" : "results"} for “${searchQuery}”`}
+                  </p>
+                ) : null}
               </motion.div>
             </div>
-          </motion.div>
-        </div>
-      </section>
+          </section>
 
-      {/* Footer */}
+          {/* Categories */}
+          <section
+            className="mx-auto px-[var(--dawn-gutter)] pb-[clamp(72px,9vw,120px)]"
+            style={{ maxWidth: "var(--dawn-content)" }}
+          >
+            <div className="max-w-[820px]">
+              {filteredCategories.length === 0 ? (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="rounded-[16px] border border-[var(--dawn-line)] bg-[var(--dawn-surface)] px-6 py-16 text-center shadow-[0_1px_2px_rgba(31,27,24,0.04)]"
+                >
+                  <p className="text-[16px] text-[var(--dawn-ink-2)]">
+                    Nothing matched &ldquo;{searchQuery}&rdquo;. Try a different word.
+                  </p>
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="mt-4 inline-flex min-h-[44px] items-center rounded-full px-4 text-[14px] font-medium text-[var(--coral-lo)] underline decoration-[var(--coral)]/40 underline-offset-4 transition-colors hover:decoration-[var(--coral)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-bg)]"
+                  >
+                    Clear search
+                  </button>
+                </motion.div>
+              ) : (
+                <div className="space-y-14">
+                  {filteredCategories.map((category, categoryIndex) => (
+                    <FAQCategory
+                      key={category.id}
+                      category={category}
+                      categoryIndex={categoryIndex}
+                      openItems={openItems}
+                      onToggle={toggleItem}
+                      searchQuery={searchQuery}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* CTA */}
+          <section
+            className="px-[var(--dawn-gutter)] pb-[clamp(72px,9vw,120px)]"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-80px" }}
+              transition={{ duration: 0.55 }}
+              className="mx-auto rounded-[24px] border border-[var(--dawn-line)] px-[clamp(28px,5vw,64px)] py-[clamp(48px,7vw,80px)] text-center"
+              style={{ maxWidth: "var(--dawn-content)", background: "var(--dawn-cream)" }}
+            >
+              <h2
+                className="text-[clamp(28px,3.6vw,42px)] font-semibold leading-[1.1] tracking-[-0.02em] text-[var(--dawn-ink)]"
+                style={{ textWrap: "balance" } as React.CSSProperties}
+              >
+                Still have questions?
+              </h2>
+              <p className="mx-auto mt-4 max-w-[46ch] text-[clamp(16px,1.1vw,18px)] leading-[1.6] text-[var(--dawn-ink-2)]">
+                We read every message and reply like humans, because we are. Reach out and
+                we&apos;ll help you get set up.
+              </p>
+              <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                <CtaButton href="/contact" variant="coral" size="lg">
+                  Contact support
+                </CtaButton>
+                <CtaButton href="/pricing" variant="ghost" size="lg">
+                  View pricing
+                </CtaButton>
+              </div>
+            </motion.div>
+          </section>
+        </main>
+      </MotionConfig>
+
       <PublicFooter />
     </div>
   )
@@ -493,36 +409,38 @@ function FAQCategory({
   category: (typeof FAQ_CATEGORIES)[0]
   categoryIndex: number
   openItems: Record<string, boolean>
-  onToggle: (categoryId: string, questionIndex: number) => void
+  onToggle: (categoryId: string, question: string) => void
   searchQuery: string
 }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const isInView = useInView(ref, { once: true, margin: "-50px" })
-
   return (
     <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 30 }}
-      animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 }}
-      transition={{ duration: 0.6, delay: categoryIndex * 0.1 }}
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.5, delay: Math.min(categoryIndex * 0.06, 0.24) }}
     >
       {/* Category Header */}
-      <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-3">
-        <span className="w-8 h-8 rounded-lg bg-white/[0.05] flex items-center justify-center text-sm text-zinc-400">
+      <div className="mb-6 flex items-baseline gap-3 border-b border-[var(--dawn-line)] pb-3">
+        <span className="text-[12px] font-medium tabular-nums text-[var(--dawn-ink-3)]">
+          {String(categoryIndex + 1).padStart(2, "0")}
+        </span>
+        <h2 className="text-[18px] font-semibold leading-[1.15] tracking-[-0.01em] text-[var(--dawn-ink)] md:text-[20px]">
+          {category.title}
+        </h2>
+        <span className="ml-auto shrink-0 self-center text-[12px] tabular-nums text-[var(--dawn-ink-3)]">
           {category.questions.length}
         </span>
-        {category.title}
-      </h2>
+      </div>
 
       {/* Questions */}
       <div className="space-y-3">
-        {category.questions.map((item, questionIndex) => (
+        {category.questions.map((item) => (
           <FAQItem
-            key={questionIndex}
+            key={item.question}
             question={item.question}
             answer={item.answer}
-            isOpen={openItems[`${category.id}-${questionIndex}`] || false}
-            onToggle={() => onToggle(category.id, questionIndex)}
+            isOpen={openItems[faqItemKey(category.id, item.question)] || false}
+            onToggle={() => onToggle(category.id, item.question)}
             searchQuery={searchQuery}
           />
         ))}
@@ -545,6 +463,9 @@ function FAQItem({
   onToggle: () => void
   searchQuery: string
 }) {
+  const answerId = React.useId()
+  const triggerId = `${answerId}-trigger`
+
   // Highlight matching text
   const highlightText = (text: string) => {
     if (!searchQuery.trim()) return text
@@ -554,7 +475,7 @@ function FAQItem({
 
     return parts.map((part, i) =>
       regex.test(part) ? (
-        <mark key={i} className="bg-zinc-700/50 text-white rounded px-0.5">
+        <mark key={i} className="rounded bg-[var(--coral-soft)] px-0.5 text-[var(--coral-lo)]">
           {part}
         </mark>
       ) : (
@@ -564,29 +485,59 @@ function FAQItem({
   }
 
   return (
-    <div className="rounded-xl overflow-hidden border border-white/[0.04] bg-white/[0.01]">
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-[14px] border transition-[border-color,background-color,box-shadow] duration-200",
+        isOpen
+          ? "border-[var(--coral)] bg-[var(--dawn-surface)] shadow-[0_10px_28px_-18px_rgba(240,96,58,0.35),0_1px_2px_rgba(31,27,24,0.05)]"
+          : "border-[var(--dawn-line)] bg-[var(--dawn-surface)] shadow-[0_1px_2px_rgba(31,27,24,0.04)] hover:border-[var(--dawn-line-2)]"
+      )}
+    >
+      {/* Coral edge — appears only while open, keeping the accent precious */}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "absolute inset-y-0 left-0 w-[3px] origin-top bg-[var(--coral)] transition-transform duration-300",
+          isOpen ? "scale-y-100" : "scale-y-0"
+        )}
+      />
       <button
+        id={triggerId}
         onClick={onToggle}
-        className="w-full flex items-center justify-between p-5 text-left hover:bg-white/[0.02] transition-colors duration-300"
+        aria-expanded={isOpen}
+        aria-controls={answerId}
+        className="flex min-h-[44px] w-full items-center justify-between gap-4 rounded-[14px] px-5 py-4 text-left transition-colors duration-200 hover:bg-[rgba(240,96,58,0.035)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--coral)] active:bg-[rgba(240,96,58,0.07)] md:py-5"
       >
-        <span className="font-medium text-white pr-4">
+        <span className="pr-2 text-[15px] font-medium text-[var(--dawn-ink)] md:text-[16px]">
           {highlightText(question)}
         </span>
-        <ChevronDown
+        <span
+          aria-hidden="true"
           className={cn(
-            "w-5 h-5 text-zinc-500 flex-shrink-0 transition-transform duration-300",
-            isOpen && "rotate-180"
+            "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full transition-colors duration-200",
+            isOpen ? "bg-[var(--coral-soft)]" : "bg-[var(--dawn-cream)]"
           )}
-        />
+        >
+          <ChevronDown
+            className={cn(
+              "h-[16px] w-[16px] transition-transform duration-300",
+              isOpen ? "rotate-180 text-[var(--coral-lo)]" : "text-[var(--dawn-ink-3)]"
+            )}
+          />
+        </span>
       </button>
 
       <motion.div
+        id={answerId}
+        role="region"
+        aria-labelledby={triggerId}
+        hidden={!isOpen}
         initial={false}
         animate={{ height: isOpen ? "auto" : 0, opacity: isOpen ? 1 : 0 }}
         transition={{ duration: 0.3, ease: [0.21, 0.47, 0.32, 0.98] }}
         className="overflow-hidden"
       >
-        <p className="px-5 pb-5 text-sm text-zinc-400 leading-relaxed">
+        <p className="max-w-[65ch] px-5 pb-5 pl-6 text-[14px] leading-[1.6] text-[var(--dawn-ink-2)] md:text-[15px]">
           {highlightText(answer)}
         </p>
       </motion.div>

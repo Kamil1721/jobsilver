@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
@@ -24,6 +25,7 @@ import {
   FileText,
   Settings,
   Globe,
+  CircleAlert,
 } from "lucide-react"
 
 const STEPS = [
@@ -102,12 +104,18 @@ export interface WizardData {
 }
 
 export function SetupWizard() {
+  const router = useRouter()
   const [currentStep, setCurrentStep] = React.useState(1)
   const [isLoading, setIsLoading] = React.useState(true)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
+  const [loadAttempt, setLoadAttempt] = React.useState(0)
   const [isSaving, setIsSaving] = React.useState(false)
   const [isFirstTimeSetup, setIsFirstTimeSetup] = React.useState(true)
   const [subscriptionPlan, setSubscriptionPlan] = React.useState<SubscriptionPlan>('free')
+  const [hasFullFeatureAccess, setHasFullFeatureAccess] = React.useState(false)
   const [loggedInEmail, setLoggedInEmail] = React.useState<string | null>(null)
+  const stepContentRef = React.useRef<HTMLElement>(null)
+  const hasRenderedStepRef = React.useRef(false)
   const { toast } = useToast()
   const supabase = createClient()
 
@@ -122,6 +130,7 @@ export function SetupWizard() {
 
     const loadExistingData = async () => {
       try {
+        if (isMounted) setLoadError(null)
         const { data: { user } } = await supabase.auth.getUser()
         if (!user || !isMounted) {
           if (isMounted) setIsLoading(false)
@@ -133,7 +142,7 @@ export function SetupWizard() {
 
         const { data, error } = await supabase
           .from("profiles")
-          .select("job_filters, screening_answers, cv_url, phone, location, subscription_plan")
+          .select("job_filters, screening_answers, cv_url, phone, location, subscription_plan, is_tester, is_admin")
           .eq("id", user.id)
           .single()
 
@@ -141,6 +150,8 @@ export function SetupWizard() {
 
         if (error && error.code !== "PGRST116") {
           console.error("Error loading profile:", error)
+          setLoadError("We couldn't load your saved setup. Retry before making changes so none of your information is overwritten.")
+          return
         }
 
         if (data) {
@@ -154,6 +165,7 @@ export function SetupWizard() {
           if (data.subscription_plan) {
             setSubscriptionPlan(data.subscription_plan as SubscriptionPlan)
           }
+          setHasFullFeatureAccess(data.is_tester === true || data.is_admin === true)
 
           // Build screening answers, but clear cv_generation_mode for returning users
           // who already have a CV - they should see their existing CV, not be in generate mode
@@ -181,6 +193,9 @@ export function SetupWizard() {
         }
       } catch (err) {
         console.error("Error loading data:", err)
+        if (isMounted) {
+          setLoadError("We couldn't load your saved setup. Check your connection and try again.")
+        }
       } finally {
         if (isMounted) setIsLoading(false)
       }
@@ -191,7 +206,7 @@ export function SetupWizard() {
     return () => {
       isMounted = false
     }
-  }, [supabase])
+  }, [loadAttempt, supabase])
 
   const updateJobFilters = React.useCallback((updates: Partial<JobFilters>) => {
     setWizardData((prev) => ({
@@ -218,8 +233,67 @@ export function SetupWizard() {
     })
   }, [toast])
 
-  const handleNext = () => {
-    // Validate mandatory filters before leaving Step 1
+  const focusCurrentStepField = React.useCallback((selector: string) => {
+    window.requestAnimationFrame(() => {
+      stepContentRef.current?.querySelector<HTMLElement>(selector)?.focus()
+    })
+  }, [])
+
+  React.useEffect(() => {
+    if (!hasRenderedStepRef.current) {
+      hasRenderedStepRef.current = true
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => stepContentRef.current?.focus())
+    return () => window.cancelAnimationFrame(frame)
+  }, [currentStep])
+
+  const validateCvSelection = React.useCallback(() => {
+    const hasUploadedCV = !!wizardData.screeningAnswers.cv_url
+    const isGeneratingCV = wizardData.screeningAnswers.cv_generation_mode === "generate"
+
+    if (isGeneratingCV) {
+      const workHistory = wizardData.screeningAnswers.work_history || []
+      const education = wizardData.screeningAnswers.education || []
+      const hasValidWorkHistory = workHistory.some(
+        (entry) => entry.company && entry.position && entry.start_date
+      )
+      const hasValidEducation = education.some(
+        (entry) => entry.institution && entry.degree && entry.area && entry.graduation_year
+      )
+
+      if (!hasValidWorkHistory || !hasValidEducation) {
+        const missing = []
+        if (!hasValidWorkHistory) missing.push("work experience (company, position, start date)")
+        if (!hasValidEducation) missing.push("education (institution, degree, area, graduation year)")
+
+        toast({
+          variant: "destructive",
+          title: "Required fields missing",
+          description: `Please complete at least one ${missing.join(" and one ")} to generate your CV.`,
+        })
+        focusCurrentStepField("input")
+        return false
+      }
+
+      return true
+    }
+
+    if (!hasUploadedCV) {
+      toast({
+        variant: "destructive",
+        title: "CV required",
+        description: "Please upload your CV or choose to generate one from your information.",
+      })
+      focusCurrentStepField("#cv-upload-trigger, #cv-mode-upload")
+      return false
+    }
+
+    return true
+  }, [focusCurrentStepField, toast, wizardData.screeningAnswers])
+
+  const validateCurrentStep = React.useCallback(() => {
     if (currentStep === 1) {
       const validation = validateMandatoryFilters(wizardData.jobFilters)
       if (!validation.isValid) {
@@ -228,11 +302,19 @@ export function SetupWizard() {
           title: "Required fields missing",
           description: validation.errors.map(e => e.message).join(". "),
         })
-        return
+        const firstErrorField = validation.errors[0]?.field
+        const selectorByField: Record<string, string> = {
+          industries: "#industry-trigger",
+          job_titles: "#job-title-input",
+          work_location: '[data-setup-field="work-arrangements"] button',
+          job_types: '[data-setup-field="job-types"] button',
+          location: "#job-location-input",
+        }
+        focusCurrentStepField(selectorByField[firstErrorField] || "button, input")
+        return false
       }
     }
 
-    // Validate mandatory screening fields before leaving Step 3
     if (currentStep === 3) {
       const screeningValidation = validateScreeningAnswers(wizardData.screeningAnswers)
       if (!screeningValidation.isValid) {
@@ -241,51 +323,30 @@ export function SetupWizard() {
           title: "Required profile fields missing",
           description: screeningValidation.errors.map(e => e.message).join(". "),
         })
-        return
-      }
-    }
-
-    // Validate CV before leaving Step 4
-    if (currentStep === 4) {
-      const hasUploadedCV = !!wizardData.screeningAnswers.cv_url
-      const isGeneratingCV = wizardData.screeningAnswers.cv_generation_mode === "generate"
-
-      // If generating CV, check that work history and education have at least one valid entry each
-      if (isGeneratingCV) {
-        const workHistory = wizardData.screeningAnswers.work_history || []
-        const education = wizardData.screeningAnswers.education || []
-
-        const hasValidWorkHistory = workHistory.some(
-          (entry) => entry.company && entry.position && entry.start_date
-        )
-        const hasValidEducation = education.some(
-          (entry) => entry.institution && entry.degree && entry.area && entry.graduation_year
-        )
-
-        if (!hasValidWorkHistory || !hasValidEducation) {
-          const missing = []
-          if (!hasValidWorkHistory) missing.push("work experience (company, position, start date)")
-          if (!hasValidEducation) missing.push("education (institution, degree, area, graduation year)")
-
-          toast({
-            variant: "destructive",
-            title: "Required fields missing",
-            description: `Please complete at least one ${missing.join(" and one ")} to generate your CV.`,
-          })
-          return
+        const firstErrorField = screeningValidation.errors[0]?.field
+        const selectorByField: Record<string, string> = {
+          first_name: "#first_name",
+          last_name: "#last_name",
+          country: "#screening-country",
+          city: "#screening-city",
+          work_authorization_countries: "#work-authorization-countries",
         }
-      } else if (!hasUploadedCV) {
-        // No CV uploaded and not generating
-        toast({
-          variant: "destructive",
-          title: "CV required",
-          description: "Please upload your CV or choose to generate one from your information.",
-        })
-        return
+        focusCurrentStepField(selectorByField[firstErrorField] || "input, button")
+        return false
       }
     }
 
-    if (currentStep < 5) {
+    const cvIsValid = currentStep !== 4 || validateCvSelection()
+    if (!cvIsValid) {
+      focusCurrentStepField("#cv-upload-trigger, #cv-mode-upload, input")
+    }
+    return cvIsValid
+  }, [currentStep, focusCurrentStepField, toast, validateCvSelection, wizardData])
+
+  const handleNext = () => {
+    if (!validateCurrentStep()) return
+
+    if (currentStep < STEPS.length) {
       setCurrentStep(currentStep + 1)
     }
   }
@@ -296,10 +357,32 @@ export function SetupWizard() {
     }
   }
 
+  const handleStepSelect = (stepId: number) => {
+    if (stepId < currentStep) {
+      setCurrentStep(stepId)
+      return
+    }
+
+    if (stepId > currentStep + 1) {
+      toast({
+        variant: "destructive",
+        title: "Complete current step first",
+        description: "Please complete each step before proceeding.",
+      })
+      return
+    }
+
+    if (stepId > currentStep && !validateCurrentStep()) return
+
+    setCurrentStep(stepId)
+  }
+
   const handleSave = async () => {
     setIsSaving(true)
 
     try {
+      const screeningAnswers = { ...wizardData.screeningAnswers }
+
       // Validate mandatory filters before saving
       const filterValidation = validateMandatoryFilters(wizardData.jobFilters)
       if (!filterValidation.isValid) {
@@ -321,6 +404,13 @@ export function SetupWizard() {
           description: screeningValidation.errors.map(e => e.message).join(". "),
         })
         setIsSaving(false)
+        return
+      }
+
+      // Fail closed if a user reaches the final step without a usable CV.
+      if (!validateCvSelection()) {
+        setIsSaving(false)
+        setCurrentStep(4)
         return
       }
 
@@ -346,7 +436,7 @@ export function SetupWizard() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              screeningAnswers: wizardData.screeningAnswers,
+          screeningAnswers,
             }),
           })
 
@@ -363,7 +453,12 @@ export function SetupWizard() {
           }
 
           // Update screening answers with the generated CV URL
-          wizardData.screeningAnswers.cv_url = generateResult.cv_url
+          screeningAnswers.cv_url = generateResult.cv_url
+          screeningAnswers.cv_generation_mode = undefined
+          updateScreeningAnswers({
+            cv_url: generateResult.cv_url,
+            cv_generation_mode: undefined,
+          })
         } catch (genError) {
           console.error('CV generation error:', genError)
           toast({
@@ -377,7 +472,6 @@ export function SetupWizard() {
       }
 
       // Sync screening data to profile and job filters
-      const screeningAnswers = wizardData.screeningAnswers
       const jobFilters = { ...wizardData.jobFilters }
 
       // Normalize city and country names for consistent matching
@@ -446,6 +540,9 @@ export function SetupWizard() {
           title: "CV reference cleared",
           description: "Please re-upload your CV. The previous reference was invalid.",
         })
+        updateScreeningAnswers({ cv_url: null, cv_generation_mode: undefined })
+        setCurrentStep(4)
+        return
       }
 
       const { error } = await supabase
@@ -474,11 +571,24 @@ export function SetupWizard() {
         // Trigger instant job search in the background
         // Uses /api/jobs/search which respects free plan quota (3 jobs/day)
         // Note: /api/jobs/curate is for paid users only (daily curation)
-        fetch("/api/jobs/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ useProfileFilters: true }),
-        }).catch(err => console.error("Job search error:", err))
+        try {
+          const searchResponse = await fetch("/api/jobs/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ useProfileFilters: true }),
+          })
+
+          if (!searchResponse.ok) {
+            throw new Error(`Initial search returned ${searchResponse.status}`)
+          }
+        } catch (searchError) {
+          console.error("Job search error:", searchError)
+          toast({
+            variant: "destructive",
+            title: "Setup saved. Search will retry.",
+            description: "Your profile is ready, but we couldn't start the first search. You can retry from the dashboard.",
+          })
+        }
       } else {
         toast({
           title: "Configuration saved",
@@ -488,7 +598,7 @@ export function SetupWizard() {
 
       // Redirect to dashboard after successful save
       setTimeout(() => {
-        window.location.href = "/dashboard"
+        router.push("/dashboard")
       }, 1500)
     } catch (error: unknown) {
       // Safe error message extraction
@@ -509,161 +619,131 @@ export function SetupWizard() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-        <div className="relative">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-zinc-400 via-zinc-500 to-zinc-600 flex items-center justify-center animate-pulse">
-            <Sparkles className="w-8 h-8 text-white" />
-          </div>
+      <div className="mx-auto min-h-[25rem] max-w-2xl space-y-5 py-14" role="status" aria-label="Loading your setup">
+        <div className="h-3 w-28 animate-pulse rounded bg-[var(--coral-soft)]" />
+        <div className="h-12 w-3/4 animate-pulse rounded-xl bg-[var(--dawn-cream)]" />
+        <div className="h-4 w-full animate-pulse rounded bg-[var(--dawn-cream)]" />
+        <div className="h-52 w-full animate-pulse rounded-2xl border border-[var(--dawn-line)] bg-[var(--dawn-surface)]" />
+        <div className="sr-only">
+          Loading your configuration...
         </div>
-        <p className="text-muted-foreground">Loading your configuration...</p>
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="mx-auto flex min-h-[25rem] max-w-2xl items-center py-14">
+        <div className="w-full rounded-[20px] border border-[var(--dawn-line)] bg-[var(--dawn-surface)] p-8 text-center shadow-[0_18px_50px_-32px_rgba(31,27,24,0.24)]">
+          <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-[var(--coral-soft)] text-[var(--coral-lo)]">
+            <CircleAlert className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <h2 className="mt-5 text-2xl font-semibold tracking-[-0.02em] text-[var(--dawn-ink)]">
+            Your setup is temporarily unavailable
+          </h2>
+          <p className="mx-auto mt-3 max-w-[48ch] text-sm leading-6 text-[var(--dawn-ink-2)]">
+            {loadError}
+          </p>
+          <Button
+            type="button"
+            className="mt-6 rounded-full bg-[var(--coral)] px-6 text-[var(--coral-ink)] hover:bg-[var(--coral-hi)]"
+            onClick={() => {
+              setIsLoading(true)
+              setLoadAttempt((attempt) => attempt + 1)
+            }}
+          >
+            Retry loading
+          </Button>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
       {/* Header */}
-      <div className="text-center space-y-3">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-white/[0.05] text-zinc-700 dark:text-zinc-300 text-sm font-medium border border-zinc-200 dark:border-white/[0.06]">
-          <Sparkles className="w-4 h-4" />
-          Job Configuration
-        </div>
-        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">
-          Set Up Your <span className="text-gradient">Job Preferences</span>
+      <header className="max-w-2xl space-y-3">
+        <p className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.09em] text-[var(--coral-lo)]">
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
+          Your search setup
+        </p>
+        <h1 className="text-balance text-[clamp(2.2rem,6vw,4rem)] font-semibold leading-[0.98] tracking-[-0.04em] text-[var(--dawn-ink)]">
+          Tell us what is worth waking up for.
         </h1>
-        <p className="text-muted-foreground max-w-xl mx-auto">
-          Configure your job search criteria to help us find the perfect opportunities for you.
+        <p className="max-w-[58ch] text-pretty leading-7 text-[var(--dawn-ink-2)]">
+          Set your criteria once. JobSilver will use them to build a focused shortlist and explain why each role fits.
         </p>
         {/* Show logged-in account to prevent accidental saves to wrong account */}
         {loggedInEmail && (
-          <p className="text-xs text-muted-foreground/70">
-            Configuring for: <span className="font-medium text-foreground/80">{loggedInEmail}</span>
+          <p className="text-xs text-[var(--dawn-ink-3)]">
+            Saving to <span className="font-medium text-[var(--dawn-ink)]">{loggedInEmail}</span>
           </p>
         )}
-      </div>
+      </header>
 
       {/* How It Works Info Box */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800/50 rounded-xl p-4">
-        <div className="flex gap-3">
-          <div className="shrink-0 w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
-            <Globe className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+      <aside className="rounded-2xl border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-4 sm:p-5" aria-label="How job matching works">
+        <div className="flex gap-3 sm:gap-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--coral-soft)] text-[var(--coral-lo)]">
+            <Globe className="h-5 w-5" aria-hidden="true" />
           </div>
-          <div className="space-y-1">
-            <h3 className="font-medium text-blue-900 dark:text-blue-100">How Job Matching Works</h3>
-            <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-              <li className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+          <div>
+            <h2 className="font-semibold text-[var(--dawn-ink)]">What happens after setup</h2>
+            <ul className="mt-2 grid gap-2 text-sm leading-6 text-[var(--dawn-ink-2)] sm:grid-cols-3 sm:gap-4">
+              <li className="border-l border-[var(--dawn-line-2)] pl-3">
                 Your first job matches arrive <strong>instantly</strong> after saving your preferences
               </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              <li className="border-l border-[var(--dawn-line-2)] pl-3">
                 New matches are delivered <strong>every 24 hours</strong> based on your plan
               </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              <li className="border-l border-[var(--dawn-line-2)] pl-3">
                 <strong>Tip:</strong> Broader filters = more matches. Narrow filters may limit your daily quota.
               </li>
             </ul>
           </div>
         </div>
-      </div>
+      </aside>
 
-      {/* Progress Steps - z-index lower than dropdowns in content area */}
-      <div className="relative z-10">
+      {/* Progress rail - z-index lower than dropdowns in content area */}
+      <nav className="relative z-10" aria-label="Setup progress">
         {/* Progress Line */}
-        <div className="absolute top-6 left-0 right-0 h-0.5 bg-zinc-200 dark:bg-zinc-700 hidden sm:block" />
+        <div className="absolute left-4 right-4 top-4 h-px bg-[var(--dawn-line-2)] sm:left-5 sm:right-5 sm:top-5" />
         <div
-          className="absolute top-6 left-0 h-0.5 bg-gradient-to-r from-zinc-400 via-zinc-300 to-zinc-400 transition-all duration-500 hidden sm:block"
-          style={{ width: `${((currentStep - 1) / 4) * 100}%` }}
+          className="absolute left-4 right-4 top-4 h-px origin-left bg-[var(--coral)] transition-transform duration-300 sm:left-5 sm:right-5 sm:top-5"
+          style={{ transform: `scaleX(${(currentStep - 1) / (STEPS.length - 1)})` }}
         />
 
         {/* Step Indicators */}
-        <div className="relative flex justify-between">
-          {STEPS.map((step, index) => {
+        <ol className="relative flex justify-between">
+          {STEPS.map((step) => {
             const isCompleted = currentStep > step.id
             const isCurrent = currentStep === step.id
             const Icon = step.icon
 
             return (
-              <button
-                key={step.id}
-                onClick={() => {
-                  // Going backwards is always allowed
-                  if (step.id < currentStep) {
-                    setCurrentStep(step.id)
-                    return
-                  }
-
-                  // Going forward - prevent skipping multiple steps
-                  if (step.id > currentStep + 1) {
-                    toast({
-                      variant: "destructive",
-                      title: "Complete current step first",
-                      description: "Please complete each step before proceeding.",
-                    })
-                    return
-                  }
-
-                  // Validate current step before advancing
-                  if (step.id > currentStep) {
-                    // Step 1 validation (mandatory filters)
-                    if (currentStep === 1) {
-                      const validation = validateMandatoryFilters(wizardData.jobFilters)
-                      if (!validation.isValid) {
-                        toast({
-                          variant: "destructive",
-                          title: "Required fields missing",
-                          description: validation.errors.map(e => e.message).join(". "),
-                        })
-                        return
-                      }
-                    }
-
-                    // Step 3 validation (screening)
-                    if (currentStep === 3) {
-                      const screeningValidation = validateScreeningAnswers(wizardData.screeningAnswers)
-                      if (!screeningValidation.isValid) {
-                        toast({
-                          variant: "destructive",
-                          title: "Required profile fields missing",
-                          description: screeningValidation.errors.map(e => e.message).join(". "),
-                        })
-                        return
-                      }
-                    }
-                  }
-
-                  setCurrentStep(step.id)
-                }}
-                className={cn(
-                  "flex flex-col items-center gap-2 group transition-all duration-200",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 rounded-lg p-2 -m-2"
-                )}
-              >
-                <div
-                  className={cn(
-                    "relative w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300",
-                    "border-2",
-                    isCompleted
-                      ? "bg-gradient-to-br from-zinc-400 via-zinc-500 to-zinc-600 border-transparent text-white shadow-lg shadow-zinc-500/25"
-                      : isCurrent
-                      ? "bg-white dark:bg-zinc-800 border-zinc-400 text-zinc-600 dark:text-zinc-300 shadow-lg"
-                      : "bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-400 group-hover:border-zinc-400"
-                  )}
+              <li key={step.id} className="min-w-0 flex-1">
+                <button
+                  type="button"
+                  aria-current={isCurrent ? "step" : undefined}
+                  aria-label={`${isCompleted ? "Completed " : ""}Step ${step.id}: ${step.title}. ${step.description}`}
+                  onClick={() => handleStepSelect(step.id)}
+                  className="group flex w-full flex-col items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2"
                 >
-                  {isCompleted ? (
-                    <Check className="w-5 h-5" />
-                  ) : (
-                    <Icon className="w-5 h-5" />
-                  )}
-                  {isCurrent && (
-                    <span className="absolute -inset-1 rounded-xl border-2 border-zinc-400/30 animate-pulse" />
-                  )}
-                </div>
-                <div className="hidden sm:block text-center">
+                  <span
+                    className={cn(
+                      "relative z-10 flex h-8 w-8 items-center justify-center rounded-full border bg-[var(--dawn-bg)] text-xs font-semibold tabular-nums transition-colors sm:h-10 sm:w-10",
+                      isCompleted && "border-[var(--coral)] bg-[var(--coral)] text-white",
+                      isCurrent && "border-[var(--coral)] text-[var(--coral-lo)] ring-4 ring-[var(--coral-soft)]",
+                      !isCompleted && !isCurrent && "border-[var(--dawn-line-2)] text-[var(--dawn-ink-3)] group-hover:border-[var(--coral)]/50"
+                    )}
+                  >
+                    {isCompleted ? <Check className="h-4 w-4" aria-hidden="true" /> : <span className="sm:hidden" aria-hidden="true">{step.id}</span>}
+                    {!isCompleted && <Icon className="hidden h-4 w-4 sm:block" aria-hidden="true" />}
+                  </span>
+                  <div className="hidden max-w-[9rem] text-center sm:block">
                   <p
                     className={cn(
-                      "text-sm font-medium transition-colors",
+                      "text-sm font-medium leading-5 transition-colors",
                       isCurrent || isCompleted
                         ? "text-foreground"
                         : "text-muted-foreground"
@@ -671,24 +751,35 @@ export function SetupWizard() {
                   >
                     {step.title}
                   </p>
-                  <p className="text-xs text-muted-foreground">{step.description}</p>
-                </div>
-              </button>
+                    <p className="mt-0.5 text-[11px] leading-4 text-[var(--dawn-ink-3)]">{step.description}</p>
+                  </div>
+                </button>
+              </li>
             )
           })}
-        </div>
-      </div>
+        </ol>
+      </nav>
 
       {/* Step Counter for Mobile */}
-      <div className="sm:hidden text-center">
-        <p className="text-sm font-medium">
-          Step {currentStep} of 5: <span className="text-zinc-500 dark:text-zinc-300">{STEPS[currentStep - 1].title}</span>
+      <div className="text-center sm:hidden">
+        <p className="text-sm font-medium text-[var(--dawn-ink)]">
+          Step {currentStep} of {STEPS.length} · {STEPS[currentStep - 1].title}
         </p>
+        <p className="mt-0.5 text-xs text-[var(--dawn-ink-3)]">{STEPS[currentStep - 1].description}</p>
+      </div>
+
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        Step {currentStep} of {STEPS.length}: {STEPS[currentStep - 1].title}
       </div>
 
       {/* Step Content */}
-      <div className="bg-white dark:bg-[#111113] rounded-2xl border border-zinc-200 dark:border-white/[0.06] shadow-xl shadow-zinc-200/50 dark:shadow-none overflow-hidden">
-        <div className="p-6 sm:p-8">
+      <section
+        ref={stepContentRef}
+        tabIndex={-1}
+        aria-label={`Step ${currentStep}: ${STEPS[currentStep - 1].title}`}
+        className="overflow-hidden rounded-[1.35rem] border border-[var(--dawn-line)] bg-[var(--dawn-surface)] shadow-[0_28px_70px_-56px_rgba(31,27,24,0.55)] focus:outline-none"
+      >
+        <div className="p-5 sm:p-8">
           {currentStep === 1 && (
             <StepJobPreferences
               data={wizardData.jobFilters}
@@ -716,6 +807,7 @@ export function SetupWizard() {
               jobFilters={wizardData.jobFilters}
               isFirstTimeSetup={isFirstTimeSetup}
               subscriptionPlan={subscriptionPlan}
+              hasFullFeatureAccess={hasFullFeatureAccess}
             />
           )}
           {currentStep === 5 && (
@@ -728,13 +820,13 @@ export function SetupWizard() {
         </div>
 
         {/* Navigation */}
-        <div className="px-6 sm:px-8 py-4 bg-zinc-50 dark:bg-white/[0.02] border-t border-zinc-200 dark:border-white/[0.06] flex items-center justify-between">
+        <div className="flex items-center justify-between border-t border-[var(--dawn-line)] bg-[var(--dawn-cream)] px-4 py-4 sm:px-8">
           <Button
             variant="ghost"
             onClick={handleBack}
             disabled={currentStep === 1}
             className={cn(
-              "gap-2 transition-opacity",
+              "gap-2 text-[var(--dawn-ink-2)] transition-opacity hover:bg-[var(--dawn-surface)] hover:text-[var(--dawn-ink)]",
               currentStep === 1 && "opacity-0 pointer-events-none"
             )}
           >
@@ -743,14 +835,13 @@ export function SetupWizard() {
           </Button>
 
           <span className="text-sm text-muted-foreground hidden sm:block">
-            Step {currentStep} of 5
+            Step {currentStep} of {STEPS.length}
           </span>
 
-          {currentStep < 5 ? (
+          {currentStep < STEPS.length ? (
             <Button
               onClick={handleNext}
-              variant="metallic"
-              className="gap-2"
+              className="gap-2 bg-[var(--coral)] text-[var(--coral-ink)] hover:bg-[var(--coral-hi)] active:bg-[var(--coral-active)]"
             >
               Next
               <ArrowRight className="w-4 h-4" />
@@ -759,8 +850,7 @@ export function SetupWizard() {
             <Button
               onClick={handleSave}
               disabled={isSaving}
-              variant="metallic"
-              className="gap-2 min-w-[160px]"
+              className="min-w-[10rem] gap-2 bg-[var(--coral)] text-[var(--coral-ink)] hover:bg-[var(--coral-hi)] active:bg-[var(--coral-active)]"
             >
               {isSaving ? (
                 <>
@@ -776,7 +866,7 @@ export function SetupWizard() {
             </Button>
           )}
         </div>
-      </div>
+      </section>
     </div>
   )
 }

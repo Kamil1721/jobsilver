@@ -124,20 +124,13 @@ export function WorkHistorySection({ data, onUpdate }: WorkHistorySectionProps) 
     return `-${month}`
   }
 
-  // Check if date is complete (has both year and month)
-  const isDateComplete = (dateStr: string) => {
-    if (!dateStr) return false
-    const { year, month } = parseDate(dateStr)
-    return year.length === 4 && month.length === 2
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Briefcase className="w-4 h-4 text-zinc-500" />
+          <Briefcase className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Work Experience</h3>
-          <span className="text-xs text-amber-600 font-medium">Required</span>
+          <span className="text-xs font-medium text-[var(--coral-lo)]">Required</span>
         </div>
         <span className="text-xs text-muted-foreground">{workHistory.length}/3 positions</span>
       </div>
@@ -155,7 +148,7 @@ export function WorkHistorySection({ data, onUpdate }: WorkHistorySectionProps) 
           return (
             <div
               key={index}
-              className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden"
+              className="border border-border dark:border-zinc-700 rounded-xl overflow-hidden"
             >
               {/* Header - always visible */}
               <button
@@ -164,8 +157,8 @@ export function WorkHistorySection({ data, onUpdate }: WorkHistorySectionProps) 
                 className={cn(
                   "w-full flex items-center justify-between p-4 text-left transition-colors",
                   isExpanded
-                    ? "bg-zinc-50 dark:bg-white/[0.02]"
-                    : "hover:bg-zinc-50 dark:hover:bg-white/[0.02]"
+                    ? "bg-muted dark:bg-white/[0.02]"
+                    : "hover:bg-muted dark:hover:bg-white/[0.02]"
                 )}
               >
                 <div className="flex-1 min-w-0">
@@ -195,7 +188,7 @@ export function WorkHistorySection({ data, onUpdate }: WorkHistorySectionProps) 
                         e.stopPropagation()
                         removeEntry(index)
                       }}
-                      className="h-8 w-8 p-0 text-zinc-500 hover:text-red-600 hover:bg-red-50"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -210,7 +203,7 @@ export function WorkHistorySection({ data, onUpdate }: WorkHistorySectionProps) 
 
               {/* Expanded Content */}
               {isExpanded && (
-                <div className="p-4 pt-0 space-y-4 border-t border-zinc-100 dark:border-zinc-800">
+                <div className="p-4 pt-0 space-y-4 border-t border-border dark:border-zinc-800">
                   {/* Company & Position */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
                     <div className="space-y-2">
@@ -235,7 +228,7 @@ export function WorkHistorySection({ data, onUpdate }: WorkHistorySectionProps) 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
-                        <Calendar className="w-3.5 h-3.5 text-zinc-500" />
+                        <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                         Start Date *
                       </Label>
                       <div className="flex gap-2">
@@ -271,7 +264,7 @@ export function WorkHistorySection({ data, onUpdate }: WorkHistorySectionProps) 
                     </div>
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">
-                        <Calendar className="w-3.5 h-3.5 text-zinc-500" />
+                        <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                         End Date
                       </Label>
                       <div className="flex gap-2">
@@ -319,7 +312,7 @@ export function WorkHistorySection({ data, onUpdate }: WorkHistorySectionProps) 
                           onChange={(e) =>
                             updateEntry(index, { end_date: e.target.checked ? null : "" })
                           }
-                          className="w-4 h-4 rounded border-zinc-300"
+                          className="w-4 h-4 rounded border-input"
                         />
                         <span className="text-sm text-muted-foreground">I currently work here</span>
                       </label>
@@ -329,7 +322,7 @@ export function WorkHistorySection({ data, onUpdate }: WorkHistorySectionProps) 
                   {/* Location */}
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
-                      <MapPin className="w-3.5 h-3.5 text-zinc-500" />
+                      <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
                       Location
                     </Label>
                     <Input
@@ -362,7 +355,7 @@ export function WorkHistorySection({ data, onUpdate }: WorkHistorySectionProps) 
                               variant="ghost"
                               size="sm"
                               onClick={() => removeHighlight(index, hIndex)}
-                              className="h-8 w-8 p-0 mt-1 text-zinc-500 hover:text-red-600"
+                              className="h-8 w-8 p-0 mt-1 text-muted-foreground hover:text-red-600"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
@@ -375,7 +368,7 @@ export function WorkHistorySection({ data, onUpdate }: WorkHistorySectionProps) 
                         variant="ghost"
                         size="sm"
                         onClick={() => addHighlight(index)}
-                        className="text-zinc-600 hover:text-zinc-900"
+                        className="text-muted-foreground hover:text-foreground"
                       >
                         <Plus className="w-4 h-4 mr-1" />
                         Add bullet point
@@ -401,8 +394,8 @@ export function WorkHistorySection({ data, onUpdate }: WorkHistorySectionProps) 
       )}
 
       {workHistory.length === 0 && (
-        <p className="text-sm text-amber-600 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+        <p className="flex items-center gap-2 text-sm text-[var(--coral-lo)]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--coral)]" />
           At least one work experience entry is required
         </p>
       )}

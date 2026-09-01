@@ -30,12 +30,12 @@ export function QuickActions({ onSelect, jobContext, pendingQuestion, pageContex
           size="sm"
           className={cn(
             "w-full justify-start text-left h-auto py-2.5 px-3 whitespace-normal",
-            "border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/[0.12]",
+            "border-border bg-muted hover:bg-accent hover:border-border",
             "transition-colors duration-200"
           )}
           onClick={() => onSelect(pendingQuestion)}
         >
-          <Sparkles className="h-4 w-4 mr-2 shrink-0 text-zinc-400" />
+          <Sparkles className="h-4 w-4 mr-2 shrink-0 text-muted-foreground" />
           <span className="text-xs text-foreground line-clamp-2">{pendingQuestion}</span>
         </Button>
       </div>
@@ -112,14 +112,14 @@ export function QuickActions({ onSelect, jobContext, pendingQuestion, pageContex
             variant="outline"
             size="sm"
             className={cn(
-              "h-auto py-1.5 px-2.5 text-xs",
-              "border-border/50 bg-transparent",
-              "hover:border-white/[0.12] hover:bg-white/[0.05] hover:text-white",
+              "group h-auto py-1.5 px-2.5 text-xs",
+              "border-border bg-card",
+              "hover:border-[var(--coral)]/50 hover:bg-[var(--coral-soft)]/40 hover:text-foreground",
               "transition-colors duration-200"
             )}
             onClick={() => onSelect(action.prompt)}
           >
-            <action.icon className="h-3 w-3 mr-1.5 text-zinc-400" />
+            <action.icon className="h-3 w-3 mr-1.5 text-muted-foreground transition-colors group-hover:text-[var(--coral-lo)]" />
             {action.label}
           </Button>
         ))}

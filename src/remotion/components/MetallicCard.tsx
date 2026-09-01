@@ -1,6 +1,5 @@
 import React from 'react'
 import {
-  AbsoluteFill,
   interpolate,
   useCurrentFrame,
   spring,

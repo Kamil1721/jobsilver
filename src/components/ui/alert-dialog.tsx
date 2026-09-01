@@ -40,7 +40,7 @@ const AlertDialogContent = React.forwardRef<
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
         "sm:rounded-xl border",
         // Light mode
-        "bg-white border-zinc-200",
+        "bg-popover border-border text-foreground",
         // Dark mode - metallic
         "dark:bg-[#111113] dark:border-white/[0.06]",
         className
@@ -85,7 +85,7 @@ const AlertDialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Title
     ref={ref}
-    className={cn("text-lg font-semibold text-zinc-900 dark:text-white", className)}
+    className={cn("text-lg font-semibold text-foreground dark:text-white", className)}
     {...props}
   />
 ))
@@ -97,7 +97,7 @@ const AlertDialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Description
     ref={ref}
-    className={cn("text-sm text-zinc-500 dark:text-zinc-400", className)}
+    className={cn("text-sm text-muted-foreground dark:text-zinc-400", className)}
     {...props}
   />
 ))

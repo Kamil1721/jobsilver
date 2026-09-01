@@ -14,7 +14,7 @@ import {
   Briefcase,
   Calendar,
   Globe,
-  Linkedin,
+  Link2,
   X,
   Shield,
   AlertCircle,
@@ -99,7 +99,7 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
       {/* Section Header */}
       <div className="space-y-1">
         <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-          <FileText className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+          <FileText className="w-5 h-5 text-muted-foreground" />
           Screening Questions
         </h2>
         <p className="text-muted-foreground text-sm">
@@ -110,7 +110,7 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
       {/* Personal Information */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <FileText className="w-4 h-4 text-zinc-500" />
+          <FileText className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Personal Information</h3>
           <span className="text-xs text-red-500 font-medium">Required</span>
         </div>
@@ -120,11 +120,11 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
             <Label htmlFor="first_name">First Name *</Label>
             <Input
               id="first_name"
-              placeholder="John"
+              placeholder="Maya"
               value={data.first_name || ""}
               onChange={(e) => onUpdate({ first_name: e.target.value })}
               className={cn(
-                !data.first_name && "border-amber-300 dark:border-amber-700"
+                !data.first_name && "border-[var(--coral)]/45"
               )}
             />
           </div>
@@ -132,11 +132,11 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
             <Label htmlFor="last_name">Last Name *</Label>
             <Input
               id="last_name"
-              placeholder="Doe"
+              placeholder="Nowak"
               value={data.last_name || ""}
               onChange={(e) => onUpdate({ last_name: e.target.value })}
               className={cn(
-                !data.last_name && "border-amber-300 dark:border-amber-700"
+                !data.last_name && "border-[var(--coral)]/45"
               )}
             />
           </div>
@@ -146,18 +146,23 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
       {/* Location */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <MapPin className="w-4 h-4 text-zinc-500" />
+          <MapPin className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Location</h3>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Country */}
           <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">Country</Label>
+            <Label htmlFor="screening-country" className="text-sm text-muted-foreground">Country</Label>
             <div className="relative">
               <button
+                id="screening-country"
+                type="button"
                 onClick={() => setShowCountryDropdown(!showCountryDropdown)}
-                className="w-full flex items-center justify-between h-10 px-3 bg-background rounded-md border border-input hover:border-zinc-400 transition-colors text-sm"
+                aria-haspopup="dialog"
+                aria-expanded={showCountryDropdown}
+                aria-controls="screening-country-dialog"
+                className="w-full flex items-center justify-between h-10 px-3 bg-background rounded-md border border-input hover:border-muted-foreground/40 transition-colors text-sm"
               >
                 <span className={data.country ? "text-foreground" : "text-muted-foreground"}>
                   {data.country || "Select country..."}
@@ -167,7 +172,18 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
                 </svg>
               </button>
               {showCountryDropdown && (
-                <div className="absolute z-50 w-full mt-1 py-1 bg-white dark:bg-[#111113] rounded-lg border border-zinc-200 dark:border-white/[0.06] shadow-lg max-h-48 overflow-auto">
+                <div
+                  id="screening-country-dialog"
+                  role="dialog"
+                  aria-label="Choose country"
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      setShowCountryDropdown(false)
+                      document.getElementById("screening-country")?.focus()
+                    }
+                  }}
+                  className="absolute z-50 w-full mt-1 py-1 bg-popover rounded-lg border border-border shadow-lg max-h-48 overflow-auto"
+                >
                   <div className="px-2 py-1.5">
                     <Input
                       placeholder="Search..."
@@ -180,7 +196,9 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
                   {filteredCountries.map((country) => (
                     <button
                       key={country}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-white/[0.05]"
+                      type="button"
+                      aria-pressed={data.country === country}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
                       onClick={() => {
                         onUpdate({ country })
                         setShowCountryDropdown(false)
@@ -197,8 +215,9 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
 
           {/* City */}
           <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">City</Label>
+            <Label htmlFor="screening-city" className="text-sm text-muted-foreground">City</Label>
             <Input
+              id="screening-city"
               placeholder="City"
               value={data.city}
               onChange={(e) => onUpdate({ city: e.target.value })}
@@ -207,8 +226,9 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
 
           {/* State/Region */}
           <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">State / Region</Label>
+            <Label htmlFor="screening-state-region" className="text-sm text-muted-foreground">State / Region</Label>
             <Input
+              id="screening-state-region"
               placeholder="State or region"
               value={data.state_region}
               onChange={(e) => onUpdate({ state_region: e.target.value })}
@@ -217,8 +237,9 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
 
           {/* Postcode */}
           <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">Postcode</Label>
+            <Label htmlFor="screening-postcode" className="text-sm text-muted-foreground">Postcode</Label>
             <Input
+              id="screening-postcode"
               placeholder="Postcode / ZIP"
               value={data.postcode}
               onChange={(e) => onUpdate({ postcode: e.target.value })}
@@ -230,10 +251,11 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
       {/* Current Job Title */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
-          <Briefcase className="w-4 h-4 text-zinc-500" />
-          <Label className="font-medium">Current Job Title</Label>
+          <Briefcase className="w-4 h-4 text-muted-foreground" />
+          <Label htmlFor="screening-current-job-title" className="font-medium">Current Job Title</Label>
         </div>
         <Input
+          id="screening-current-job-title"
           placeholder="e.g., Senior Software Engineer"
           value={data.current_job_title}
           onChange={(e) => onUpdate({ current_job_title: e.target.value })}
@@ -243,19 +265,21 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
       {/* Availability */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-zinc-500" />
+          <Calendar className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Availability</h3>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Availability">
           {AVAILABILITY_OPTIONS.map((option) => (
             <button
               key={option.id}
+              type="button"
               onClick={() => onUpdate({ availability: option.id })}
+              aria-pressed={data.availability === option.id}
               className={cn(
                 "px-4 py-2.5 rounded-full text-sm font-medium transition-all",
                 data.availability === option.id
-                  ? "bg-gradient-to-r from-zinc-500 to-zinc-600 text-white shadow-md shadow-zinc-500/25"
-                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                  ? "bg-[var(--coral)] text-[var(--coral-ink)] shadow-md shadow-[var(--coral)]/25"
+                  : "bg-secondary text-muted-foreground hover:bg-accent"
               )}
             >
               {option.label}
@@ -267,7 +291,7 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
       {/* Work Authorization */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <Shield className="w-4 h-4 text-zinc-500" />
+          <Shield className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Work Authorization</h3>
           <span className="text-xs text-red-500 font-medium">* Required</span>
         </div>
@@ -277,7 +301,7 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
 
         {/* Validation Warning */}
         {data.work_authorization_countries.length === 0 && (
-          <div className="flex items-center gap-2 text-amber-600 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+          <div className="flex items-center gap-2 rounded-lg bg-[var(--coral-soft)] p-3 text-sm text-[var(--coral-lo)]">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             Select at least one country where you are authorized to work
           </div>
@@ -285,8 +309,13 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
 
         <div className="relative">
           <button
+            id="work-authorization-countries"
+            type="button"
             onClick={() => setShowAuthCountryDropdown(!showAuthCountryDropdown)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-zinc-50 dark:bg-white/[0.02] rounded-xl border border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 transition-colors"
+            aria-haspopup="listbox"
+            aria-expanded={showAuthCountryDropdown}
+            aria-controls="work-authorization-listbox"
+            className="w-full flex items-center justify-between px-4 py-3 bg-muted rounded-xl border border-border hover:border-muted-foreground/40 transition-colors"
           >
             <span className="text-sm text-muted-foreground">
               {data.work_authorization_countries.length > 0
@@ -296,24 +325,39 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
             <Globe className="w-4 h-4 text-muted-foreground" />
           </button>
           {showAuthCountryDropdown && (
-            <div className="absolute z-50 w-full mt-1 py-2 bg-white dark:bg-[#111113] rounded-xl border border-zinc-200 dark:border-white/[0.06] shadow-lg max-h-60 overflow-auto">
+            <div
+              id="work-authorization-listbox"
+              role="listbox"
+              aria-label="Work authorization countries"
+              aria-multiselectable="true"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setShowAuthCountryDropdown(false)
+                  document.getElementById("work-authorization-countries")?.focus()
+                }
+              }}
+              className="absolute z-50 w-full mt-1 py-2 bg-popover rounded-xl border border-border shadow-lg max-h-60 overflow-auto"
+            >
               {COUNTRIES.map((country) => (
                 <button
                   key={country}
+                  type="button"
+                  role="option"
+                  aria-selected={data.work_authorization_countries.includes(country)}
                   className={cn(
-                    "w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-zinc-50 dark:hover:bg-white/[0.05] transition-colors",
-                    data.work_authorization_countries.includes(country) && "bg-zinc-50 dark:bg-white/[0.05]"
+                    "w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-accent transition-colors",
+                    data.work_authorization_countries.includes(country) && "bg-secondary"
                   )}
                   onClick={() => toggleWorkAuthCountry(country)}
                 >
                   <div className={cn(
                     "w-5 h-5 rounded border-2 flex items-center justify-center transition-colors",
                     data.work_authorization_countries.includes(country)
-                      ? "bg-zinc-500 border-zinc-500"
-                      : "border-zinc-300 dark:border-zinc-600"
+                      ? "bg-[var(--coral)] border-[var(--coral)]"
+                      : "border-input"
                   )}>
                     {data.work_authorization_countries.includes(country) && (
-                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-3 h-3 text-[var(--coral-ink)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                       </svg>
                     )}
@@ -329,12 +373,14 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
             {data.work_authorization_countries.map((country) => (
               <Badge
                 key={country}
-                className="bg-zinc-100 text-zinc-700 dark:bg-white/[0.05] dark:text-zinc-300 pl-3 pr-1.5 py-1.5 gap-1.5"
+                className="bg-secondary text-foreground pl-3 pr-1.5 py-1.5 gap-1.5"
               >
                 {country}
                 <button
+                  type="button"
+                  aria-label={`Remove work authorization country ${country}`}
                   onClick={() => toggleWorkAuthCountry(country)}
-                  className="hover:bg-zinc-300/50 dark:hover:bg-white/[0.1] rounded-full p-0.5"
+                  className="hover:bg-muted-foreground/20 rounded-full p-0.5"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -345,7 +391,7 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
       </div>
 
       {/* Visa Sponsorship */}
-      <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-white/[0.02] rounded-xl">
+      <div className="flex items-center justify-between p-4 bg-muted rounded-xl">
         <div>
           <Label htmlFor="visa-toggle" className="text-base font-medium cursor-pointer">
             Require Visa Sponsorship?
@@ -364,13 +410,18 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
       {/* Nationality */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Label className="font-medium">Nationality</Label>
+          <Label htmlFor="screening-nationality" className="font-medium">Nationality</Label>
           <span className="text-xs text-muted-foreground">{data.nationalities.length}/3</span>
         </div>
         <div className="relative">
           <button
+            id="screening-nationality"
+            type="button"
             onClick={() => setShowNationalityDropdown(!showNationalityDropdown)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-zinc-50 dark:bg-white/[0.02] rounded-xl border border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 transition-colors"
+            aria-haspopup="listbox"
+            aria-expanded={showNationalityDropdown}
+            aria-controls="nationality-listbox"
+            className="w-full flex items-center justify-between px-4 py-3 bg-muted rounded-xl border border-border hover:border-muted-foreground/40 transition-colors"
           >
             <span className="text-sm text-muted-foreground">
               {data.nationalities.length > 0
@@ -380,13 +431,28 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
             <Globe className="w-4 h-4 text-muted-foreground" />
           </button>
           {showNationalityDropdown && (
-            <div className="absolute z-50 w-full mt-1 py-2 bg-white dark:bg-[#111113] rounded-xl border border-zinc-200 dark:border-white/[0.06] shadow-lg max-h-60 overflow-auto">
+            <div
+              id="nationality-listbox"
+              role="listbox"
+              aria-label="Nationalities"
+              aria-multiselectable="true"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setShowNationalityDropdown(false)
+                  document.getElementById("screening-nationality")?.focus()
+                }
+              }}
+              className="absolute z-50 w-full mt-1 py-2 bg-popover rounded-xl border border-border shadow-lg max-h-60 overflow-auto"
+            >
               {NATIONALITIES.map((nat) => (
                 <button
                   key={nat}
+                  type="button"
+                  role="option"
+                  aria-selected={data.nationalities.includes(nat)}
                   className={cn(
-                    "w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-zinc-50 dark:hover:bg-white/[0.05] transition-colors",
-                    data.nationalities.includes(nat) && "bg-zinc-50 dark:bg-white/[0.05]",
+                    "w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-accent transition-colors",
+                    data.nationalities.includes(nat) && "bg-secondary",
                     !data.nationalities.includes(nat) && data.nationalities.length >= 3 && "opacity-50 cursor-not-allowed"
                   )}
                   onClick={() => toggleNationality(nat)}
@@ -395,11 +461,11 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
                   <div className={cn(
                     "w-5 h-5 rounded border-2 flex items-center justify-center transition-colors",
                     data.nationalities.includes(nat)
-                      ? "bg-zinc-500 border-zinc-500"
-                      : "border-zinc-300 dark:border-zinc-600"
+                      ? "bg-[var(--coral)] border-[var(--coral)]"
+                      : "border-input"
                   )}>
                     {data.nationalities.includes(nat) && (
-                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-3 h-3 text-[var(--coral-ink)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                       </svg>
                     )}
@@ -415,12 +481,14 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
             {data.nationalities.map((nat) => (
               <Badge
                 key={nat}
-                className="bg-zinc-100 text-zinc-700 dark:bg-white/[0.05] dark:text-zinc-300 pl-3 pr-1.5 py-1.5 gap-1.5"
+                className="bg-secondary text-foreground pl-3 pr-1.5 py-1.5 gap-1.5"
               >
                 {nat}
                 <button
+                  type="button"
+                  aria-label={`Remove nationality ${nat}`}
                   onClick={() => toggleNationality(nat)}
-                  className="hover:bg-zinc-300/50 dark:hover:bg-white/[0.1] rounded-full p-0.5"
+                  className="hover:bg-muted-foreground/20 rounded-full p-0.5"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -433,10 +501,11 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
       {/* LinkedIn */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
-          <Linkedin className="w-4 h-4 text-zinc-500" />
-          <Label className="font-medium">LinkedIn Profile</Label>
+          <Link2 className="w-4 h-4 text-muted-foreground" />
+          <Label htmlFor="screening-linkedin" className="font-medium">LinkedIn Profile</Label>
         </div>
         <Input
+          id="screening-linkedin"
           placeholder="https://linkedin.com/in/your-profile"
           value={data.linkedin_url || ""}
           onChange={(e) => onUpdate({ linkedin_url: e.target.value || null })}
@@ -461,15 +530,17 @@ export function StepScreening({ data, onUpdate }: StepScreeningProps) {
       {/* Experience Summary */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <Label className="font-medium">Experience Summary</Label>
-          <span className={cn(
+          <Label htmlFor="screening-experience-summary" className="font-medium">Experience Summary</Label>
+          <span id="screening-experience-count" className={cn(
             "text-xs",
-            data.experience_summary.length > 450 ? "text-amber-600" : "text-muted-foreground"
+            data.experience_summary.length > 450 ? "text-[var(--coral-lo)]" : "text-muted-foreground"
           )}>
             {data.experience_summary.length}/500
           </span>
         </div>
         <Textarea
+          id="screening-experience-summary"
+          aria-describedby="screening-experience-count"
           placeholder="Brief summary of your professional experience..."
           value={data.experience_summary}
           onChange={(e) => {

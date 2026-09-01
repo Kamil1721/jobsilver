@@ -15,8 +15,8 @@ const Switch = React.forwardRef<
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
       "disabled:cursor-not-allowed disabled:opacity-50",
       // Light mode
-      "border-transparent bg-zinc-200 data-[state=checked]:bg-zinc-900",
-      "focus-visible:ring-zinc-200 focus-visible:ring-offset-white",
+      "border-transparent bg-muted data-[state=checked]:bg-[var(--coral)]",
+      "focus-visible:ring-[var(--coral)] focus-visible:ring-offset-background",
       // Dark mode - inverted style (white when checked)
       "dark:bg-white/[0.08] dark:data-[state=checked]:bg-white",
       "dark:focus-visible:ring-white/[0.08] dark:focus-visible:ring-offset-[#0a0a0b]",
@@ -30,7 +30,7 @@ const Switch = React.forwardRef<
         "pointer-events-none block h-5 w-5 rounded-full shadow-lg ring-0 transition-transform duration-200",
         "data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0",
         // Light mode
-        "bg-white",
+        "bg-card",
         // Dark mode - inverted (dark thumb when checked)
         "dark:bg-zinc-400 dark:data-[state=checked]:bg-zinc-900"
       )}

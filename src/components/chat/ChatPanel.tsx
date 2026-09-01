@@ -116,7 +116,7 @@ export function ChatPanel({ onSend }: ChatPanelProps) {
     <div
       className={cn(
         'fixed z-[80] flex flex-col rounded-xl overflow-hidden',
-        // Dark theme styling matching site
+        // Dawn surface — translucent card floating over the app
         'bg-card/95 backdrop-blur-xl border border-border/50',
         'shadow-elevated',
         'w-[400px] h-[600px]',
@@ -133,8 +133,8 @@ export function ChatPanel({ onSend }: ChatPanelProps) {
 
       {/* Job context indicator */}
       {jobContext && (
-        <div className="px-4 py-2 bg-white/[0.03] border-b border-white/[0.06] text-xs text-zinc-300 flex-shrink-0">
-          <span className="font-medium text-white">Context:</span> {jobContext.title} at {jobContext.company}
+        <div className="px-4 py-2 bg-muted border-b border-border text-xs text-muted-foreground flex-shrink-0">
+          <span className="font-medium text-foreground">Context:</span> {jobContext.title} at {jobContext.company}
         </div>
       )}
 

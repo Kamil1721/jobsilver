@@ -78,7 +78,6 @@ export async function GET(request: NextRequest) {
     // Generate match reasons based on job and preferences
     const reasons: string[] = []
     let score = 0
-    let matchCount = 0
 
     // Check industry match
     const industries = preferences.industries as { name: string; weight: number }[] | null
@@ -89,7 +88,6 @@ export async function GET(request: NextRequest) {
       if (matchingIndustry) {
         reasons.push(`Matches your ${matchingIndustry.name} industry preference`)
         score += matchingIndustry.weight * 0.2
-        matchCount++
       }
     }
 
@@ -103,7 +101,6 @@ export async function GET(request: NextRequest) {
         if (jobMid >= prefMin && jobMid <= prefMax) {
           reasons.push("Salary is within your preferred range")
           score += 0.15
-          matchCount++
         }
       }
     }
@@ -116,11 +113,9 @@ export async function GET(request: NextRequest) {
       if (isRemote && prefersRemote) {
         reasons.push("Matches your remote work preference")
         score += 0.15
-        matchCount++
       } else if (!isRemote && !prefersRemote) {
         reasons.push("Matches your on-site/hybrid preference")
         score += 0.1
-        matchCount++
       }
     }
 
@@ -135,7 +130,6 @@ export async function GET(request: NextRequest) {
         const keywordsStr = matchedKeywords.slice(0, 3).join(", ")
         reasons.push(`Contains keywords you like: ${keywordsStr}`)
         score += Math.min(matchedKeywords.length * 0.1, 0.3)
-        matchCount++
       }
     }
 
@@ -161,7 +155,6 @@ export async function GET(request: NextRequest) {
       if (isPreferred) {
         reasons.push(`From ${job.company}, a company you like`)
         score += 0.2
-        matchCount++
       }
     }
 

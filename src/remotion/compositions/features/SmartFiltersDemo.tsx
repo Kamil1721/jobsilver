@@ -79,7 +79,7 @@ export const SmartFiltersDemo: React.FC = () => {
           flexWrap: 'wrap',
         }}
       >
-        {filterChips.map((chip, index) => {
+        {filterChips.map((chip) => {
           const chipScale = spring({
             frame: frame - chip.delay,
             fps,
@@ -204,7 +204,7 @@ export const SmartFiltersDemo: React.FC = () => {
 
         {/* Job items */}
         <div style={{ maxHeight: 200, overflow: 'hidden' }}>
-          {allJobs.map((job, index) => {
+          {allJobs.map((job) => {
             const isVisible = filteredJobs.includes(job)
             const itemOpacity = spring({
               frame: isVisible ? frame : frame - 5,

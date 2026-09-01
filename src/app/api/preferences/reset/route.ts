@@ -5,7 +5,6 @@ import {
   checkRateLimit,
   getClientIdentifier,
   getRateLimitHeaders,
-  RATE_LIMITS,
 } from '@/lib/security/rate-limit'
 import type { SubscriptionPlan } from '@/lib/supabase/types'
 

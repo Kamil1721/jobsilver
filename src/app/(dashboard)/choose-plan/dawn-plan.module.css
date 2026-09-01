@@ -1,0 +1,70 @@
+.shell {
+  position: relative;
+  min-height: 100dvh;
+  overflow: hidden;
+  color: var(--dawn-ink);
+  background:
+    radial-gradient(circle at 8% 4%, var(--coral-soft) 0, transparent 26rem),
+    var(--dawn-bg);
+}
+
+.shell::after {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+  opacity: 0.32;
+  background-image: radial-gradient(var(--dawn-line-2) 0.55px, transparent 0.55px);
+  background-size: 9px 9px;
+  mask-image: linear-gradient(to bottom, black, transparent 48%);
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 74rem);
+  margin-inline: auto;
+  padding: clamp(2rem, 5vw, 4.5rem) var(--dawn-gutter) 5rem;
+}
+
+.plans :global(.group) {
+  border-color: var(--dawn-line-2);
+  background: color-mix(in srgb, var(--dawn-surface) 92%, var(--dawn-cream));
+  box-shadow: 0 18px 55px -42px rgba(31, 27, 24, 0.42);
+}
+
+.plans :global(.group:hover) {
+  border-color: rgba(201, 68, 37, 0.38);
+  background: var(--dawn-surface);
+  transform: translateY(-2px);
+}
+
+.plans :global(.text-emerald-600),
+.plans :global(.text-emerald-500),
+.plans :global(.text-emerald-400),
+.plans :global(.text-amber-600),
+.plans :global(.text-amber-400) {
+  color: var(--coral-lo) !important;
+}
+
+.plans :global(.bg-amber-500\/10),
+.plans :global(.bg-emerald-500\/10),
+.plans :global(.bg-emerald-100) {
+  background: var(--coral-soft) !important;
+}
+
+.plans :global(button) {
+  min-height: 2.75rem;
+  border-radius: 0.7rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plans :global(*) {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+

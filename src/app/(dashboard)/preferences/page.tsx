@@ -18,8 +18,8 @@ export default function PreferencesRedirectPage() {
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
       <div className="flex flex-col items-center gap-4">
-        <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
-        <p className="text-sm text-zinc-500">Redirecting to preferences...</p>
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Redirecting to preferences...</p>
       </div>
     </div>
   )

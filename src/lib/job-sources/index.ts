@@ -10,7 +10,6 @@ import type { Job } from '@/lib/supabase/types'
 import {
   searchJobs as searchFantasticJobs,
   mapFantasticJobToJob,
-  FantasticJobsJob,
   FantasticJobsSearchParams,
   SOURCE_NAME as FANTASTICJOBS_SOURCE,
 } from '@/lib/api/fantasticjobs'
@@ -18,7 +17,6 @@ import {
 import {
   searchJobs as searchAdzunaJobs,
   mapAdzunaJobToJob,
-  AdzunaJob,
   AdzunaSearchParams,
   ADZUNA_COUNTRIES,
   getCountryCode,
@@ -28,7 +26,6 @@ import {
 import {
   searchJobs as searchTheMuseJobs,
   mapTheMuseJobToJob,
-  TheMuseJob,
   TheMuseSearchParams,
   SOURCE_NAME as THEMUSE_SOURCE
 } from '@/lib/api/themuse'
@@ -36,7 +33,6 @@ import {
 import {
   searchJobs as searchRemotiveJobs,
   mapRemotiveJobToJob,
-  RemotiveJob,
   RemotiveSearchParams,
   SOURCE_NAME as REMOTIVE_SOURCE
 } from '@/lib/api/remotive'
@@ -44,7 +40,6 @@ import {
 import {
   searchJobs as searchArbeitnowJobs,
   mapArbeitnowJobToJob,
-  ArbeitnowJob,
   ArbeitnowSearchParams,
   SOURCE_NAME as ARBEITNOW_SOURCE
 } from '@/lib/api/arbeitnow'

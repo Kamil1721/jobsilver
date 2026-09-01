@@ -60,7 +60,7 @@ export function StepFinal({ data, onUpdate, isFirstTimeSetup = true }: StepFinal
       {/* Section Header */}
       <div className="space-y-1">
         <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-          <Settings className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+          <Settings className="w-5 h-5 text-muted-foreground" />
           Additional Information
         </h2>
         <p className="text-muted-foreground text-sm">
@@ -71,14 +71,14 @@ export function StepFinal({ data, onUpdate, isFirstTimeSetup = true }: StepFinal
       {/* Travel & Relocation */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <Plane className="w-4 h-4 text-zinc-500" />
+          <Plane className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Travel & Relocation</h3>
         </div>
 
-        <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-white/[0.02] rounded-xl">
+        <div className="flex items-center justify-between p-4 bg-muted rounded-xl">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-zinc-100 dark:bg-white/[0.05] flex items-center justify-center">
-              <Plane className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+            <div className="w-10 h-10 rounded-lg bg-card flex items-center justify-center">
+              <Plane className="w-5 h-5 text-muted-foreground" />
             </div>
             <div>
               <Label htmlFor="travel-toggle" className="text-base font-medium cursor-pointer">
@@ -96,10 +96,10 @@ export function StepFinal({ data, onUpdate, isFirstTimeSetup = true }: StepFinal
           />
         </div>
 
-        <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-white/[0.02] rounded-xl">
+        <div className="flex items-center justify-between p-4 bg-muted rounded-xl">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-zinc-100 dark:bg-white/[0.05] flex items-center justify-center">
-              <MapPin className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+            <div className="w-10 h-10 rounded-lg bg-card flex items-center justify-center">
+              <MapPin className="w-5 h-5 text-muted-foreground" />
             </div>
             <div>
               <Label htmlFor="relocate-toggle" className="text-base font-medium cursor-pointer">
@@ -122,16 +122,22 @@ export function StepFinal({ data, onUpdate, isFirstTimeSetup = true }: StepFinal
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Languages className="w-4 h-4 text-zinc-500" />
+            <Languages className="w-4 h-4 text-muted-foreground" />
             <h3 className="font-medium">Languages Spoken</h3>
           </div>
           <span className="text-xs text-muted-foreground">{data.spoken_languages.length}/6</span>
         </div>
 
         <div className="relative">
+          <Label htmlFor="spoken-languages" className="sr-only">Languages spoken</Label>
           <button
+            id="spoken-languages"
+            type="button"
             onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-zinc-50 dark:bg-white/[0.02] rounded-xl border border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 transition-colors"
+            aria-haspopup="listbox"
+            aria-expanded={showLanguageDropdown}
+            aria-controls="spoken-languages-listbox"
+            className="w-full flex items-center justify-between px-4 py-3 bg-muted rounded-xl border border-border hover:border-muted-foreground/40 transition-colors"
           >
             <span className="text-sm text-muted-foreground">
               {data.spoken_languages.length > 0
@@ -141,13 +147,28 @@ export function StepFinal({ data, onUpdate, isFirstTimeSetup = true }: StepFinal
             <Languages className="w-4 h-4 text-muted-foreground" />
           </button>
           {showLanguageDropdown && (
-            <div className="absolute z-[100] w-full mt-1 py-2 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-xl max-h-60 overflow-auto">
+            <div
+              id="spoken-languages-listbox"
+              role="listbox"
+              aria-label="Languages spoken"
+              aria-multiselectable="true"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setShowLanguageDropdown(false)
+                  document.getElementById("spoken-languages")?.focus()
+                }
+              }}
+              className="absolute z-[100] w-full mt-1 py-2 bg-popover rounded-xl border border-border shadow-xl max-h-60 overflow-auto"
+            >
               {SPOKEN_LANGUAGES.map((lang) => (
                 <button
                   key={lang}
+                  type="button"
+                  role="option"
+                  aria-selected={data.spoken_languages.includes(lang)}
                   className={cn(
-                    "w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-zinc-50 dark:hover:bg-white/[0.05] transition-colors",
-                    data.spoken_languages.includes(lang) && "bg-zinc-50 dark:bg-white/[0.05]",
+                    "w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-accent transition-colors",
+                    data.spoken_languages.includes(lang) && "bg-secondary",
                     !data.spoken_languages.includes(lang) && data.spoken_languages.length >= 6 && "opacity-50 cursor-not-allowed"
                   )}
                   onClick={() => toggleLanguage(lang)}
@@ -156,11 +177,11 @@ export function StepFinal({ data, onUpdate, isFirstTimeSetup = true }: StepFinal
                   <div className={cn(
                     "w-5 h-5 rounded border-2 flex items-center justify-center transition-colors",
                     data.spoken_languages.includes(lang)
-                      ? "bg-zinc-500 border-zinc-500"
-                      : "border-zinc-300 dark:border-zinc-600"
+                      ? "bg-[var(--coral)] border-[var(--coral)]"
+                      : "border-input"
                   )}>
                     {data.spoken_languages.includes(lang) && (
-                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-3 h-3 text-[var(--coral-ink)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                       </svg>
                     )}
@@ -176,12 +197,14 @@ export function StepFinal({ data, onUpdate, isFirstTimeSetup = true }: StepFinal
             {data.spoken_languages.map((lang) => (
               <Badge
                 key={lang}
-                className="bg-zinc-100 text-zinc-700 dark:bg-white/[0.05] dark:text-zinc-300 pl-3 pr-1.5 py-1.5 gap-1.5"
+                className="bg-secondary text-foreground pl-3 pr-1.5 py-1.5 gap-1.5"
               >
                 {lang}
                 <button
+                  type="button"
+                  aria-label={`Remove language ${lang}`}
                   onClick={() => toggleLanguage(lang)}
-                  className="hover:bg-zinc-300/50 dark:hover:bg-white/[0.1] rounded-full p-0.5"
+                  className="hover:bg-muted-foreground/20 rounded-full p-0.5"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -194,7 +217,7 @@ export function StepFinal({ data, onUpdate, isFirstTimeSetup = true }: StepFinal
       {/* Driving License & Security Clearance */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <Car className="w-4 h-4 text-zinc-500" />
+          <Car className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Credentials (Optional)</h3>
         </div>
         <p className="text-sm text-muted-foreground">
@@ -203,22 +226,24 @@ export function StepFinal({ data, onUpdate, isFirstTimeSetup = true }: StepFinal
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground flex items-center gap-2">
+            <Label htmlFor="driving-license" className="text-sm text-muted-foreground flex items-center gap-2">
               <Car className="w-4 h-4" />
               Driving License
             </Label>
             <Input
+              id="driving-license"
               placeholder="e.g., Full, Class B"
               value={data.driving_license || ""}
               onChange={(e) => onUpdate({ driving_license: e.target.value || null })}
             />
           </div>
           <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground flex items-center gap-2">
+            <Label htmlFor="security-clearance" className="text-sm text-muted-foreground flex items-center gap-2">
               <Lock className="w-4 h-4" />
               Security Clearance
             </Label>
             <Input
+              id="security-clearance"
               placeholder="e.g., Secret, Top Secret"
               value={data.security_clearance || ""}
               onChange={(e) => onUpdate({ security_clearance: e.target.value || null })}
@@ -229,26 +254,26 @@ export function StepFinal({ data, onUpdate, isFirstTimeSetup = true }: StepFinal
 
       {/* Summary Card - only show for first-time setup */}
       {isFirstTimeSetup && (
-        <div className="p-6 bg-gradient-to-br from-zinc-50 to-zinc-50 dark:from-white/[0.03] dark:to-white/[0.03] rounded-2xl border border-zinc-200 dark:border-white/[0.06]">
+        <div className="p-6 bg-[var(--coral-soft)] rounded-2xl border border-[var(--coral)]/20">
           <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-zinc-400 via-zinc-500 to-zinc-600 flex items-center justify-center shrink-0">
-              <Sparkles className="w-6 h-6 text-white" />
+            <div className="w-12 h-12 rounded-xl bg-[var(--coral)] flex items-center justify-center shrink-0">
+              <Sparkles className="w-6 h-6 text-[var(--coral-ink)]" />
             </div>
             <div>
-              <h4 className="font-semibold text-lg">Ready to Find Jobs!</h4>
+              <h4 className="font-semibold text-lg">Ready to find jobs</h4>
               <p className="text-sm text-muted-foreground mt-1">
                 Click &quot;Save Configuration&quot; to start discovering job matches. Your <strong>first matches arrive instantly</strong>, then new jobs are delivered <strong>daily</strong>.
               </p>
               <div className="flex flex-wrap gap-2 mt-4">
-                <div className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <CheckCircle2 className="w-4 h-4" />
                   <span>First matches: Instant</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <CheckCircle2 className="w-4 h-4" />
                   <span>New matches: Daily</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <CheckCircle2 className="w-4 h-4" />
                   <span>AI assistant ready</span>
                 </div>

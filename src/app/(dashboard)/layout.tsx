@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import Link from "next/link"
-import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { useTheme } from "@/lib/contexts/theme-context"
@@ -25,8 +24,7 @@ import {
   AlertTriangle,
   X,
 } from "lucide-react"
-import { ThemeToggle } from "@/components/theme-toggle"
-import type { Profile, AllSubscriptionPlans } from "@/lib/supabase/types"
+import type { Profile } from "@/lib/supabase/types"
 import { ChatProvider } from "@/components/chat"
 import { clearChatState } from "@/hooks/use-chat"
 import { clearToastState } from "@/hooks/use-toast"
@@ -35,8 +33,8 @@ import { SubscriptionProvider } from "@/contexts/SubscriptionContext"
 import { UpgradeModal } from "@/components/upgrade-modal"
 import { TesterBadge } from "@/components/dashboard/TesterBadge"
 import { AnnouncementBanner } from "@/components/dashboard/announcement-banner"
-import { getPlanLimits } from "@/lib/stripe/plans"
 import { PublicFooter } from "@/components/public-footer"
+import { useHydrated } from "@/hooks/use-hydrated"
 
 // System message types
 interface SystemMessage {
@@ -60,18 +58,17 @@ export default function DashboardLayout({
   const [userEmail, setUserEmail] = React.useState<string>("")
   const [isAdmin, setIsAdmin] = React.useState<boolean>(false)
   const [isTester, setIsTester] = React.useState<boolean>(false)
-  const [activeJobsCount, setActiveJobsCount] = React.useState<number>(0)
   const [systemMessages, setSystemMessages] = React.useState<SystemMessage[]>([])
   const [dismissedMessages, setDismissedMessages] = React.useState<Set<string>>(new Set())
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  const { resolvedTheme, setTheme } = useTheme()
-  const [mounted, setMounted] = React.useState(false)
-
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
+  const { setTheme } = useTheme()
+  const mounted = useHydrated()
+  const isOnboardingPath = pathname.startsWith('/setup') || pathname.startsWith('/choose-plan')
+  const pageProvidesMainLandmark =
+    isOnboardingPath || pathname === '/profile' || /^\/jobs\/[^/]+$/.test(pathname)
+  const ContentWrapper = pageProvidesMainLandmark ? 'div' : 'main'
 
   // Track current user ID to detect account switches
   const [currentUserId, setCurrentUserId] = React.useState<string | null>(null)
@@ -83,7 +80,7 @@ export default function DashboardLayout({
     try {
       // Count active jobs (only discovered = NEW MATCHES column)
       // Jobs in APPLIED or OFFERS don't count toward the limit
-      const { count, error } = await supabase
+      const { error } = await supabase
         .from('jobs')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userProfile.id)
@@ -93,14 +90,6 @@ export default function DashboardLayout({
         console.error('Error fetching active jobs count:', error)
         return
       }
-
-      const activeCount = count || 0
-      setActiveJobsCount(activeCount)
-
-      // Get plan limits
-      const plan = (userProfile.subscription_plan || 'free') as AllSubscriptionPlans
-      const limits = getPlanLimits(plan)
-      const maxActiveJobs = limits.savedJobs
 
       // Job limit warnings are now shown ONLY for Free users and INSIDE the New Matches column
       // (handled by dashboard/page.tsx), not in the top banner
@@ -167,7 +156,9 @@ export default function DashboardLayout({
   // Re-check job limit when returning to dashboard or when jobs might have changed
   React.useEffect(() => {
     if (profile && pathname === '/dashboard') {
-      checkJobLimitAndUpdateMessages(profile)
+      queueMicrotask(() => {
+        void checkJobLimitAndUpdateMessages(profile)
+      })
     }
   }, [pathname, profile, checkJobLimitAndUpdateMessages])
 
@@ -229,12 +220,12 @@ export default function DashboardLayout({
 
   // Check if user is in onboarding flow (setup or choose-plan)
   // Only apply after mount to avoid hydration mismatch
-  const isInOnboarding = mounted && (pathname.startsWith('/setup') || pathname.startsWith('/choose-plan'))
+  const isInOnboarding = mounted && isOnboardingPath
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-[#0a0a0b]">
+    <div className="min-h-screen bg-background dark:bg-[#0a0a0b]">
       {/* Slim, fixed header with blur backdrop - Metallic style */}
-      <header className="fixed top-0 z-50 w-full bg-white/80 dark:bg-[#0a0a0b]/80 backdrop-blur-xl border-b border-zinc-200 dark:border-white/[0.04]">
+      <header className="fixed top-0 z-50 w-full bg-[var(--dawn-bg)]/80 dark:bg-[#0a0a0b]/80 backdrop-blur-xl border-b border-border dark:border-white/[0.04]">
         <div className="flex h-14 items-center justify-between px-4 sm:px-6">
           {/* Left side - Logo */}
           <div className="flex items-center gap-4 shrink-0">
@@ -244,20 +235,15 @@ export default function DashboardLayout({
               className="flex items-center group"
               onClick={isInOnboarding ? (e) => e.preventDefault() : undefined}
             >
-              <Image
-                src={mounted && resolvedTheme === 'light' ? '/logo-light.svg' : '/logo-dark.svg'}
-                alt="JobSilver"
-                width={160}
-                height={32}
-                className="h-8 w-auto"
-                priority
-              />
+              <span className="text-[19px] font-semibold leading-none tracking-[-0.02em] text-[var(--dawn-ink)]">
+                JobSilver
+              </span>
             </Link>
           </div>
 
           {/* Center - System Messages Banner or Announcement Banner */}
           {!isInOnboarding && (
-            <div className="flex-1 flex items-center justify-center px-4 max-w-2xl mx-auto">
+            <div className="mx-auto flex min-w-0 max-w-2xl flex-1 items-center justify-center px-2 sm:px-4">
               {visibleMessages.length > 0 ? (
                 // System messages take priority
                 visibleMessages.map((msg) => (
@@ -303,20 +289,17 @@ export default function DashboardLayout({
             {/* Tester badge - show for tester users */}
             {isTester && !isAdmin && <TesterBadge variant="default" />}
 
-            {/* Theme toggle */}
-            <ThemeToggle />
-
             {/* User menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="flex items-center gap-2 px-2 hover:bg-zinc-100 dark:hover:bg-white/[0.05]"
+                  className="flex items-center gap-2 px-2 hover:bg-accent dark:hover:bg-white/[0.05]"
                 >
-                  <Avatar className="h-7 w-7 border border-zinc-200 dark:border-white/[0.08]">
+                  <Avatar className="h-7 w-7 border border-border dark:border-white/[0.08]">
                     <AvatarImage src="" alt={profile?.full_name || "User"} />
-                    <AvatarFallback className="bg-zinc-100 text-zinc-700 dark:bg-white/[0.05] dark:text-zinc-300 text-xs font-medium">
+                    <AvatarFallback className="bg-muted text-foreground dark:bg-white/[0.05] dark:text-zinc-300 text-xs font-medium">
                       {getInitials(profile?.full_name)}
                     </AvatarFallback>
                   </Avatar>
@@ -325,10 +308,10 @@ export default function DashboardLayout({
               <DropdownMenuContent align="end" className="w-56">
                 <div className="px-3 py-2">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-zinc-900 dark:text-white">{profile?.full_name || "User"}</p>
+                    <p className="text-sm font-medium text-foreground dark:text-white">{profile?.full_name || "User"}</p>
                     {isTester && !isAdmin && <TesterBadge variant="compact" showTooltip={false} />}
                   </div>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+                  <p className="text-xs text-muted-foreground dark:text-zinc-400 truncate">
                     {userEmail}
                   </p>
                 </div>
@@ -374,7 +357,7 @@ export default function DashboardLayout({
       </header>
 
       {/* Main content with top padding for fixed header */}
-      <main className="pt-14">
+      <ContentWrapper className="pt-14">
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -387,10 +370,10 @@ export default function DashboardLayout({
             <UpgradeModal />
           </SubscriptionProvider>
         </motion.div>
-      </main>
+      </ContentWrapper>
 
       {/* Global report button - bottom-left, opposite of chat */}
-      <ReportButton />
+      {!isOnboardingPath && <ReportButton />}
 
       {/* Footer */}
       <PublicFooter onboarding={isInOnboarding} />

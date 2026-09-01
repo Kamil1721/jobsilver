@@ -24,13 +24,18 @@ export function MessageInput({
 
   // Update value when initialValue changes (for pending questions)
   React.useEffect(() => {
+    let cancelled = false
     if (initialValue) {
-      setValue((currentValue) => {
-        if (initialValue !== currentValue) {
-          return initialValue
-        }
-        return currentValue
+      queueMicrotask(() => {
+        if (cancelled) return
+        setValue((currentValue) =>
+          initialValue === currentValue ? currentValue : initialValue
+        )
       })
+    }
+
+    return () => {
+      cancelled = true
     }
   }, [initialValue])
 
@@ -71,9 +76,9 @@ export function MessageInput({
         disabled={disabled}
         className={cn(
           'min-h-[44px] max-h-[120px] resize-none text-sm',
-          'bg-background/50 border-border/50',
-          'hover:border-zinc-500/40 transition-colors duration-200',
-          'focus-visible:ring-1 focus-visible:ring-zinc-400/50 focus-visible:border-zinc-400/50',
+          'bg-background border-input',
+          'hover:border-[var(--coral)]/40 transition-colors duration-200',
+          'focus-visible:ring-1 focus-visible:ring-[var(--coral)] focus-visible:border-[var(--coral)]',
           'placeholder:text-muted-foreground/60'
         )}
         rows={1}
@@ -84,10 +89,10 @@ export function MessageInput({
         disabled={disabled || !value.trim()}
         className={cn(
           'h-11 w-11 shrink-0 transition-all duration-200 relative overflow-hidden',
-          'bg-gradient-to-r from-zinc-700 via-zinc-600 to-zinc-700 text-white',
-          'hover:from-zinc-600 hover:via-zinc-500 hover:to-zinc-600',
-          'disabled:from-zinc-400 disabled:via-zinc-300 disabled:to-zinc-400 disabled:text-zinc-100',
-          'shadow-sm hover:shadow-md hover:shadow-zinc-500/25'
+          'bg-[var(--coral)] text-[var(--coral-ink)]',
+          'hover:bg-[var(--coral-hi)] active:scale-95',
+          'disabled:opacity-50 disabled:bg-[var(--coral)] disabled:text-[var(--coral-ink)]',
+          'shadow-sm hover:shadow-md hover:shadow-[var(--coral)]/25'
         )}
       >
         <Send className="h-4 w-4" />

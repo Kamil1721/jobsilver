@@ -4,14 +4,6 @@ import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
-interface ChatMessage {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  image_url?: string
-  created_at: string
-}
-
 // GET - Load chat history for a job
 export async function GET(
   request: NextRequest,

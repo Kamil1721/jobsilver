@@ -1,5 +1,10 @@
+import { PHASE_DEVELOPMENT_SERVER } from 'next/constants.js'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // The desktop review browser opens the local server by IP. Next 16 blocks
+  // development chunks from alternate origins unless they are explicit.
+  allowedDevOrigins: ['127.0.0.1'],
   images: {
     remotePatterns: [
       // Supabase storage
@@ -40,12 +45,10 @@ const nextConfig = {
       },
     ],
   },
-  experimental: {
-    serverComponentsExternalPackages: [
-      '@adobe/pdfservices-node-sdk',
-      'log4js',
-    ],
-  },
+  serverExternalPackages: [
+    '@adobe/pdfservices-node-sdk',
+    'log4js',
+  ],
   // Security headers
   async headers() {
     return [
@@ -79,4 +82,9 @@ const nextConfig = {
   },
 }
 
-export default nextConfig
+const configureNext = (phase) => ({
+  ...nextConfig,
+  distDir: phase === PHASE_DEVELOPMENT_SERVER ? '.next-dev' : '.next',
+})
+
+export default configureNext

@@ -222,8 +222,6 @@ export function normalizeLocation(location: string): string {
  */
 export function getCitySearchVariants(city: string): string[] {
   const normalized = normalizeCity(city)
-  const lower = city.toLowerCase().trim()
-
   const variants = new Set<string>([normalized])
 
   // Add the original if different

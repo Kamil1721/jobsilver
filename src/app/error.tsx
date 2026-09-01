@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { AlertTriangle, RefreshCcw, Home } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -11,6 +12,8 @@ export default function GlobalError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
+  const router = useRouter()
+
   React.useEffect(() => {
     // Log the error to an error reporting service
     console.error("Global error:", error)
@@ -48,7 +51,7 @@ export default function GlobalError({
           </Button>
 
           <Button
-            onClick={() => window.location.href = "/"}
+            onClick={() => router.push("/")}
             variant="outline"
             className="gap-2"
           >

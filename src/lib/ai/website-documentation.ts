@@ -35,7 +35,7 @@ export const WEBSITE_HELP = {
       purpose: 'Manage your account, CV, and subscription',
       tabs: {
         'Profile': 'Update your name, email, phone number, and location',
-        'CV': 'Upload your CV (PDF, DOC, DOCX up to 10MB) or generate one with AI',
+        'CV': 'Upload your CV as a PDF, DOCX, or TXT file (up to 10MB), or generate one with AI',
         'Preferences': 'Email notification settings for job alerts',
         'Subscription': 'View your current plan, manage billing, or upgrade to Pro',
       },
@@ -236,7 +236,7 @@ export const WEBSITE_HELP = {
     'How do I contact JobSilver?': 'Email us at jobsilver50@gmail.com or visit the Contact page from the footer. We typically respond within 24-48 hours.',
     'What is the orange flag button?': 'The orange flag icon in the bottom-left corner opens the Report Problem dialog. Use it to report incorrect job info, bugs, or submit suggestions. Choose from: Incorrect Questions, Incorrect Description, Bug Report, Suggestion, or Other. Fill in a title and description, and we will review your report.',
     'How do I get more job matches?': 'Update your preferences in the Setup wizard. Adding more target job titles, expanding location options, or adjusting your match threshold can increase matches.',
-    'What file formats are supported for CV upload?': 'PDF, DOC, and DOCX files up to 10MB are supported.',
+    'What file formats are supported for CV upload?': 'PDF, DOCX, and TXT files up to 10MB are supported.',
     'How much does Pro cost?': 'Pro costs $3.99 per week or $12.99 per month. Monthly billing saves you about 25% compared to weekly. Pro includes a 3-day free trial with 15 jobs/day and limited AI access (30 responses, 5 cover letters, 3 CV generations per day).',
     'How much does Ultra cost?': 'Ultra costs $6.99 per week or $19.99 per month. Ultra has no trial and provides immediate access to 35 jobs/day, unlimited AI features, and priority support.',
     'Which plan should I choose?': 'Free is great for casual browsing. Pro ($3.99/week) is good for active job seekers who want AI help but can work within daily limits. Ultra ($6.99/week) is best for power users who want unlimited AI and priority support.',

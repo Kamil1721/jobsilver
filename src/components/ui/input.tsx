@@ -2,8 +2,7 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-export interface InputProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {}
+export type InputProps = React.InputHTMLAttributes<HTMLInputElement>
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, ...props }, ref) => {
@@ -13,10 +12,10 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         className={cn(
           "flex h-9 w-full rounded-lg border px-3 py-2 text-sm transition-all duration-200",
           // Light mode styles
-          "bg-white border-zinc-200 text-zinc-900",
-          "placeholder:text-zinc-400",
-          "hover:border-zinc-300",
-          "focus:outline-none focus:ring-2 focus:ring-zinc-200 focus:ring-offset-0 focus:border-zinc-400",
+          "bg-card border-input text-foreground",
+          "placeholder:text-muted-foreground",
+          "hover:border-input",
+          "focus:outline-none focus:ring-2 focus:ring-[var(--coral)] focus:ring-offset-0 focus:border-[var(--coral)]",
           // Dark mode styles
           "dark:bg-white/[0.02] dark:border-white/[0.06] dark:text-white",
           "dark:placeholder:text-zinc-500",

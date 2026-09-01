@@ -12,7 +12,7 @@
  */
 
 import { formatDescription } from '@/lib/utils/format-description'
-import type { Job, ScrapedQuestion, ScrapedQuestionType } from '@/lib/supabase/types'
+import type { Job, ScrapedQuestion } from '@/lib/supabase/types'
 
 const LEVER_API = 'https://api.lever.co/v0/postings'
 

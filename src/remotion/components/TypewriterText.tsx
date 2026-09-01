@@ -1,5 +1,5 @@
 import React from 'react'
-import { interpolate, useCurrentFrame } from 'remotion'
+import { useCurrentFrame } from 'remotion'
 import { fonts } from '../theme/fonts'
 import { colors } from '../theme/colors'
 

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">JobSilver dawn mark</title>
+  <desc id="description">A warm sunrise appearing through a night-time window.</desc>
+  <rect x="16" y="16" width="480" height="480" rx="132" fill="#F4F1E9"/>
+  <rect x="96" y="96" width="320" height="320" rx="76" fill="#17253D"/>
+  <clipPath id="window-clip">
+    <rect x="96" y="96" width="320" height="320" rx="76"/>
+  </clipPath>
+  <g clip-path="url(#window-clip)">
+    <circle cx="256" cy="394" r="118" fill="#D85B37"/>
+    <path d="M96 334H416" stroke="#F4F1E9" stroke-width="18"/>
+    <path d="M256 96V334" stroke="#F4F1E9" stroke-width="18"/>
+    <path d="M158 186h24M170 174v24" stroke="#C7CDD6" stroke-width="13" stroke-linecap="round"/>
+    <circle cx="341" cy="174" r="10" fill="#C7CDD6"/>
+  </g>
+</svg>

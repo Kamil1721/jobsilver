@@ -23,6 +23,7 @@ import {
   ExternalLink,
   CheckCircle2,
 } from "lucide-react"
+import styles from "./dawn-generator.module.css"
 import type { ScreeningAnswers, Job } from "@/lib/supabase/types"
 import { mapParsedCVToScreeningAnswers, type ParsedCV } from "@/lib/cv/data-mapper"
 
@@ -509,7 +510,7 @@ export function CVGeneratorDialog({
       onCVGenerated?.(result.cv_url, result.signed_url)
 
       toast({
-        title: "CV generated!",
+        title: "CV generated",
         description: job
           ? `Your CV tailored for ${job.company || "this role"} is ready.`
           : "Your professional CV is ready to download.",
@@ -527,10 +528,10 @@ export function CVGeneratorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className={`${styles.dialog} max-h-[90dvh] max-w-2xl overflow-y-auto rounded-[1.35rem]`}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-blue-500" />
+            <Sparkles className="h-5 w-5 text-[var(--coral-lo)]" />
             {job ? `Generate CV for ${job.company || "Job"}` : "Generate Professional CV"}
           </DialogTitle>
           <DialogDescription>
@@ -543,16 +544,16 @@ export function CVGeneratorDialog({
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
           </div>
         ) : generatedUrl ? (
           <div className="py-8 space-y-6">
             <div className="flex flex-col items-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--coral-soft)]">
+                <CheckCircle2 className="h-8 w-8 text-[var(--coral-lo)]" />
               </div>
               <div className="text-center">
-                <h3 className="font-semibold text-lg">CV Generated Successfully!</h3>
+                <h3 className="text-lg font-semibold">CV generated successfully</h3>
                 <p className="text-sm text-muted-foreground mt-1">
                   Your professional CV is ready to download
                 </p>
@@ -579,8 +580,8 @@ export function CVGeneratorDialog({
         ) : (
           <div className="space-y-6 py-4">
             {/* Info banner */}
-            <div className="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/50 p-4">
-              <p className="text-sm text-blue-800 dark:text-blue-200">
+            <div className="rounded-xl border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-4">
+              <p className="text-sm leading-6 text-[var(--dawn-ink-2)]">
                 <strong>First time?</strong> Fill out your work experience and education below. Your information will be saved and pre-filled for future CV generations.
               </p>
             </div>
@@ -595,7 +596,7 @@ export function CVGeneratorDialog({
                     id="first_name"
                     value={screeningAnswers.first_name || ""}
                     onChange={(e) => setScreeningAnswers(prev => ({ ...prev, first_name: e.target.value }))}
-                    placeholder="John"
+                    placeholder="Maya"
                   />
                 </div>
                 <div className="space-y-2">
@@ -604,7 +605,7 @@ export function CVGeneratorDialog({
                     id="last_name"
                     value={screeningAnswers.last_name || ""}
                     onChange={(e) => setScreeningAnswers(prev => ({ ...prev, last_name: e.target.value }))}
-                    placeholder="Doe"
+                    placeholder="Nowak"
                   />
                 </div>
                 <div className="space-y-2">
@@ -660,7 +661,7 @@ export function CVGeneratorDialog({
                     id="linkedin_url"
                     value={screeningAnswers.linkedin_url || ""}
                     onChange={(e) => setScreeningAnswers(prev => ({ ...prev, linkedin_url: e.target.value }))}
-                    placeholder="https://linkedin.com/in/johndoe"
+                    placeholder="https://linkedin.com/in/maya-nowak"
                   />
                 </div>
               </div>
@@ -749,7 +750,7 @@ export function CVGeneratorDialog({
                         size="sm"
                         onClick={() => handleAISuggestAchievements(index)}
                         disabled={loadingAchievements === index || !work.company || !work.position}
-                        className="h-6 px-2 text-xs gap-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/50"
+                        className="h-6 gap-1 px-2 text-xs text-[var(--coral-lo)] hover:bg-[var(--coral-soft)] hover:text-[var(--coral-hi)]"
                       >
                         {loadingAchievements === index ? (
                           <>
@@ -784,7 +785,7 @@ export function CVGeneratorDialog({
                               type="button"
                               variant="ghost"
                               size="sm"
-                              className="h-8 w-8 p-0 text-zinc-400 hover:text-red-500"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
                               onClick={() => {
                                 const newHighlights = work.highlights.filter((_, i) => i !== hIdx)
                                 updateWorkHistory(index, { highlights: newHighlights })
@@ -802,7 +803,7 @@ export function CVGeneratorDialog({
                         onClick={() => {
                           updateWorkHistory(index, { highlights: [...work.highlights, ""] })
                         }}
-                        className="h-7 px-2 text-xs gap-1 text-zinc-500 hover:text-zinc-700"
+                        className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
                       >
                         <Plus className="w-3 h-3" />
                         Add Achievement
@@ -810,8 +811,8 @@ export function CVGeneratorDialog({
                     </div>
                     {/* AI Achievement Suggestions */}
                     {achievementSuggestions?.index === index && achievementSuggestions.suggestions.length > 0 && (
-                      <div className="mt-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 space-y-2">
-                        <p className="text-xs font-medium text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                      <div className="mt-2 space-y-2 rounded-xl border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-3">
+                        <p className="flex items-center gap-1.5 text-xs font-medium text-[var(--coral-lo)]">
                           <Sparkles className="w-3 h-3" />
                           AI-suggested achievements (click to add):
                         </p>
@@ -830,7 +831,7 @@ export function CVGeneratorDialog({
                                   suggestions: prev.suggestions.filter((_, i) => i !== achIdx)
                                 } : null)
                               }}
-                              className="w-full text-left px-2.5 py-1.5 rounded text-xs border border-blue-300 dark:border-blue-700 bg-white dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-800/50 transition-colors flex items-center gap-2"
+                              className="flex w-full items-center gap-2 rounded-lg border border-[var(--dawn-line-2)] bg-[var(--dawn-surface)] px-2.5 py-1.5 text-left text-xs text-[var(--dawn-ink-2)] transition-colors hover:border-[var(--coral)]/40 hover:bg-[var(--coral-soft)]"
                             >
                               <Plus className="w-3 h-3 flex-shrink-0" />
                               <span>{achievement}</span>
@@ -928,7 +929,7 @@ export function CVGeneratorDialog({
                             type="button"
                             variant="ghost"
                             size="sm"
-                            className="h-8 w-8 p-0 text-zinc-400 hover:text-red-500"
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
                             onClick={() => {
                               const newHighlights = (edu.highlights || []).filter((_, i) => i !== hIdx)
                               updateEducation(index, { highlights: newHighlights })
@@ -945,7 +946,7 @@ export function CVGeneratorDialog({
                         onClick={() => {
                           updateEducation(index, { highlights: [...(edu.highlights || []), ""] })
                         }}
-                        className="h-7 px-2 text-xs gap-1 text-zinc-500 hover:text-zinc-700"
+                        className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
                       >
                         <Plus className="w-3 h-3" />
                         Add Achievement
@@ -999,8 +1000,8 @@ export function CVGeneratorDialog({
               </div>
               {/* AI Suggestions */}
               {aiSkillSuggestions.length > 0 && (
-                <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 space-y-2">
-                  <p className="text-xs font-medium text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                <div className="space-y-2 rounded-xl border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-3">
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-[var(--coral-lo)]">
                     <Sparkles className="w-3 h-3" />
                     AI-suggested skills (click to add):
                   </p>
@@ -1021,7 +1022,7 @@ export function CVGeneratorDialog({
                           }))
                           setAiSkillSuggestions(prev => prev.filter(s => s !== skill))
                         }}
-                        className="px-2.5 py-1 rounded-full text-xs border border-blue-300 dark:border-blue-700 bg-white dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-800/50 transition-colors"
+                        className="rounded-lg border border-[var(--dawn-line-2)] bg-[var(--dawn-surface)] px-2.5 py-1 text-xs text-[var(--dawn-ink-2)] transition-colors hover:border-[var(--coral)]/40 hover:bg-[var(--coral-soft)]"
                       >
                         + {skill}
                       </button>
@@ -1034,13 +1035,13 @@ export function CVGeneratorDialog({
                   {(screeningAnswers.skills || []).map((skill) => (
                     <span
                       key={skill}
-                      className="inline-flex items-center gap-1 px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-full text-sm"
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-muted rounded-full text-sm"
                     >
                       {skill}
                       <button
                         type="button"
                         onClick={() => removeSkill(skill)}
-                        className="text-zinc-400 hover:text-zinc-600"
+                        className="text-muted-foreground hover:text-foreground"
                       >
                         ×
                       </button>
@@ -1055,7 +1056,7 @@ export function CVGeneratorDialog({
               <Button
                 onClick={handleGenerate}
                 disabled={isGenerating}
-                className="w-full gap-2"
+                className="w-full gap-2 bg-[var(--coral)] text-[var(--coral-ink)] transition-colors hover:bg-[var(--coral-hi)] active:bg-[var(--coral-lo)]"
               >
                 {isGenerating ? (
                   <>

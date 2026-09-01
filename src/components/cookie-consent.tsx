@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { motion, MotionConfig } from 'framer-motion'
 import { Cookie, ChevronDown, ChevronUp } from 'lucide-react'
 
 const COOKIE_CONSENT_KEY = 'jobsilver-cookie-consent'
@@ -16,32 +17,50 @@ interface CookieConsent {
 
 const CONSENT_VERSION = '1.0'
 
+// Shared focus ring — Dawn coral, offset against the warm page background.
+const focusRing =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-bg)]'
+
 export function CookieConsentBanner() {
   const [showBanner, setShowBanner] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
 
   useEffect(() => {
+    let cancelled = false
     const stored = localStorage.getItem(COOKIE_CONSENT_KEY)
+
+    const showCurrentBanner = () => {
+      queueMicrotask(() => {
+        if (!cancelled) setShowBanner(true)
+      })
+    }
 
     if (stored) {
       try {
         const consent: CookieConsent = JSON.parse(stored)
         if (consent.version !== CONSENT_VERSION) {
-          setShowBanner(true)
+          showCurrentBanner()
         }
       } catch {
-        setShowBanner(true)
+        showCurrentBanner()
       }
     } else {
       const timer = setTimeout(() => setShowBanner(true), 1500)
-      return () => clearTimeout(timer)
+      return () => {
+        cancelled = true
+        clearTimeout(timer)
+      }
+    }
+
+    return () => {
+      cancelled = true
     }
   }, [])
 
-  const handleAccept = () => {
+  const saveConsent = (status: 'accepted' | 'declined') => {
     const consent: CookieConsent = {
-      status: 'accepted',
+      status,
       timestamp: new Date().toISOString(),
       version: CONSENT_VERSION,
     }
@@ -49,15 +68,8 @@ export function CookieConsentBanner() {
     closeBanner()
   }
 
-  const handleEssentialOnly = () => {
-    const consent: CookieConsent = {
-      status: 'declined',
-      timestamp: new Date().toISOString(),
-      version: CONSENT_VERSION,
-    }
-    localStorage.setItem(COOKIE_CONSENT_KEY, JSON.stringify(consent))
-    closeBanner()
-  }
+  const handleAccept = () => saveConsent('accepted')
+  const handleEssentialOnly = () => saveConsent('declined')
 
   const closeBanner = () => {
     setIsClosing(true)
@@ -70,59 +82,80 @@ export function CookieConsentBanner() {
   if (!showBanner) return null
 
   return (
-    <div
-      className={`fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-lg z-50 transition-all duration-300 ${
-        isClosing ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'
-      }`}
-    >
-      <div className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden">
+    <MotionConfig reducedMotion="user">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={isClosing ? { opacity: 0, y: 16 } : { opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-lg z-50"
+      >
+        <div
+        className="rounded-[16px] border border-[var(--dawn-line)] overflow-hidden shadow-[0_12px_40px_rgba(31,27,24,0.12)]"
+        style={{ background: 'var(--dawn-surface)', color: 'var(--dawn-ink)' }}
+      >
         {/* Main content */}
-        <div className="p-4">
+        <div className="p-5">
           <div className="flex items-start gap-3">
-            <div className="p-2 bg-teal-900/40 rounded-lg flex-shrink-0">
-              <Cookie className="w-4 h-4 text-teal-400" />
+            <div
+              className="p-2 rounded-[10px] flex-shrink-0"
+              style={{ background: 'var(--coral-soft)' }}
+            >
+              <Cookie className="w-4 h-4 text-[var(--coral-lo)]" aria-hidden="true" />
             </div>
             <div className="flex-1 min-w-0">
-              <h4 className="text-sm font-medium text-white mb-1">Cookie Settings</h4>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                We use <span className="text-zinc-300">essential cookies only</span> for
-                authentication and security. No tracking or advertising cookies.{' '}
-                <Link href="/privacy" className="text-teal-400 hover:text-teal-300 underline">
+              <h4 className="text-[15px] font-semibold tracking-[-0.01em] text-[var(--dawn-ink)] mb-1">
+                Cookie settings
+              </h4>
+              <p className="text-[13px] leading-[1.6] text-[var(--dawn-ink-2)]">
+                We use{' '}
+                <span className="text-[var(--dawn-ink)] font-medium">
+                  essential cookies only
+                </span>{' '}
+                for authentication and security. No tracking or advertising
+                cookies.{' '}
+                <Link
+                  href="/privacy"
+                  className={`text-[var(--coral-lo)] font-medium underline underline-offset-2 rounded-[4px] hover:text-[var(--coral)] transition-colors ${focusRing}`}
+                >
                   Privacy Policy
                 </Link>
               </p>
             </div>
           </div>
 
-          {/* Buttons */}
+          {/* Buttons — CtaButton-style skins on real <button> elements so the
+              consent handlers (localStorage writes) still fire. */}
           <div className="flex gap-2 mt-4">
             <button
               onClick={handleAccept}
-              className="flex-1 px-3 py-2 bg-teal-600 hover:bg-teal-500 text-white text-sm font-medium rounded-lg transition-colors"
+              className={`flex-1 inline-flex items-center justify-center min-h-[44px] px-4 rounded-full text-[14px] font-medium leading-none tracking-[-0.01em] bg-[var(--coral)] text-[var(--coral-ink)] hover:bg-[var(--coral-hi)] transition-colors duration-200 ${focusRing}`}
             >
-              Accept All
+              Accept all
             </button>
             <button
               onClick={handleEssentialOnly}
-              className="flex-1 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium rounded-lg border border-zinc-700 transition-colors"
+              className={`flex-1 inline-flex items-center justify-center min-h-[44px] px-4 rounded-full text-[14px] font-medium leading-none tracking-[-0.01em] bg-transparent border border-[var(--dawn-line-2)] text-[var(--dawn-ink)] hover:border-[var(--coral)] hover:text-[var(--coral-lo)] transition-colors duration-200 ${focusRing}`}
             >
-              Essential Only
+              Essential only
             </button>
           </div>
 
           {/* Toggle details */}
           <button
+            type="button"
             onClick={() => setShowDetails(!showDetails)}
-            className="flex items-center gap-1 mt-3 text-xs text-zinc-500 hover:text-zinc-300 transition-colors w-full justify-center"
+            aria-expanded={showDetails}
+            aria-controls="cookie-details"
+            className={`flex items-center gap-1 mt-3 min-h-[44px] text-[12px] text-[var(--dawn-ink-3)] hover:text-[var(--dawn-ink-2)] transition-colors w-full justify-center rounded-[6px] ${focusRing}`}
           >
             {showDetails ? (
               <>
-                <ChevronUp className="w-3 h-3" />
+                <ChevronUp className="w-3 h-3" aria-hidden="true" />
                 Hide details
               </>
             ) : (
               <>
-                <ChevronDown className="w-3 h-3" />
+                <ChevronDown className="w-3 h-3" aria-hidden="true" />
                 View cookie details
               </>
             )}
@@ -131,31 +164,38 @@ export function CookieConsentBanner() {
 
         {/* Expandable details */}
         {showDetails && (
-          <div className="px-4 pb-4 border-t border-zinc-800 pt-3">
-            <div className="bg-zinc-800/50 rounded-lg p-3">
-              <h5 className="text-xs font-medium text-zinc-300 mb-2">Cookies we use:</h5>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">
-                    <code className="text-teal-400/80">sb-*-auth-token</code>
+          <div id="cookie-details" className="px-5 pb-5 border-t border-[var(--dawn-line)] pt-4">
+            <div
+              className="rounded-[12px] p-4 border border-[var(--dawn-line)]"
+              style={{ background: 'var(--dawn-cream)' }}
+            >
+              <h5 className="text-[12px] font-semibold text-[var(--dawn-ink)] mb-2">
+                Cookies we use:
+              </h5>
+              <div className="space-y-2 text-[12px]">
+                <div className="flex justify-between gap-3">
+                  <span className="text-[var(--dawn-ink-2)]">
+                    <code className="text-[var(--coral-lo)]">sb-*-auth-token</code>
                   </span>
-                  <span className="text-zinc-500">Authentication</span>
+                  <span className="text-[var(--dawn-ink-3)]">Authentication</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-400">
-                    <code className="text-teal-400/80">sb-*-code-verifier</code>
+                <div className="flex justify-between gap-3">
+                  <span className="text-[var(--dawn-ink-2)]">
+                    <code className="text-[var(--coral-lo)]">sb-*-code-verifier</code>
                   </span>
-                  <span className="text-zinc-500">OAuth security</span>
+                  <span className="text-[var(--dawn-ink-3)]">OAuth security</span>
                 </div>
               </div>
-              <p className="text-xs text-zinc-600 mt-2">
-                These are Supabase authentication cookies required for the app to function.
+              <p className="text-[12px] text-[var(--dawn-ink-3)] mt-3 leading-[1.6]">
+                These are Supabase authentication cookies required for the app to
+                function.
               </p>
             </div>
           </div>
         )}
-      </div>
-    </div>
+        </div>
+      </motion.div>
+    </MotionConfig>
   )
 }
 
@@ -166,14 +206,21 @@ export function useCookieConsent(): ConsentStatus {
   const [status, setStatus] = useState<ConsentStatus>('pending')
 
   useEffect(() => {
+    let cancelled = false
     const stored = localStorage.getItem(COOKIE_CONSENT_KEY)
     if (stored) {
       try {
         const consent: CookieConsent = JSON.parse(stored)
-        setStatus(consent.status)
+        queueMicrotask(() => {
+          if (!cancelled) setStatus(consent.status)
+        })
       } catch {
-        setStatus('pending')
+        // The default pending state already represents invalid stored data.
       }
+    }
+
+    return () => {
+      cancelled = true
     }
   }, [])
 

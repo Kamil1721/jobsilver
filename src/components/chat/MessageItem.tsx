@@ -26,7 +26,7 @@ function formatMarkdown(text: string): React.ReactNode[] {
       const indentLevel = Math.floor((indent?.length || 0) / 2)
       result.push(
         <div key={lineIndex} className="flex items-start gap-2" style={{ marginLeft: `${indentLevel * 12}px` }}>
-          <span className="text-zinc-400 mt-0.5">•</span>
+          <span className="text-muted-foreground mt-0.5">•</span>
           <span>{formatInlineMarkdown(content)}</span>
         </div>
       )
@@ -205,7 +205,7 @@ export function MessageItem({ message }: MessageItemProps) {
         className={cn(
           'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
           isUser
-            ? 'bg-zinc-600 text-white'
+            ? 'bg-[var(--coral-soft)] text-[var(--coral-lo)]'
             : 'bg-muted text-muted-foreground'
         )}
       >
@@ -223,7 +223,7 @@ export function MessageItem({ message }: MessageItemProps) {
           className={cn(
             'rounded-xl px-4 py-2.5 text-sm',
             isUser
-              ? 'bg-gradient-to-r from-zinc-600 via-zinc-500 to-zinc-600 text-white rounded-tr-sm'
+              ? 'bg-[var(--coral)] text-[var(--coral-ink)] rounded-tr-sm'
               : 'bg-muted/50 text-foreground border border-border/50 rounded-tl-sm'
           )}
         >
@@ -232,13 +232,13 @@ export function MessageItem({ message }: MessageItemProps) {
             <div
               className={cn(
                 'flex items-center gap-2 text-xs mb-2 pb-2 border-b',
-                isUser ? 'border-white/20' : 'border-border/50'
+                isUser ? 'border-[var(--coral-ink)]/25' : 'border-border/50'
               )}
             >
               {message.toolCall.status === 'pending' ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
               ) : message.toolCall.status === 'completed' ? (
-                <Check className="h-3 w-3 text-emerald-400" />
+                <Check className="h-3 w-3 text-[hsl(var(--status-offer))]" />
               ) : (
                 <Wrench className="h-3 w-3" />
               )}
@@ -264,11 +264,11 @@ export function MessageItem({ message }: MessageItemProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
+              className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-200"
               onClick={handleCopy}
             >
               {copied ? (
-                <Check className="h-3 w-3 text-emerald-400" />
+                <Check className="h-3 w-3 text-[hsl(var(--status-offer))]" />
               ) : (
                 <Copy className="h-3 w-3" />
               )}
@@ -282,8 +282,8 @@ export function MessageItem({ message }: MessageItemProps) {
                 className={cn(
                   "h-6 px-2 text-xs gap-1.5 transition-colors duration-200",
                   autofilled
-                    ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
-                    : "text-zinc-300 hover:text-white hover:bg-white/[0.05]"
+                    ? "text-[hsl(var(--status-offer))] bg-[hsl(var(--status-offer)/0.1)]"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
                 )}
                 onClick={handleAutofill}
                 disabled={autofilled}
@@ -306,7 +306,7 @@ export function MessageItem({ message }: MessageItemProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-white hover:bg-white/[0.05] transition-colors duration-200"
+                className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-200"
                 onClick={handleDownload}
                 disabled={isDownloading}
                 title="Download as Word document"

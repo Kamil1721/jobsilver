@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import Stripe from 'stripe'
-import { stripe, getPlanFromPriceId } from '@/lib/stripe/client'
+import { stripe, getPlanFromPriceId, isValidPlan } from '@/lib/stripe/client'
 import { createServiceClient } from '@/lib/supabase/server'
-import type { SubscriptionPlan, AllSubscriptionPlans } from '@/lib/supabase/types'
-import { mapLegacyPlan } from '@/lib/stripe/plans'
+import type { SubscriptionPlan } from '@/lib/supabase/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +14,29 @@ export const runtime = 'nodejs'
 // Note: For multi-instance deployments, use Redis or a database table instead
 const processedEvents = new Map<string, number>()
 const EVENT_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+type SupabaseServiceClient = ReturnType<typeof createServiceClient>
+
+interface SubscriptionReconciliationResult {
+  success: true
+  applied: boolean
+  ignored_reason: string | null
+  user_id: string
+  stripe_subscription_id: string
+  ledger_plan: string
+  entitled_plan: SubscriptionPlan
+  previous_plan: string
+  previous_subscription_started_at: string | null
+  production_mode: boolean
+  subscription_started_at: string | null
+  schedule_cleared: boolean
+}
+
+interface ReconcileSubscriptionOptions {
+  knownUserId?: string
+  forceStatus?: Stripe.Subscription.Status
+  clearScheduledDowngrade?: boolean
+}
 
 function isEventProcessed(eventId: string): boolean {
   const timestamp = processedEvents.get(eventId)
@@ -42,6 +64,59 @@ function markEventProcessed(eventId: string): void {
     })
     keysToDelete.forEach(id => processedEvents.delete(id))
   }
+}
+
+function getStripeReferenceId(
+  reference: string | { id: string } | null | undefined
+): string | null {
+  if (typeof reference === 'string') return reference
+  return reference?.id ?? null
+}
+
+function toIsoTimestamp(timestamp: number | null | undefined): string | null {
+  return timestamp == null ? null : new Date(timestamp * 1000).toISOString()
+}
+
+function isStripeResourceMissing(error: unknown): boolean {
+  return error instanceof Stripe.errors.StripeInvalidRequestError
+    && error.code === 'resource_missing'
+}
+
+function parseReconciliationResult(
+  value: unknown,
+  subscriptionId: string
+): SubscriptionReconciliationResult {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`Invalid reconciliation result for subscription ${subscriptionId}`)
+  }
+
+  const result = value as Record<string, unknown>
+  const entitledPlan = result.entitled_plan
+
+  if (
+    result.success !== true
+    || typeof result.applied !== 'boolean'
+    || typeof result.user_id !== 'string'
+    || typeof result.stripe_subscription_id !== 'string'
+    || typeof result.ledger_plan !== 'string'
+    || typeof result.previous_plan !== 'string'
+    || typeof result.production_mode !== 'boolean'
+    || typeof result.schedule_cleared !== 'boolean'
+    || (result.ignored_reason !== null && typeof result.ignored_reason !== 'string')
+    || (
+      result.previous_subscription_started_at !== null
+      && typeof result.previous_subscription_started_at !== 'string'
+    )
+    || (
+      result.subscription_started_at !== null
+      && typeof result.subscription_started_at !== 'string'
+    )
+    || (!isValidPlan(entitledPlan as string) && entitledPlan !== 'free')
+  ) {
+    throw new Error(`Malformed reconciliation result for subscription ${subscriptionId}`)
+  }
+
+  return result as unknown as SubscriptionReconciliationResult
 }
 
 /**
@@ -104,7 +179,7 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription
-        await handleSubscriptionUpdated(supabase, subscription)
+        await handleSubscriptionChanged(supabase, subscription)
         break
       }
 
@@ -153,167 +228,312 @@ export async function POST(request: NextRequest) {
 
 /**
  * Handle checkout.session.completed event
- * Creates/updates customer and subscription records
+ * Creates/updates the customer record and reconciles current Stripe state.
  */
 async function handleCheckoutCompleted(
-  supabase: ReturnType<typeof createServiceClient>,
+  supabase: SupabaseServiceClient,
   session: Stripe.Checkout.Session
 ) {
   console.log('Processing checkout.session.completed:', session.id)
 
   const userId = session.metadata?.supabase_user_id
-  const customerId = session.customer as string
-  const subscriptionId = session.subscription as string
+  const subscriptionId = getStripeReferenceId(session.subscription)
 
   if (!userId) {
-    console.error('Checkout session missing supabase_user_id metadata')
+    throw new Error(`Checkout session ${session.id} is missing supabase_user_id metadata`)
+  }
+
+  // Non-subscription Checkout sessions have nothing to reconcile.
+  if (!subscriptionId) {
+    console.info(`Checkout session ${session.id} has no subscription; no reconciliation needed`)
     return
   }
 
-  // Ensure customer record exists
-  await supabase.from('customers').upsert({
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  const customerId = getStripeReferenceId(subscription.customer)
+  const sessionCustomerId = getStripeReferenceId(session.customer)
+
+  if (!customerId) {
+    throw new Error(`Subscription ${subscription.id} is missing a Stripe customer`)
+  }
+
+  if (sessionCustomerId && sessionCustomerId !== customerId) {
+    throw new Error(`Checkout session ${session.id} customer does not match its subscription`)
+  }
+
+  const { error: customerError } = await supabase.from('customers').upsert({
     user_id: userId,
     stripe_customer_id: customerId,
-  })
-
-  // Fetch full subscription details
-  if (subscriptionId) {
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-    await handleSubscriptionUpdated(supabase, subscription, userId)
-  }
-
-  console.log(`Checkout completed for user ${userId}`)
-}
-
-/**
- * Handle customer.subscription.created/updated events
- * Updates subscription record and user's plan
- */
-async function handleSubscriptionUpdated(
-  supabase: ReturnType<typeof createServiceClient>,
-  subscription: Stripe.Subscription,
-  knownUserId?: string
-) {
-  console.log('Processing subscription update:', subscription.id, 'Status:', subscription.status)
-
-  // Get user ID from metadata or lookup by customer
-  let userId = knownUserId || subscription.metadata?.supabase_user_id
-
-  if (!userId) {
-    // Lookup by customer ID
-    const { data: customer } = await supabase
-      .from('customers')
-      .select('user_id')
-      .eq('stripe_customer_id', subscription.customer as string)
-      .single()
-
-    userId = customer?.user_id
-  }
-
-  if (!userId) {
-    console.error('Cannot find user for subscription:', subscription.id)
-    return
-  }
-
-  // Get plan from price ID and migrate legacy plans to 3-tier model
-  const priceId = subscription.items.data[0]?.price.id
-  const rawPlan = subscription.metadata?.plan || getPlanFromPriceId(priceId) || 'free'
-  // Migrate legacy plans: starter/basic -> free, mega -> ultra
-  const plan = mapLegacyPlan(rawPlan as AllSubscriptionPlans)
-
-  // Log legacy plan migrations
-  if (rawPlan !== plan) {
-    console.log(`Legacy plan migration: ${rawPlan} -> ${plan} for subscription ${subscription.id}`)
-  }
-
-  // Extract period timestamps - handle different Stripe SDK versions
-  const periodStart = (subscription as unknown as Record<string, unknown>).current_period_start as number | undefined
-  const periodEnd = (subscription as unknown as Record<string, unknown>).current_period_end as number | undefined
-
-  // Check if there was a scheduled downgrade that's now complete
-  const { data: existingSub } = await supabase
-    .from('subscriptions')
-    .select('scheduled_downgrade_to')
-    .eq('user_id', userId)
-    .single()
-
-  // Clear scheduled downgrade fields if the plan transition has happened
-  const shouldClearSchedule = existingSub?.scheduled_downgrade_to === plan
-
-  // Upsert subscription record
-  const { error: subError } = await supabase.from('subscriptions').upsert({
-    user_id: userId,
-    stripe_subscription_id: subscription.id,
-    stripe_customer_id: subscription.customer as string,
-    status: subscription.status,
-    plan: plan,
-    price_id: priceId,
-    current_period_start: periodStart ? new Date(periodStart * 1000).toISOString() : null,
-    current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
-    cancel_at_period_end: subscription.cancel_at_period_end,
-    canceled_at: subscription.canceled_at
-      ? new Date(subscription.canceled_at * 1000).toISOString()
-      : null,
-    trial_start: subscription.trial_start
-      ? new Date(subscription.trial_start * 1000).toISOString()
-      : null,
-    trial_end: subscription.trial_end
-      ? new Date(subscription.trial_end * 1000).toISOString()
-      : null,
-    // Clear scheduled downgrade if the transition has happened
-    ...(shouldClearSchedule && {
-      scheduled_downgrade_to: null,
-      scheduled_downgrade_date: null,
-    }),
   }, {
     onConflict: 'user_id',
   })
 
-  if (subError) {
-    console.error('Error upserting subscription:', subError)
+  if (customerError) {
+    throw new Error(`Failed to persist Stripe customer for user ${userId}: ${customerError.message}`)
+  }
+
+  await reconcileSubscription(supabase, subscription, { knownUserId: userId })
+  console.log(`Checkout completed for user ${userId}`)
+}
+
+/**
+ * Stripe does not guarantee webhook ordering. Created/updated event payloads
+ * are snapshots, so always retrieve the current object before applying them.
+ */
+async function handleSubscriptionChanged(
+  supabase: SupabaseServiceClient,
+  eventSubscription: Stripe.Subscription
+) {
+  const currentSubscription = await stripe.subscriptions.retrieve(eventSubscription.id)
+  await reconcileSubscription(supabase, currentSubscription)
+}
+
+/**
+ * Handle customer.subscription.deleted event
+ * Retrieves current state first. If Stripe reports that the terminal resource
+ * no longer exists, the signed deletion snapshot is safe to use for revocation.
+ */
+async function handleSubscriptionDeleted(
+  supabase: SupabaseServiceClient,
+  eventSubscription: Stripe.Subscription
+) {
+  console.log('Processing subscription deletion:', eventSubscription.id)
+
+  try {
+    const currentSubscription = await stripe.subscriptions.retrieve(eventSubscription.id)
+    await reconcileSubscription(supabase, currentSubscription, { forceStatus: 'canceled' })
+  } catch (error) {
+    if (!isStripeResourceMissing(error)) throw error
+
+    console.info(
+      `Stripe subscription ${eventSubscription.id} is no longer retrievable; applying terminal revocation`
+    )
+    await reconcileSubscription(supabase, eventSubscription, { forceStatus: 'canceled' })
+  }
+}
+
+/**
+ * Handle invoice.payment_succeeded event
+ * Reconciles the current subscription rather than the invoice snapshot.
+ */
+async function handleInvoicePaymentSucceeded(
+  supabase: SupabaseServiceClient,
+  invoice: Stripe.Invoice
+) {
+  const subscriptionId = getStripeReferenceId(
+    invoice.parent?.subscription_details?.subscription
+  )
+  if (!subscriptionId) return
+
+  console.log('Processing payment succeeded for subscription:', subscriptionId)
+
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  await reconcileSubscription(supabase, subscription)
+}
+
+/**
+ * Handle invoice.payment_failed event
+ * Reconciles Stripe's current subscription status. A stale failure event must
+ * not overwrite a later successful payment or cancellation.
+ */
+async function handleInvoicePaymentFailed(
+  supabase: SupabaseServiceClient,
+  invoice: Stripe.Invoice
+) {
+  const subscriptionId = getStripeReferenceId(
+    invoice.parent?.subscription_details?.subscription
+  )
+  if (!subscriptionId) return
+
+  console.log('Processing payment failed for subscription:', subscriptionId)
+
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+  const result = await reconcileSubscription(supabase, subscription)
+  const firstItem = subscription.items.data[0]
+
+  if (subscription.status !== 'past_due') {
+    console.info(
+      `Payment failure for ${subscriptionId} is stale relative to current status ${subscription.status}`
+    )
     return
   }
 
-  // Get current plan to detect upgrades
-  const { data: currentProfile } = await supabase
-    .from('profiles')
-    .select('subscription_plan, production_mode, subscription_started_at')
-    .eq('id', userId)
-    .single()
+  const isFirstCharge = invoice.billing_reason === 'subscription_create'
+  const relevantEnd = isFirstCharge && subscription.trial_end
+    ? subscription.trial_end
+    : firstItem?.current_period_end
 
-  const previousPlan = currentProfile?.subscription_plan || 'free'
-  const activePlan = getActivePlan(subscription.status, plan as SubscriptionPlan)
+  console.log(
+    `${isFirstCharge ? 'First charge' : 'Renewal'} failed for user ${result.user_id}; `
+    + `current entitlement is ${result.entitled_plan} until ${toIsoTimestamp(relevantEnd) ?? 'no valid expiry'}`
+  )
+}
 
-  // Update user's profile with active plan and mark plan as selected
-  const { error: profileError } = await supabase
-    .from('profiles')
-    .update({
-      subscription_plan: activePlan,
-      subscription_started_at: subscription.status === 'active' && periodStart
-        ? new Date(periodStart * 1000).toISOString()
-        : null,
-      // Mark that user has selected a plan (via Stripe checkout)
-      has_selected_plan: true,
-    })
-    .eq('id', userId)
+/**
+ * Handle subscription_schedule.released event
+ * This fires when a subscription schedule completes all phases and releases
+ * the subscription back to a regular subscription (e.g., after Ultra→Pro transition)
+ */
+async function handleSubscriptionScheduleReleased(
+  supabase: SupabaseServiceClient,
+  schedule: Stripe.SubscriptionSchedule
+) {
+  console.log('Processing subscription schedule released:', schedule.id)
 
-  if (profileError) {
-    console.error('Error updating profile subscription:', profileError)
+  // Get the released subscription ID
+  const subscriptionId = schedule.released_subscription
+  if (!subscriptionId) {
+    console.info(`Released schedule ${schedule.id} has no associated subscription; no reconciliation needed`)
+    return
   }
 
-  // Trigger instant job curation on plan UPGRADE (free -> paid)
-  // Additional safeguard: don't trigger if subscription was started in the last 5 minutes
-  // (prevents duplicate curation from webhook retries/race conditions)
-  const isUpgrade = previousPlan === 'free' && activePlan !== 'free'
-  const recentlyUpgraded = currentProfile?.subscription_started_at &&
-    (Date.now() - new Date(currentProfile.subscription_started_at).getTime()) < 5 * 60 * 1000
+  // Stripe does not guarantee webhook ordering. Retrieve the current
+  // subscription so the price active at release time drives entitlement.
+  const currentSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+  const result = await reconcileSubscription(supabase, currentSubscription, {
+    clearScheduledDowngrade: true,
+  })
 
-  if (isUpgrade && currentProfile?.production_mode && !recentlyUpgraded) {
-    console.log(`Plan upgrade detected for user ${userId}: ${previousPlan} -> ${activePlan}. Triggering instant curation.`)
+  console.log(
+    result.schedule_cleared
+      ? `Cleared scheduled downgrade for subscription ${subscriptionId}`
+      : `Released schedule ${schedule.id} had no local downgrade marker to clear`
+  )
+}
 
-    // Trigger job curation in background using internal service call
-    // Pass user_id and internal secret to bypass auth (webhook has no session)
-    // Support both INTERNAL_API_KEY (preferred) and INTERNAL_API_SECRET (legacy)
+async function resolveSubscriptionUserId(
+  supabase: SupabaseServiceClient,
+  subscription: Stripe.Subscription,
+  knownUserId?: string
+): Promise<string> {
+  const customerId = getStripeReferenceId(subscription.customer)
+  if (!customerId) {
+    throw new Error(`Subscription ${subscription.id} is missing a Stripe customer`)
+  }
+
+  const { data: ledgerOwner, error: ledgerError } = await supabase
+    .from('subscriptions')
+    .select('user_id')
+    .eq('stripe_subscription_id', subscription.id)
+    .maybeSingle()
+
+  if (ledgerError) {
+    throw new Error(`Failed to look up subscription ${subscription.id}: ${ledgerError.message}`)
+  }
+
+  const { data: customerOwner, error: customerError } = await supabase
+    .from('customers')
+    .select('user_id')
+    .eq('stripe_customer_id', customerId)
+    .maybeSingle()
+
+  if (customerError) {
+    throw new Error(`Failed to look up Stripe customer ${customerId}: ${customerError.message}`)
+  }
+
+  const metadataUserId = subscription.metadata?.supabase_user_id
+  const candidateUserIds = [
+    ledgerOwner?.user_id,
+    knownUserId,
+    metadataUserId,
+    customerOwner?.user_id,
+  ].filter((value): value is string => Boolean(value))
+
+  if (new Set(candidateUserIds).size > 1) {
+    throw new Error(`Conflicting user ownership for subscription ${subscription.id}`)
+  }
+
+  const userId = candidateUserIds[0]
+  if (!userId) {
+    throw new Error(`Cannot find a user for subscription ${subscription.id}`)
+  }
+
+  return userId
+}
+
+async function reconcileSubscription(
+  supabase: SupabaseServiceClient,
+  subscription: Stripe.Subscription,
+  options: ReconcileSubscriptionOptions = {}
+): Promise<SubscriptionReconciliationResult> {
+  const customerId = getStripeReferenceId(subscription.customer)
+  if (!customerId) {
+    throw new Error(`Subscription ${subscription.id} is missing a Stripe customer`)
+  }
+
+  const userId = await resolveSubscriptionUserId(
+    supabase,
+    subscription,
+    options.knownUserId
+  )
+  const currentItem = subscription.items.data[0]
+  const priceId = currentItem?.price.id ?? null
+  const priceMapping = priceId ? getPlanFromPriceId(priceId) : null
+  const plan = priceMapping && isValidPlan(priceMapping.plan)
+    ? priceMapping.plan
+    : null
+  const status = options.forceStatus ?? subscription.status
+
+  if (!plan) {
+    console.warn('Webhook: subscription price is not mapped', {
+      subscriptionId: subscription.id,
+      priceId,
+      status,
+    })
+  } else if (subscription.metadata?.plan && subscription.metadata.plan !== plan) {
+    console.warn('Webhook: subscription metadata plan differs from current price', {
+      subscriptionId: subscription.id,
+      metadataPlan: subscription.metadata.plan,
+      pricePlan: plan,
+    })
+  }
+
+  const { data, error } = await supabase.rpc('reconcile_stripe_subscription', {
+    p_user_id: userId,
+    p_stripe_subscription_id: subscription.id,
+    p_stripe_customer_id: customerId,
+    p_status: status,
+    p_plan: plan,
+    p_price_id: priceId,
+    p_current_period_start: toIsoTimestamp(currentItem?.current_period_start),
+    p_current_period_end: toIsoTimestamp(currentItem?.current_period_end),
+    p_cancel_at_period_end: subscription.cancel_at_period_end,
+    p_canceled_at: toIsoTimestamp(subscription.canceled_at ?? subscription.ended_at),
+    p_trial_start: toIsoTimestamp(subscription.trial_start),
+    p_trial_end: toIsoTimestamp(subscription.trial_end),
+    p_clear_scheduled_downgrade: options.clearScheduledDowngrade ?? false,
+  })
+
+  if (error) {
+    throw new Error(`Failed to reconcile subscription ${subscription.id}: ${error.message}`)
+  }
+
+  const result = parseReconciliationResult(data, subscription.id)
+  if (result.user_id !== userId) {
+    throw new Error(`Reconciliation returned the wrong user for subscription ${subscription.id}`)
+  }
+
+  if (!result.applied) {
+    console.info('Ignored stale Stripe subscription state', {
+      subscriptionId: subscription.id,
+      reason: result.ignored_reason,
+    })
+    return result
+  }
+
+  const isUpgrade = result.previous_plan === 'free' && result.entitled_plan !== 'free'
+  const previousStartedAtMs = result.previous_subscription_started_at
+    ? new Date(result.previous_subscription_started_at).getTime()
+    : Number.NaN
+  const recentlyUpgraded = Number.isFinite(previousStartedAtMs)
+    && Date.now() - previousStartedAtMs < 5 * 60 * 1000
+
+  if (isUpgrade && result.production_mode && !recentlyUpgraded) {
+    console.log(
+      `Plan upgrade detected for user ${userId}: ${result.previous_plan} -> ${result.entitled_plan}. `
+      + 'Triggering instant curation.'
+    )
+
     const internalSecret = process.env.INTERNAL_API_KEY || process.env.INTERNAL_API_SECRET
     if (internalSecret) {
       fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/jobs/curate`, {
@@ -323,7 +543,7 @@ async function handleSubscriptionUpdated(
           'X-Internal-Secret': internalSecret,
           'X-User-Id': userId,
         },
-      }).catch(err => console.error('Failed to trigger upgrade curation:', err))
+      }).catch(error => console.error('Failed to trigger upgrade curation:', error))
     } else {
       console.warn('INTERNAL_API_KEY not configured, skipping curation trigger')
     }
@@ -331,213 +551,10 @@ async function handleSubscriptionUpdated(
     console.log(`Plan upgrade for user ${userId} skipped curation (recently upgraded)`)
   }
 
-  console.log(`Subscription updated for user ${userId}: ${plan} (${subscription.status})`)
-}
+  console.log(
+    `Subscription reconciled for user ${userId}: ${result.ledger_plan} `
+    + `(${status}, entitlement ${result.entitled_plan})`
+  )
 
-/**
- * Handle customer.subscription.deleted event
- * Resets user to free plan
- */
-async function handleSubscriptionDeleted(
-  supabase: ReturnType<typeof createServiceClient>,
-  subscription: Stripe.Subscription
-) {
-  console.log('Processing subscription deletion:', subscription.id)
-
-  // Find user by subscription
-  const { data: subRecord } = await supabase
-    .from('subscriptions')
-    .select('user_id')
-    .eq('stripe_subscription_id', subscription.id)
-    .single()
-
-  if (!subRecord?.user_id) {
-    console.error('Cannot find user for deleted subscription:', subscription.id)
-    return
-  }
-
-  // Update subscription status
-  await supabase
-    .from('subscriptions')
-    .update({
-      status: 'canceled',
-      canceled_at: new Date().toISOString(),
-    })
-    .eq('stripe_subscription_id', subscription.id)
-
-  // Reset user to free plan
-  await supabase
-    .from('profiles')
-    .update({
-      subscription_plan: 'free',
-      subscription_started_at: null,
-    })
-    .eq('id', subRecord.user_id)
-
-  console.log(`Subscription canceled for user ${subRecord.user_id}`)
-}
-
-/**
- * Handle invoice.payment_succeeded event
- * Updates subscription period dates
- */
-async function handleInvoicePaymentSucceeded(
-  supabase: ReturnType<typeof createServiceClient>,
-  invoice: Stripe.Invoice
-) {
-  // Get subscription from invoice - handle different SDK versions
-  const subscriptionId = (invoice as unknown as Record<string, unknown>).subscription as string | null
-  if (!subscriptionId) return
-
-  console.log('Processing payment succeeded for subscription:', subscriptionId)
-
-  // Refresh subscription data from Stripe
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-  await handleSubscriptionUpdated(supabase, subscription)
-}
-
-/**
- * Handle invoice.payment_failed event
- * Updates subscription status
- *
- * Behavior follows the same logic as cancellation:
- * - Trial conversion fails: Access ends when trial ends (user never paid)
- * - Renewal fails: Access continues until current paid period ends (user has paid)
- *
- * The actual downgrade happens via:
- * 1. Stripe eventually cancels/updates the subscription after retries
- * 2. Our check-expired-subscriptions cron as a safety net
- */
-async function handleInvoicePaymentFailed(
-  supabase: ReturnType<typeof createServiceClient>,
-  invoice: Stripe.Invoice
-) {
-  // Get subscription from invoice - handle different SDK versions
-  const subscriptionId = (invoice as unknown as Record<string, unknown>).subscription as string | null
-  if (!subscriptionId) return
-
-  console.log('Processing payment failed for subscription:', subscriptionId)
-
-  // Get the billing reason to distinguish trial conversion vs renewal
-  // billing_reason values: subscription_create, subscription_cycle, subscription_update, etc.
-  const billingReason = (invoice as unknown as Record<string, unknown>).billing_reason as string | undefined
-
-  // First charge (trial conversion) vs renewal
-  const isFirstCharge = billingReason === 'subscription_create'
-
-  // Find user by subscription for logging
-  const { data: subRecord } = await supabase
-    .from('subscriptions')
-    .select('user_id, current_period_end, trial_end')
-    .eq('stripe_subscription_id', subscriptionId)
-    .single()
-
-  if (!subRecord?.user_id) {
-    console.error('Cannot find user for failed payment:', subscriptionId)
-  }
-
-  // Update subscription status to past_due
-  await supabase
-    .from('subscriptions')
-    .update({ status: 'past_due' })
-    .eq('stripe_subscription_id', subscriptionId)
-
-  if (isFirstCharge) {
-    // TRIAL CONVERSION FAILED: User never paid, access ends when trial ends
-    // getActivePlan returns plan for 'past_due', but Stripe will update
-    // subscription status when trial ends and payment hasn't succeeded.
-    // The check-expired-subscriptions cron provides a safety net.
-    console.log(
-      `First charge failed for user ${subRecord?.user_id || 'unknown'} - ` +
-      `access will end when trial ends (${subRecord?.trial_end || 'unknown'})`
-    )
-  } else {
-    // RENEWAL FAILED: User has paid for current period
-    // Keep their access until current_period_end (getActivePlan returns plan for past_due)
-    // After period ends, check-expired-subscriptions cron will downgrade if Stripe hasn't
-    console.log(
-      `Renewal failed for user ${subRecord?.user_id || 'unknown'} - ` +
-      `keeping access until period ends (${subRecord?.current_period_end || 'unknown'})`
-    )
-  }
-}
-
-/**
- * Determine active plan based on subscription status
- *
- * Handles all Stripe subscription statuses:
- * - active: Full plan access
- * - trialing: Full plan access during trial
- * - past_due: Grace period - keep plan but payment retry in progress
- * - incomplete: Checkout not finished (initial payment failed) - no access
- * - incomplete_expired: Checkout abandoned after 23 hours - no access
- * - paused: Subscription paused (configurable) - keep plan
- * - unpaid: Payment failed after all retry attempts - no access
- * - canceled: Subscription ended - no access
- */
-function getActivePlan(status: string, plan: SubscriptionPlan): SubscriptionPlan {
-  // States that grant full plan access
-  const activeStatuses = ['active', 'trialing']
-  if (activeStatuses.includes(status)) {
-    return plan
-  }
-
-  // Grace period states - keep plan but may need notification
-  if (status === 'past_due') {
-    return plan
-  }
-
-  // Incomplete states - checkout not finished, no access
-  if (status === 'incomplete' || status === 'incomplete_expired') {
-    return 'free'
-  }
-
-  // Paused - configurable, for now treat as active (keeps plan)
-  // This allows subscription pausing without losing access
-  if (status === 'paused') {
-    return plan
-  }
-
-  // Unpaid - payment failed after grace period, no access
-  if (status === 'unpaid') {
-    return 'free'
-  }
-
-  // All other statuses revert to free (including 'canceled')
-  return 'free'
-}
-
-/**
- * Handle subscription_schedule.released event
- * This fires when a subscription schedule completes all phases and releases
- * the subscription back to a regular subscription (e.g., after Ultra→Pro transition)
- */
-async function handleSubscriptionScheduleReleased(
-  supabase: ReturnType<typeof createServiceClient>,
-  schedule: Stripe.SubscriptionSchedule
-) {
-  console.log('Processing subscription schedule released:', schedule.id)
-
-  // Get the released subscription ID
-  const subscriptionId = schedule.released_subscription
-  if (!subscriptionId) {
-    console.log('No released subscription ID, skipping')
-    return
-  }
-
-  // Clear scheduled downgrade fields for this subscription
-  const { error } = await supabase
-    .from('subscriptions')
-    .update({
-      scheduled_downgrade_to: null,
-      scheduled_downgrade_date: null,
-    })
-    .eq('stripe_subscription_id', subscriptionId)
-
-  if (error) {
-    console.error('Error clearing scheduled downgrade fields:', error)
-    return
-  }
-
-  console.log(`Cleared scheduled downgrade for subscription ${subscriptionId}`)
+  return result
 }

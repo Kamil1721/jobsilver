@@ -4,7 +4,6 @@ import { checkAdminAuth, isAdminEmail } from '@/lib/admin/auth'
 import {
   sanitizeSearchInput,
   sanitizeSearchPattern,
-  validateUUID,
   adminUsersQuerySchema,
   adminUserUpdateSchema,
   adminUserDeleteSchema,
@@ -208,32 +207,22 @@ export async function PATCH(request: NextRequest) {
     const { user_id, is_tester } = bodyValidation.data
 
     const supabase = await createClient()
-
-    // SECURITY: Only is_tester can be modified through admin UI
-    // - subscription_plan changes ONLY via Stripe webhooks (prevents billing bypass)
-    // - is_admin changes ONLY via ADMIN_EMAILS env var (prevents privilege escalation)
-    const updateData: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    }
-
-    if (is_tester !== undefined) {
-      updateData.is_tester = is_tester
-      if (is_tester) {
-        updateData.tester_invite_code = 'ADMIN_GRANTED'
-      }
-    }
+    const serviceClient = createServiceClient()
 
     // Get target user email for audit log
-    const { data: targetUser } = await supabase
+    const { data: targetUser } = await serviceClient
       .from('profiles')
       .select('email')
       .eq('id', user_id)
       .single()
 
-    const { error } = await supabase
-      .from('profiles')
-      .update(updateData)
-      .eq('id', user_id)
+    // Tester status is reconciled atomically with the billing ledger so a
+    // revoke cannot leave invite-granted paid access behind.
+    const { error } = await serviceClient.rpc('set_tester_status', {
+      p_user_id: user_id,
+      p_is_tester: is_tester,
+      p_invite_code: is_tester ? 'ADMIN_GRANTED' : null,
+    })
 
     if (error) {
       console.error('Error updating user:', error)
@@ -323,32 +312,49 @@ export async function DELETE(request: NextRequest) {
 
     const { user_id } = bodyValidation.data
 
-    const supabase = await createClient()
-
     // Prevent self-deletion
     if (user_id === adminAuth.user?.id) {
       return NextResponse.json({ error: 'Cannot delete your own account' }, { status: 400 })
     }
 
+    const supabaseAdmin = createServiceClient()
+
     // Don't allow deleting admin users
-    const { data: targetUser } = await supabase
+    const { data: targetUser, error: targetUserError } = await supabaseAdmin
       .from('profiles')
       .select('is_admin, email')
       .eq('id', user_id)
-      .single()
+      .maybeSingle()
 
-    // Check both database flag and environment variable for admin status
-    if (targetUser?.is_admin || isAdminEmail(targetUser?.email)) {
-      return NextResponse.json({ error: 'Cannot delete admin users' }, { status: 400 })
+    if (targetUserError) {
+      console.error('Error fetching target user:', targetUserError)
+      return NextResponse.json({ error: 'Failed to verify target user' }, { status: 500 })
     }
 
-    // Use service role client for admin operations
-    const { createClient: createSupabaseClient } = await import('@supabase/supabase-js')
-    const supabaseAdmin = createSupabaseClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    )
+    const {
+      data: { user: targetAuthUser },
+      error: targetAuthError,
+    } = await supabaseAdmin.auth.admin.getUserById(user_id)
+
+    if (targetAuthError && targetAuthError.status !== 404) {
+      console.error('Error fetching target auth user:', targetAuthError)
+      return NextResponse.json({ error: 'Failed to verify target user' }, { status: 500 })
+    }
+
+    if (!targetUser && !targetAuthUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    const targetEmail = targetAuthUser?.email || targetUser?.email || null
+
+    // Profile email is user-editable, so only protected database state and the
+    // verified Auth email may determine whether this account is an admin.
+    if (
+      targetUser?.is_admin ||
+      isAdminEmail(targetAuthUser?.email)
+    ) {
+      return NextResponse.json({ error: 'Cannot delete admin users' }, { status: 400 })
+    }
 
     // Delete related data first (in case cascade doesn't work)
     // Delete jobs
@@ -393,7 +399,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete from Supabase Auth (auth.users)
-    const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(user_id)
+    const { error: authError } = targetAuthUser
+      ? await supabaseAdmin.auth.admin.deleteUser(user_id)
+      : { error: null }
 
     if (authError) {
       console.error('Error deleting user from auth:', authError)
@@ -416,7 +424,7 @@ export async function DELETE(request: NextRequest) {
       ip: auditContext.ip,
       action: 'delete_user',
       details: {
-        targetEmail: targetUser?.email,
+        targetEmail,
         deletedAt: new Date().toISOString(),
       },
     })

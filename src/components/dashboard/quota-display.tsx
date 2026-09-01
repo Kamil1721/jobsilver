@@ -47,7 +47,7 @@ export function QuotaDisplay({ quota, className }: QuotaDisplayProps) {
           ? "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20"
           : remaining <= 5
           ? "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20"
-          : "bg-white dark:bg-white/[0.03] border-zinc-200 dark:border-white/[0.06]",
+          : "bg-card dark:bg-white/[0.03] border-border dark:border-white/[0.06]",
         className
       )}
     >
@@ -59,7 +59,7 @@ export function QuotaDisplay({ quota, className }: QuotaDisplayProps) {
               ? "text-red-500 dark:text-red-400"
               : remaining <= 5
               ? "text-amber-500 dark:text-amber-400"
-              : "text-zinc-600 dark:text-zinc-400"
+              : "text-muted-foreground dark:text-zinc-400"
           )}
         />
         <span className={cn(
@@ -68,7 +68,7 @@ export function QuotaDisplay({ quota, className }: QuotaDisplayProps) {
             ? "text-red-600 dark:text-red-400"
             : remaining <= 5
             ? "text-amber-600 dark:text-amber-400"
-            : "text-zinc-700 dark:text-zinc-300"
+            : "text-foreground dark:text-zinc-300"
         )}>
           {remaining}/{limit}
         </span>
@@ -78,12 +78,12 @@ export function QuotaDisplay({ quota, className }: QuotaDisplayProps) {
         <Progress
           value={percentUsed}
           className={cn(
-            "h-1.5 bg-zinc-200 dark:bg-white/[0.05]",
+            "h-1.5 bg-muted dark:bg-white/[0.05]",
             isExhausted
               ? "[&>div]:bg-red-500 dark:[&>div]:bg-red-400"
               : remaining <= 5
               ? "[&>div]:bg-amber-500 dark:[&>div]:bg-amber-400"
-              : "[&>div]:bg-zinc-600 dark:[&>div]:bg-zinc-400"
+              : "[&>div]:bg-[var(--coral)] dark:[&>div]:bg-zinc-400"
           )}
         />
       </div>

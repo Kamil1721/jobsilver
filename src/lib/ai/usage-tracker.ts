@@ -1,4 +1,5 @@
-import type { SubscriptionPlan, AllSubscriptionPlans } from '@/lib/supabase/types'
+import type { AllSubscriptionPlans } from '@/lib/supabase/types'
+import { createServiceClient } from '@/lib/supabase/server'
 import {
   getPlanLimits,
   hasAIAccess as checkPlanAIAccess,
@@ -152,8 +153,6 @@ export async function canUseAI(
     }
   }
 
-  // Get plan limits
-  const planLimits = getPlanLimits(effectivePlan)
   const resource = featureToResource(feature)
   const limit = getResourceLimit(effectivePlan, resource)
 
@@ -342,7 +341,7 @@ export async function checkCanUseFeature(
 export async function incrementUsage(
   userId: string,
   feature: AIFeature,
-  supabase: SupabaseClientLike,
+  _supabase: SupabaseClientLike,
   increment: number = 1
 ): Promise<number> {
   // Map feature name to database column
@@ -351,7 +350,8 @@ export async function incrementUsage(
 
   // Use the atomic increment_ai_usage database function
   // This prevents race conditions from concurrent requests
-  const { data, error } = await supabase.rpc('increment_ai_usage', {
+  const serviceClient = createServiceClient()
+  const { data, error } = await serviceClient.rpc('increment_ai_usage', {
     p_user_id: userId,
     p_feature: dbFeature, // 'ai_responses', 'cover_letters', or 'cv_optimizations'
     p_increment: increment,
@@ -442,7 +442,7 @@ export async function checkNearLimits(
   coverLetters: boolean
   cvGenerations: boolean
 }> {
-  const { usage, limits, hasAIAccess } = await getUsageWithLimits(userId, supabase)
+  const { limits, hasAIAccess } = await getUsageWithLimits(userId, supabase)
 
   // Free users have no access, technically always "at limit"
   if (!hasAIAccess) {

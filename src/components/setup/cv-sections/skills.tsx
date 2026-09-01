@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -14,7 +13,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
-import type { ScreeningAnswers, JobFilters } from "@/lib/supabase/types"
+import type { ScreeningAnswers } from "@/lib/supabase/types"
 
 interface SkillsSectionProps {
   data: ScreeningAnswers
@@ -268,7 +267,7 @@ export function SkillsSection({ data, onUpdate, jobTitles = [] }: SkillsSectionP
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Wrench className="w-4 h-4 text-zinc-500" />
+          <Wrench className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Skills</h3>
         </div>
         <div className="flex items-center gap-3">
@@ -303,8 +302,8 @@ export function SkillsSection({ data, onUpdate, jobTitles = [] }: SkillsSectionP
       <div
         className={cn(
           "min-h-[120px] p-3 rounded-xl border-2 transition-colors cursor-text",
-          "border-zinc-200 dark:border-zinc-700",
-          "focus-within:border-zinc-400"
+          "border-border dark:border-zinc-700",
+          "focus-within:border-[var(--coral)]"
         )}
         onClick={() => inputRef.current?.focus()}
       >
@@ -312,7 +311,7 @@ export function SkillsSection({ data, onUpdate, jobTitles = [] }: SkillsSectionP
           {skills.map((skill) => (
             <Badge
               key={skill}
-              className="bg-zinc-100 text-zinc-700 dark:bg-white/[0.05] dark:text-zinc-300 pl-3 pr-1.5 py-1.5 gap-1.5"
+              className="bg-secondary dark:bg-white/[0.05] text-foreground dark:text-zinc-300 pl-3 pr-1.5 py-1.5 gap-1.5"
             >
               {skill}
               <button
@@ -320,7 +319,7 @@ export function SkillsSection({ data, onUpdate, jobTitles = [] }: SkillsSectionP
                   e.stopPropagation()
                   removeSkill(skill)
                 }}
-                className="hover:bg-zinc-300/50 dark:hover:bg-white/[0.1] rounded-full p-0.5"
+                className="hover:bg-muted-foreground/20 dark:hover:bg-white/[0.1] rounded-full p-0.5"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -343,10 +342,10 @@ export function SkillsSection({ data, onUpdate, jobTitles = [] }: SkillsSectionP
 
       {/* AI-suggested skills - shown when AI generates suggestions */}
       {aiSuggestions.length > 0 && skills.length < 15 && (
-        <div className="space-y-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50">
+        <div className="space-y-2 rounded-xl border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-3">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
+            <Sparkles className="w-4 h-4 text-[var(--coral-lo)]" />
+            <p className="text-xs font-medium text-[var(--coral-lo)]">
               AI-suggested skills (click to add):
             </p>
           </div>
@@ -361,9 +360,9 @@ export function SkillsSection({ data, onUpdate, jobTitles = [] }: SkillsSectionP
                 disabled={skills.length >= 15 || skills.includes(skill)}
                 className={cn(
                   "px-3 py-1.5 rounded-full text-sm border transition-colors",
-                  "border-blue-300 dark:border-blue-700 bg-white dark:bg-blue-900/50",
-                  "hover:border-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/50",
-                  "text-blue-700 dark:text-blue-300",
+                  "border-[var(--dawn-line-2)] bg-[var(--dawn-surface)]",
+                  "hover:border-[var(--coral)]/40 hover:bg-[var(--coral-soft)]",
+                  "text-[var(--dawn-ink-2)]",
                   (skills.length >= 15 || skills.includes(skill)) && "opacity-50 cursor-not-allowed"
                 )}
               >
@@ -389,8 +388,8 @@ export function SkillsSection({ data, onUpdate, jobTitles = [] }: SkillsSectionP
                 disabled={skills.length >= 15}
                 className={cn(
                   "px-3 py-1.5 rounded-full text-sm border transition-colors",
-                  "border-zinc-300 dark:border-zinc-600 bg-transparent",
-                  "hover:border-zinc-400 hover:bg-zinc-100 dark:hover:bg-white/[0.05]",
+                  "border-border dark:border-zinc-600 bg-transparent",
+                  "hover:border-muted-foreground/40 hover:bg-accent dark:hover:bg-white/[0.05]",
                   skills.length >= 15 && "opacity-50 cursor-not-allowed"
                 )}
               >

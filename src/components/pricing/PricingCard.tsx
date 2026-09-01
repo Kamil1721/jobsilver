@@ -73,15 +73,15 @@ export function PricingCard({
       className={cn(
         "relative flex flex-col rounded-2xl border transition-all duration-300",
         plan.highlighted
-          ? "border-zinc-400/50 bg-gradient-to-b from-zinc-400/10 via-zinc-400/5 to-transparent shadow-lg shadow-zinc-400/10"
-          : "border-border/50 bg-card/30 hover:border-zinc-400/30 hover:bg-card/50",
+          ? "border-[var(--coral)] ring-1 ring-[var(--coral)] bg-gradient-to-b from-[var(--coral-soft)] to-transparent shadow-lg shadow-[rgba(240,96,58,0.12)]"
+          : "border-border/50 bg-card/30 hover:border-border hover:bg-card/50",
         "group"
       )}
     >
       {/* Badge */}
       {plan.badge && (
         <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10">
-          <div className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-zinc-600 to-zinc-500 text-white text-xs font-semibold shadow-lg shadow-zinc-500/25">
+          <div className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[var(--coral)] text-[var(--coral-ink)] text-xs font-semibold shadow-lg shadow-[rgba(240,96,58,0.25)]">
             <Sparkles className="w-3.5 h-3.5" />
             {plan.badge}
           </div>
@@ -96,7 +96,7 @@ export function PricingCard({
               <h3 className="text-lg font-semibold">{plan.name}</h3>
               {/* Current Plan Badge - positioned inline with plan name */}
               {isCurrentPlan && (
-                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
+                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--coral-soft)] border border-[var(--coral)]/30 text-[var(--coral)] text-xs font-medium">
                   <Check className="w-3 h-3" />
                   Current
                 </div>
@@ -108,8 +108,8 @@ export function PricingCard({
             className={cn(
               "w-10 h-10 rounded-xl flex items-center justify-center transition-colors duration-200",
               plan.highlighted
-                ? "bg-gradient-to-r from-zinc-600 to-zinc-500 text-white"
-                : "bg-muted/50 text-muted-foreground group-hover:bg-zinc-500/10 group-hover:text-zinc-600 dark:group-hover:text-zinc-300"
+                ? "bg-[var(--coral)] text-[var(--coral-ink)]"
+                : "bg-muted/50 text-muted-foreground group-hover:bg-muted group-hover:text-foreground"
             )}
           >
             <Icon className="w-5 h-5" />
@@ -134,15 +134,15 @@ export function PricingCard({
             </p>
           )}
           {billingCycle === "monthly" && monthlySavings && parseFloat(monthlySavings) > 0 && (
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+            <p className="text-xs text-[var(--coral)] mt-1">
               Save ${monthlySavings}/mo vs weekly
             </p>
           )}
 
           {/* Trial badge - only for plans with trial */}
           {plan.hasTrial && plan.trialDays && price > 0 && (
-            <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-              <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+            <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[var(--coral-soft)] border border-[var(--coral)]/30">
+              <span className="text-xs font-medium text-[var(--coral)]">
                 {plan.trialDays}-day free trial
               </span>
             </div>
@@ -162,7 +162,7 @@ export function PricingCard({
           <p className="text-xs text-center mt-1">
             {plan.hasAI ? (
               plan.aiResponsesPerDay === -1 ? (
-                <span className="flex items-center justify-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                <span className="flex items-center justify-center gap-1.5 text-[var(--coral)]">
                   <Sparkles className="w-3 h-3" />
                   Unlimited AI assistance
                 </span>
@@ -192,7 +192,7 @@ export function PricingCard({
               >
                 {feature.included ? (
                   <div
-                    className="mt-0.5 w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                    className="mt-0.5 w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 bg-[var(--coral-soft)] text-[var(--coral-lo)]"
                   >
                     <Check className="w-2.5 h-2.5" strokeWidth={3} />
                   </div>
@@ -222,8 +222,8 @@ export function PricingCard({
           className={cn(
             "w-full h-11 font-medium transition-all duration-200",
             plan.highlighted
-              ? "bg-gradient-to-r from-zinc-600 to-zinc-500 hover:opacity-90 shadow-lg shadow-zinc-500/20"
-              : "bg-muted/50 hover:bg-muted text-foreground border border-border/50 hover:border-zinc-400/30"
+              ? "bg-[var(--coral)] text-[var(--coral-ink)] hover:bg-[var(--coral-hi)] shadow-lg shadow-[rgba(240,96,58,0.20)]"
+              : "bg-muted/50 hover:bg-muted text-foreground border border-border/50 hover:border-border"
           )}
           variant={plan.highlighted ? "default" : "outline"}
         >

@@ -1,4 +1,5 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 
 export async function createClient() {
@@ -9,21 +10,17 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
+        getAll() {
+          return cookieStore.getAll()
         },
-        set(name: string, value: string, options: CookieOptions) {
+        setAll(cookiesToSet, _headersToSet) {
           try {
-            cookieStore.set({ name, value, ...options })
-          } catch (error) {
-            // Handle cookies in read-only context (e.g., middleware)
-          }
-        },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value: '', ...options })
-          } catch (error) {
-            // Handle cookies in read-only context
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options)
+            })
+          } catch {
+            // Server Components cannot write cookies. The proxy refreshes them.
+            // The proxy and auth callback also attach the required no-cache headers.
           }
         },
       },
@@ -32,14 +29,13 @@ export async function createClient() {
 }
 
 export function createServiceClient() {
-  return createServerClient(
+  return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
-      cookies: {
-        get() { return undefined },
-        set() {},
-        remove() {},
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
       },
     }
   )

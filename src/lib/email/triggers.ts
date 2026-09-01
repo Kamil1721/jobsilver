@@ -60,22 +60,30 @@ async function getUserForNotification(userId: string): Promise<{
 } | null> {
   const supabase = createServiceClient()
 
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('email, full_name, email_notifications, notification_preferences')
-    .eq('id', userId)
-    .single()
+  const [profileResult, authResult] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('full_name, email_notifications, notification_preferences')
+      .eq('id', userId)
+      .single(),
+    supabase.auth.admin.getUserById(userId),
+  ])
 
-  if (error || !data?.email) {
-    console.error('Failed to fetch user for notification:', error)
+  const verifiedEmail = authResult.data.user?.email ?? null
+
+  if (profileResult.error || authResult.error || !verifiedEmail) {
+    console.error('Failed to fetch user for notification:', {
+      profileError: profileResult.error,
+      authError: authResult.error,
+    })
     return null
   }
 
   return {
-    email: data.email,
-    full_name: data.full_name,
-    email_notifications: data.email_notifications ?? true,
-    notification_preferences: data.notification_preferences as Record<string, boolean> | null,
+    email: verifiedEmail,
+    full_name: profileResult.data.full_name,
+    email_notifications: profileResult.data.email_notifications ?? true,
+    notification_preferences: profileResult.data.notification_preferences as Record<string, boolean> | null,
   }
 }
 

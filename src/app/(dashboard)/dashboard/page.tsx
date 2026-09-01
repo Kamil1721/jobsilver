@@ -15,7 +15,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core"
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable"
-import { motion } from "framer-motion"
+import { motion, MotionConfig } from "framer-motion"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
@@ -29,21 +29,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { SearchBar } from "@/components/dashboard/search-bar"
+import { SearchBar, type SearchFilters } from "@/components/dashboard/search-bar"
 import { KanbanColumn } from "@/components/dashboard/kanban-column"
 import { JobCard } from "@/components/dashboard/job-card"
 import {
   Briefcase,
-  Sparkles,
   Search,
-  Zap,
   Heart,
-  FileText,
   X,
-  Settings2,
   CheckSquare,
   Square,
   Crown,
+  CircleAlert,
+  LoaderCircle,
+  RefreshCcw,
 } from "lucide-react"
 import { useSubscription } from "@/contexts/SubscriptionContext"
 import { QuotaDisplay } from "@/components/dashboard/quota-display"
@@ -58,29 +57,72 @@ interface UpgradeTeaser {
   shown: number
 }
 
-interface SearchFilters {
-  keywords: string
-  location: string
-  remote: boolean
-  jobType: string
+function isUpgradeTeaser(value: unknown): value is UpgradeTeaser {
+  if (!value || typeof value !== "object") return false
+
+  const teaser = value as Record<string, unknown>
+  return (
+    typeof teaser.hidden_jobs_count === "number" &&
+    typeof teaser.message === "string" &&
+    typeof teaser.total_found === "number" &&
+    typeof teaser.shown === "number"
+  )
+}
+
+function getResponseErrorMessage(value: unknown): string | null {
+  if (typeof value === "string") {
+    const message = value.trim()
+    return message || null
+  }
+
+  if (value && typeof value === "object") {
+    const message = (value as Record<string, unknown>).message
+    if (typeof message === "string" && message.trim()) {
+      return message.trim()
+    }
+  }
+
+  return null
+}
+
+class JobSearchResponseError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "JobSearchResponseError"
+  }
 }
 
 // 3-column system
 type ColumnId = "discovered" | "applied" | "offer"
 
+const EMPTY_SEARCH_FILTERS: SearchFilters = {
+  keywords: "",
+  location: "",
+  remote: false,
+  jobType: "all",
+}
+
+const SUPPORTED_JOB_TYPE_FILTERS = new Set([
+  "all",
+  "full-time",
+  "part-time",
+  "contract",
+  "internship",
+])
+
 const columns: { id: ColumnId; title: string }[] = [
-  { id: "discovered", title: "NEW MATCHES" },
-  { id: "applied", title: "APPLIED" },
-  { id: "offer", title: "OFFERS" },
+  { id: "discovered", title: "New matches" },
+  { id: "applied", title: "Applied" },
+  { id: "offer", title: "Offers" },
 ]
 
 // Loading fallback for Suspense
 function DashboardLoading() {
   return (
-    <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center">
+    <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="relative">
-        <div className="w-12 h-12 rounded-full border-2 border-zinc-800" />
-        <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-transparent border-t-zinc-400 animate-spin" />
+        <div className="w-12 h-12 rounded-full border-2 border-border" />
+        <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-transparent border-t-muted-foreground animate-spin" />
       </div>
     </div>
   )
@@ -97,25 +139,19 @@ export default function DashboardPage() {
 function DashboardPageContent() {
   const [jobs, setJobs] = React.useState<Job[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
+  const [jobsLoadError, setJobsLoadError] = React.useState<string | null>(null)
   const [isSearching, setIsSearching] = React.useState(false)
+  const [searchError, setSearchError] = React.useState<string | null>(null)
   const [activeJob, setActiveJob] = React.useState<Job | null>(null)
   const [jobToDiscard, setJobToDiscard] = React.useState<string | null>(null)
   const [quota, setQuota] = React.useState<QuotaStatus | null>(null)
   const [productionMode, setProductionMode] = React.useState(false)
   const [isAdmin, setIsAdmin] = React.useState<boolean>(false)
   const [isTester, setIsTester] = React.useState<boolean>(false)
-  const [showModeSettings, setShowModeSettings] = React.useState(false)
-  const [searchFilter, setSearchFilter] = React.useState<SearchFilters>({
-    keywords: "",
-    location: "",
-    remote: false,
-    jobType: "all",
-  })
+  const [searchFilter, setSearchFilter] = React.useState<SearchFilters>(EMPTY_SEARCH_FILTERS)
   const [showFavoritesOnly, setShowFavoritesOnly] = React.useState(false)
   const [filtersInitialized, setFiltersInitialized] = React.useState(false)
   const [favoriteIds, setFavoriteIds] = React.useState<Set<string>>(new Set())
-  const [cvIsGenerated, setCvIsGenerated] = React.useState(false)
-  const [showCvBanner, setShowCvBanner] = React.useState(true)
   // Selection state for bulk actions
   const [isSelectionMode, setIsSelectionMode] = React.useState(false)
   const [selectedJobIds, setSelectedJobIds] = React.useState<Set<string>>(new Set())
@@ -123,21 +159,20 @@ function DashboardPageContent() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = React.useState(false)
   const [upgradeTeaser, setUpgradeTeaser] = React.useState<UpgradeTeaser | null>(null)
   // Job limit warning for Free users (shown in New Matches column)
-  const [jobLimitWarning, setJobLimitWarning] = React.useState<{
-    show: boolean
-    currentCount: number
-    maxCount: number
-    atLimit: boolean
-  } | null>(null)
   // Track pending drag updates to prevent race conditions
   const pendingDragUpdates = React.useRef<Set<string>>(new Set())
+  const syncingFiltersFromUrl = React.useRef(false)
   const { toast } = useToast()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const supabase = createClient()
+  const supabase = React.useMemo(() => createClient(), [])
   const { plan, isTester: subscriptionIsTester } = useSubscription()
   // Check for premium plans (current 'pro'/'ultra' + legacy 'mega' for backwards compatibility) or tester status
   const isPremium = plan === "pro" || plan === "ultra" || (plan as string) === "mega" || subscriptionIsTester || isTester
+  const readCurrentFilters = React.useEffectEvent(() => ({
+    searchFilter,
+    showFavoritesOnly,
+  }))
 
   // Check for tester activation from OAuth callback
   React.useEffect(() => {
@@ -152,27 +187,80 @@ function DashboardPageContent() {
     }
   }, [searchParams, toast, router])
 
-  // Initialize filter state from URL params on mount
+  // Keep visible filter controls and the filtered board in sync with URL changes.
   React.useEffect(() => {
-    if (filtersInitialized) return
-
+    let cancelled = false
     const keywords = searchParams.get("keywords") || ""
     const location = searchParams.get("location") || ""
     const remote = searchParams.get("remote") === "true"
-    const jobType = searchParams.get("jobType") || "all"
+    const requestedJobType = searchParams.get("jobType") || "all"
+    const jobType = SUPPORTED_JOB_TYPE_FILTERS.has(requestedJobType)
+      ? requestedJobType
+      : "all"
     const favorites = searchParams.get("favorites") === "true"
 
-    // Only update if there are URL params
-    if (keywords || location || remote || jobType !== "all" || favorites) {
-      setSearchFilter({ keywords, location, remote, jobType })
-      setShowFavoritesOnly(favorites)
+    const canonicalParams = new URLSearchParams(searchParams.toString())
+    if (keywords) canonicalParams.set("keywords", keywords)
+    else canonicalParams.delete("keywords")
+    if (location) canonicalParams.set("location", location)
+    else canonicalParams.delete("location")
+    if (remote) canonicalParams.set("remote", "true")
+    else canonicalParams.delete("remote")
+    if (jobType !== "all") canonicalParams.set("jobType", jobType)
+    else canonicalParams.delete("jobType")
+    if (favorites) canonicalParams.set("favorites", "true")
+    else canonicalParams.delete("favorites")
+
+    if (canonicalParams.toString() !== searchParams.toString()) {
+      const canonicalQuery = canonicalParams.toString()
+      router.replace(canonicalQuery ? `/dashboard?${canonicalQuery}` : "/dashboard", {
+        scroll: false,
+      })
     }
-    setFiltersInitialized(true)
-  }, [searchParams, filtersInitialized])
+
+    const {
+      searchFilter: currentFilters,
+      showFavoritesOnly: currentShowFavoritesOnly,
+    } = readCurrentFilters()
+    const filtersChanged =
+      currentFilters.keywords !== keywords ||
+      currentFilters.location !== location ||
+      currentFilters.remote !== remote ||
+      currentFilters.jobType !== jobType
+    const favoritesChanged = currentShowFavoritesOnly !== favorites
+
+    queueMicrotask(() => {
+      if (cancelled) return
+
+      if (filtersChanged || favoritesChanged) {
+        syncingFiltersFromUrl.current = true
+      }
+
+      setSearchFilter((current) =>
+        current.keywords === keywords &&
+        current.location === location &&
+        current.remote === remote &&
+        current.jobType === jobType
+          ? current
+          : { keywords, location, remote, jobType }
+      )
+      setShowFavoritesOnly((current) => (current === favorites ? current : favorites))
+      setFiltersInitialized(true)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [searchParams, router])
 
   // Sync filter state to URL params (only after initialization)
   React.useEffect(() => {
     if (!filtersInitialized) return
+
+    if (syncingFiltersFromUrl.current) {
+      syncingFiltersFromUrl.current = false
+      return
+    }
 
     const params = new URLSearchParams()
 
@@ -204,28 +292,46 @@ function DashboardPageContent() {
     })
   )
 
-  // Fetch user's jobs on mount
-  React.useEffect(() => {
-    const fetchJobs = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+  const loadJobs = React.useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoading(true)
+    setJobsLoadError(null)
+
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser()
+
+      if (authError || !user) {
+        throw new Error("Your session could not be verified.")
+      }
 
       // Fetch profile data including upgrade teaser
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("production_mode, is_admin, is_tester, cv_is_generated, upgrade_teaser, subscription_plan")
+        .select("production_mode, is_admin, is_tester, upgrade_teaser, subscription_plan")
         .eq("id", user.id)
-        .single()
+        .maybeSingle()
+
+      // Profile flags control privileged UI, so fail closed if this optional
+      // companion read is unavailable while still allowing the jobs board to load.
+      if (profileError) {
+        setProductionMode(false)
+        setIsAdmin(false)
+        setIsTester(false)
+        setUpgradeTeaser(null)
+      }
 
       if (profile) {
         setProductionMode(profile.production_mode || false)
         setIsAdmin(profile.is_admin === true)
-        setIsTester((profile as any).is_tester === true)
-        setCvIsGenerated(profile.cv_is_generated === true)
+        setIsTester(profile.is_tester === true)
 
         // Set upgrade teaser from profile (for free users)
-        if ((profile as any).upgrade_teaser && profile.subscription_plan === 'free') {
-          setUpgradeTeaser((profile as any).upgrade_teaser as UpgradeTeaser)
+        if (isUpgradeTeaser(profile.upgrade_teaser) && profile.subscription_plan === 'free') {
+          setUpgradeTeaser(profile.upgrade_teaser)
+        } else {
+          setUpgradeTeaser(null)
         }
       }
 
@@ -238,12 +344,7 @@ function DashboardPageContent() {
         .order("created_at", { ascending: false })
 
       if (error) {
-        toast({
-          variant: "destructive",
-          title: "Error fetching jobs",
-          description: error.message,
-        })
-        return
+        throw new Error(error.message)
       }
 
       // Map old statuses to new 3-column system
@@ -255,12 +356,11 @@ function DashboardPageContent() {
         return { ...job, status: newStatus }
       })
 
-      // All jobs are shown - auto-apply status filtering removed since we pivoted to AI assistance model
       setJobs(mappedJobs)
 
       // Fetch favorite IDs for premium users and testers
-      const userPlan = (profile as any)?.subscription_plan || 'free'
-      const userIsTester = (profile as any)?.is_tester
+      const userPlan = profile?.subscription_plan || 'free'
+      const userIsTester = profile?.is_tester
       // Note: Job limit warning is calculated in useEffect when jobs/plan change
       if (userPlan === 'pro' || userPlan === 'ultra' || userPlan === 'mega' || userIsTester) {
         try {
@@ -269,22 +369,42 @@ function DashboardPageContent() {
             const favData = await favResponse.json()
             setFavoriteIds(new Set(favData.favoriteIds || []))
           }
-        } catch (e) {
+        } catch {
           // Silently fail - not critical
         }
       }
 
+    } catch (error) {
+      const message = "We couldn't load your job board. Check your connection and try again."
+      setJobsLoadError(message)
+      toast({
+        variant: "destructive",
+        title: "Job board unavailable",
+        description: message,
+      })
+      console.error("Job board load error:", error instanceof Error ? error.message : "Unknown error")
+    } finally {
       setIsLoading(false)
     }
-
-    fetchJobs()
   }, [supabase, toast])
 
-  // Recalculate job limit warning when jobs change (for Free users only)
+  // Fetch user's jobs on mount.
   React.useEffect(() => {
+    let cancelled = false
+
+    queueMicrotask(() => {
+      if (!cancelled) void loadJobs()
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [loadJobs])
+
+  // Recalculate job limit warning when jobs change (for Free users only)
+  const jobLimitWarning = React.useMemo(() => {
     if (plan !== 'free' || isTester || subscriptionIsTester) {
-      setJobLimitWarning(null)
-      return
+      return null
     }
 
     const discoveredCount = jobs.filter(j => j.status === 'discovered').length
@@ -292,20 +412,20 @@ function DashboardPageContent() {
     const maxJobs = limits.savedJobs // 50 for free
 
     if (discoveredCount >= maxJobs * 0.9) {
-      setJobLimitWarning({
-        show: true,
+      return {
         currentCount: discoveredCount,
         maxCount: maxJobs,
         atLimit: discoveredCount >= maxJobs,
-      })
-    } else {
-      setJobLimitWarning(null)
+      }
     }
+
+    return null
   }, [jobs, plan, isTester, subscriptionIsTester])
 
   // Search for new jobs
   const handleSearch = async (filters: SearchFilters) => {
     setIsSearching(true)
+    setSearchError(null)
 
     try {
       const hasManualQuery = filters.keywords || filters.location
@@ -330,6 +450,7 @@ function DashboardPageContent() {
       if (!response.ok) {
         if (response.status === 429 && data.quota) {
           setQuota(data.quota)
+          setSearchError("You've reached today's search limit. Your quota resets at midnight UTC.")
           toast({
             variant: "destructive",
             title: "Daily quota exceeded",
@@ -338,17 +459,20 @@ function DashboardPageContent() {
           return
         }
         if (data.redirect_to_setup) {
+          setSearchError("Your search preferences need attention before we can find matches.")
           toast({
             variant: "destructive",
             title: "Setup Required",
             description: data.validation_errors?.map((e: { message: string }) => e.message).join(". ") || "Please complete your job preferences setup.",
           })
           setTimeout(() => {
-            window.location.href = "/setup"
+            router.push("/setup?edit=true")
           }, 2000)
           return
         }
-        throw new Error(data.error || "Search failed")
+        throw new JobSearchResponseError(
+          getResponseErrorMessage(data.error) || "Search failed"
+        )
       }
 
       if (data.quota) {
@@ -379,12 +503,18 @@ function DashboardPageContent() {
         title: "Search complete",
         description: `Found ${data.jobs?.length || 0} matching jobs`,
       })
+      await loadJobs(false)
     } catch (error) {
+      const message = error instanceof JobSearchResponseError
+        ? error.message
+        : "We couldn't search for matches. Check your connection and try again."
+      setSearchError(message)
       toast({
         variant: "destructive",
         title: "Search failed",
-        description: "Could not search for jobs. Please try again.",
+        description: message,
       })
+      console.error("Job search error:", error instanceof Error ? error.message : "Unknown error")
     } finally {
       setIsSearching(false)
     }
@@ -517,28 +647,6 @@ function DashboardPageContent() {
     }
   }
 
-  // Handle favorite toggle
-  const handleFavoriteToggle = (jobId: string, favorited: boolean) => {
-    setFavoriteIds(prev => {
-      const newSet = new Set(prev)
-      if (favorited) {
-        newSet.add(jobId)
-      } else {
-        newSet.delete(jobId)
-      }
-      return newSet
-    })
-  }
-
-  // Handle Review & Submit for assisted mode
-  const handleReviewSubmit = async (jobId: string) => {
-    const job = jobs.find(j => j.id === jobId)
-    if (!job) return
-
-    // Navigate to job detail page
-    router.push(`/jobs/${jobId}`)
-  }
-
   // Selection handlers for bulk actions
   const handleSelectionChange = (jobId: string, selected: boolean) => {
     setSelectedJobIds(prev => {
@@ -626,7 +734,7 @@ function DashboardPageContent() {
         })
       }
       handleClearSelection()
-    } catch (error) {
+    } catch {
       toast({
         variant: "destructive",
         title: "Error",
@@ -672,7 +780,7 @@ function DashboardPageContent() {
         description: `${updateCount} job${updateCount === 1 ? '' : 's'} ${updateCount === 1 ? 'has' : 'have'} been moved.`,
       })
       handleClearSelection()
-    } catch (error) {
+    } catch {
       toast({
         variant: "destructive",
         title: "Error",
@@ -751,9 +859,20 @@ function DashboardPageContent() {
     applied: getColumnJobs("applied").length,
     offers: getColumnJobs("offer").length,
   }
+  const hasActiveSearchFilters = Boolean(
+    searchFilter.keywords ||
+    searchFilter.location ||
+    searchFilter.remote ||
+    searchFilter.jobType !== "all" ||
+    showFavoritesOnly
+  )
+  const showUrlFilterNotice =
+    (!(isAdmin || isTester) && hasActiveSearchFilters) ||
+    (showFavoritesOnly && !isPremium)
 
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] bg-zinc-50 dark:bg-[#0a0a0b]">
+    <MotionConfig reducedMotion="user">
+    <div className="min-h-[calc(100vh-3.5rem)] bg-background dark:bg-[#0a0a0b]">
       {/* Bulk Actions Toolbar */}
       <BulkActionsToolbar
         selectedCount={selectedJobIds.size}
@@ -763,33 +882,32 @@ function DashboardPageContent() {
         isProcessing={isBulkProcessing}
       />
 
-      {/* Page header */}
-      <div className="border-b border-zinc-200 dark:border-white/[0.04] bg-white/50 dark:bg-[#0a0a0b]/50">
-        <div className="px-4 sm:px-6 py-6 max-w-[1600px] mx-auto">
-          <div className="flex flex-col gap-5">
+      <div className="border-b border-border bg-[var(--dawn-bg)] dark:border-white/[0.04] dark:bg-[#0a0a0b]/50">
+        <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 sm:py-8">
+          <div className="flex flex-col gap-6">
             {/* Header row */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-white">Dashboard</h1>
-                <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-                  Track your applications and discover opportunities
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-xl">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--coral-lo)]">Today&apos;s search</p>
+                <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground dark:text-white sm:text-3xl">Your morning shortlist</h1>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground dark:text-zinc-400 sm:text-base">
+                  Start with your newest matches, prepare the strongest applications, and keep every outcome in view.
                 </p>
               </div>
 
-              {/* Quick stats - metallic badges with dots instead of colored backgrounds */}
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-white/[0.03] border border-zinc-200 dark:border-white/[0.06] rounded-lg">
-                  <div className="w-2 h-2 rounded-full bg-zinc-400 dark:bg-zinc-500" />
-                  <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{stats.newMatches} New</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2 rounded-xl border border-[var(--coral)]/30 bg-[var(--coral-soft)] px-3 py-2">
+                  <div className="h-2 w-2 rounded-full bg-[var(--coral)]" />
+                  <span className="text-sm font-semibold text-foreground">{stats.newMatches} new matches</span>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-white/[0.03] border border-zinc-200 dark:border-white/[0.06] rounded-lg">
-                  <div className="w-2 h-2 rounded-full bg-zinc-600 dark:bg-zinc-400" />
-                  <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{stats.applied} Applied</span>
+                <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 dark:bg-white/[0.03] dark:border-white/[0.06]">
+                  <div className="h-2 w-2 rounded-full bg-muted-foreground dark:bg-zinc-400" />
+                  <span className="text-sm font-medium text-foreground dark:text-zinc-300">{stats.applied} applied</span>
                 </div>
                 {stats.offers > 0 && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                    <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">{stats.offers} Offers</span>
+                  <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+                    <div className="h-2 w-2 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+                    <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">{stats.offers} offers</span>
                   </div>
                 )}
                 {quota && <QuotaDisplay quota={quota} />}
@@ -799,6 +917,7 @@ function DashboardPageContent() {
             {/* Search bar - only visible for admins and testers (regular users get daily curated jobs) */}
             {(isAdmin || isTester) && (
               <SearchBar
+                filters={searchFilter}
                 onSearch={handleSearch}
                 onFilterChange={setSearchFilter}
                 isLoading={isSearching}
@@ -806,10 +925,30 @@ function DashboardPageContent() {
               />
             )}
 
+            {showUrlFilterNotice && (
+              <div
+                role="status"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--dawn-line-2)] bg-[var(--dawn-cream)] px-4 py-3 text-sm text-[var(--dawn-ink-2)]"
+              >
+                <span>Filters from this URL are active.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchFilter(EMPTY_SEARCH_FILTERS)
+                    setShowFavoritesOnly(false)
+                  }}
+                  className="rounded-md font-semibold text-[var(--coral-lo)] underline decoration-[var(--coral)]/40 underline-offset-4 hover:decoration-[var(--coral)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2"
+                >
+                  Clear filters
+                </button>
+              </div>
+            )}
+
             {/* Favorites filter for Pro/Ultra users and Selection mode toggle */}
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               {/* Selection mode toggle */}
               <button
+                type="button"
                 onClick={() => {
                   if (isSelectionMode) {
                     handleClearSelection()
@@ -817,16 +956,17 @@ function DashboardPageContent() {
                     setIsSelectionMode(true)
                   }
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 ${
+                aria-pressed={isSelectionMode}
+                className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-all duration-200 ${
                   isSelectionMode
-                    ? "bg-cyan-50 dark:bg-cyan-500/10 border-cyan-200 dark:border-cyan-500/20 text-cyan-700 dark:text-cyan-400"
-                    : "bg-white dark:bg-white/[0.02] border-zinc-200 dark:border-white/[0.06] text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    ? "bg-[var(--coral-soft)] border-[var(--coral-soft)] text-[var(--coral-lo)]"
+                    : "bg-card dark:bg-white/[0.02] border-border dark:border-white/[0.06] text-muted-foreground hover:text-foreground dark:text-zinc-400 dark:hover:text-zinc-200"
                 }`}
               >
                 {isSelectionMode ? (
                   <>
                     <CheckSquare className="w-3.5 h-3.5" />
-                    Select Mode
+                    Finish selecting
                   </>
                 ) : (
                   <>
@@ -838,33 +978,37 @@ function DashboardPageContent() {
 
               {/* Favorites filter for Pro/Ultra users */}
               {isPremium && (
-                <div className="flex items-center rounded-lg border border-zinc-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] overflow-hidden">
+                <div role="group" aria-label="Job list filter" className="flex h-9 items-center overflow-hidden rounded-lg border border-border bg-card dark:border-white/[0.06] dark:bg-white/[0.02]">
                   <button
+                    type="button"
                     onClick={() => setShowFavoritesOnly(false)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
+                    aria-pressed={!showFavoritesOnly}
+                    className={`flex h-full items-center gap-1.5 px-3 text-sm font-medium transition-all duration-200 ${
                       !showFavoritesOnly
-                        ? "bg-zinc-100 dark:bg-white/[0.08] text-zinc-900 dark:text-white"
-                        : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                        ? "bg-accent dark:bg-white/[0.08] text-foreground dark:text-white"
+                        : "text-muted-foreground hover:text-foreground dark:text-zinc-400 dark:hover:text-zinc-200"
                     }`}
                   >
                     <Briefcase className="w-3.5 h-3.5" />
-                    All Jobs
+                    All jobs
                   </button>
                   <button
+                    type="button"
                     onClick={() => setShowFavoritesOnly(true)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
+                    aria-pressed={showFavoritesOnly}
+                    className={`flex h-full items-center gap-1.5 px-3 text-sm font-medium transition-all duration-200 ${
                       showFavoritesOnly
-                        ? "bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400"
-                        : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                        ? "bg-[var(--coral-soft)] text-[var(--coral-lo)]"
+                        : "text-muted-foreground hover:text-foreground dark:text-zinc-400 dark:hover:text-zinc-200"
                     }`}
                   >
-                    <Heart className={`w-3.5 h-3.5 ${showFavoritesOnly ? "fill-rose-500 text-rose-500" : ""}`} />
+                    <Heart className={`w-3.5 h-3.5 ${showFavoritesOnly ? "fill-[var(--coral)] text-[var(--coral)]" : ""}`} />
                     Favorites
                     {actualFavoritesCount > 0 && (
-                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                      <span className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${
                         showFavoritesOnly
-                          ? "bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300"
-                          : "bg-zinc-100 dark:bg-white/[0.08] text-zinc-600 dark:text-zinc-400"
+                          ? "bg-[var(--coral)] text-[var(--coral-ink)]"
+                          : "bg-accent dark:bg-white/[0.08] text-muted-foreground dark:text-zinc-400"
                       }`}>
                         {actualFavoritesCount}
                       </span>
@@ -880,8 +1024,35 @@ function DashboardPageContent() {
 
       {/* Generated CV Reminder Banner - REMOVED: Users don't need this reminder */}
 
-      {/* 3-Column Kanban Board */}
-      <div className="p-4 sm:p-6">
+      {jobsLoadError ? (
+        <div className="mx-auto flex min-h-[28rem] max-w-[1600px] items-center px-4 py-12 sm:px-6">
+          <div
+            role="alert"
+            className="mx-auto w-full max-w-xl rounded-[20px] border border-[var(--dawn-line)] bg-[var(--dawn-surface)] p-8 text-center shadow-[0_18px_50px_-32px_rgba(31,27,24,0.24)]"
+          >
+            <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-[var(--coral-soft)] text-[var(--coral-lo)]">
+              <CircleAlert className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <h2 className="mt-5 text-2xl font-semibold tracking-[-0.02em] text-[var(--dawn-ink)]">
+              Your job board is temporarily unavailable
+            </h2>
+            <p className="mx-auto mt-3 max-w-[48ch] text-sm leading-6 text-[var(--dawn-ink-2)]">
+              {jobsLoadError}
+            </p>
+            <Button
+              type="button"
+              className="mt-6 rounded-full bg-[var(--coral)] px-6 text-[var(--coral-ink)] hover:bg-[var(--coral-hi)] motion-reduce:transition-none"
+              onClick={() => void loadJobs()}
+            >
+              <RefreshCcw aria-hidden="true" />
+              Retry loading
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* 3-Column Kanban Board */}
+          <div className="px-4 py-5 sm:px-6 sm:py-6">
         {/* Upgrade Teaser - only show to Free users (Pro/Ultra don't see "more jobs" teaser) */}
         {upgradeTeaser && upgradeTeaser.hidden_jobs_count > 0 && plan === "free" && !isPremium && (
           <motion.div
@@ -889,22 +1060,22 @@ function DashboardPageContent() {
             animate={{ opacity: 1, y: 0 }}
             className="flex justify-center mb-4 max-w-[1600px] mx-auto"
           >
-            <div className="inline-flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-cyan-100 to-blue-100 dark:from-cyan-500/20 dark:to-blue-500/20 border border-cyan-300 dark:border-cyan-500/40 rounded-full shadow-sm">
+            <div className="inline-flex items-center gap-3 px-4 py-2.5 bg-[var(--coral-soft)] border border-[var(--coral-soft)] rounded-full shadow-sm">
               <div className="flex items-center gap-2">
-                <Crown className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-                <span className="text-sm font-medium text-cyan-800 dark:text-cyan-300">
+                <Crown className="w-4 h-4 text-[var(--coral-lo)]" />
+                <span className="text-sm font-medium text-[var(--coral-lo)]">
                   +{upgradeTeaser.hidden_jobs_count} more job{upgradeTeaser.hidden_jobs_count === 1 ? '' : 's'} found
                 </span>
               </div>
               <button
-                className="h-7 px-3 text-xs font-semibold bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-black dark:text-white rounded-full transition-all"
+                className="h-7 px-3 text-xs font-semibold bg-[var(--coral)] hover:bg-[var(--coral-hi)] text-[var(--coral-ink)] rounded-full transition-all"
                 onClick={() => router.push('/choose-plan')}
               >
                 Upgrade to view
               </button>
               <button
                 onClick={() => setUpgradeTeaser(null)}
-                className="p-1 rounded-full hover:bg-cyan-200 dark:hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 transition-colors"
+                className="p-1 rounded-full hover:bg-[var(--coral-soft)] text-[var(--coral-lo)] transition-colors"
                 aria-label="Dismiss"
               >
                 <X className="w-3.5 h-3.5" />
@@ -920,7 +1091,7 @@ function DashboardPageContent() {
           onDragEnd={handleDragEnd}
         >
           <motion.div
-            className="flex gap-4 max-w-[1600px] mx-auto"
+            className="mx-auto flex max-w-[1600px] snap-x snap-mandatory gap-4 overflow-x-auto pb-3 lg:overflow-visible"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.1 }}
@@ -934,8 +1105,6 @@ function DashboardPageContent() {
                 count={getColumnJobs(column.id).length}
                 isLoading={isLoading}
                 onDiscardJob={promptDiscardJob}
-                onFavoriteToggle={handleFavoriteToggle}
-                onReviewSubmit={handleReviewSubmit}
                 isSelectable={isSelectionMode}
                 selectedJobIds={selectedJobIds}
                 onSelectionChange={handleSelectionChange}
@@ -953,44 +1122,63 @@ function DashboardPageContent() {
             ) : null}
           </DragOverlay>
         </DndContext>
-      </div>
+          </div>
 
-      {/* Empty state */}
-      {!isLoading && jobs.length === 0 && (
-        <motion.div
+          {/* Empty state */}
+          {!isLoading && jobs.length === 0 && (
+            <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.2 }}
-          className="flex flex-col items-center justify-center py-16 px-4"
-        >
-          {/* Metallic icon container */}
-          <div className="relative w-16 h-16 rounded-2xl overflow-hidden mb-6">
-            <div className="absolute inset-0 bg-gradient-to-br from-zinc-300 via-zinc-400 to-zinc-600 dark:from-zinc-600 dark:via-zinc-700 dark:to-zinc-800" />
-            <div className="absolute inset-[1px] rounded-[14px] bg-gradient-to-br from-zinc-100 via-zinc-200 to-zinc-400 dark:from-zinc-700 dark:via-zinc-800 dark:to-zinc-900" />
-            <div className="absolute top-0 left-1/4 w-1/2 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
-            <div className="relative z-10 flex items-center justify-center w-full h-full">
-              <Briefcase className="w-8 h-8 text-zinc-600 dark:text-zinc-300" />
-            </div>
-          </div>
-          {productionMode ? (
+              className="mx-auto flex max-w-[1600px] flex-col items-center justify-center px-4 py-16 text-center sm:py-20"
+            >
+              <div className="w-full max-w-xl rounded-[24px] border border-[var(--dawn-line)] bg-[var(--dawn-surface)] px-6 py-10 shadow-[0_18px_50px_-32px_rgba(31,27,24,0.24)] sm:px-10 sm:py-12">
+                <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-[var(--coral-soft)] text-[var(--coral-lo)]">
+                  <Briefcase className="h-6 w-6" aria-hidden="true" />
+                </div>
+                {!(isAdmin || isTester) ? (
             <>
-              <h2 className="text-lg font-semibold mb-2 text-zinc-900 dark:text-white">
-                Finding your matches
-              </h2>
-              <p className="text-zinc-500 dark:text-zinc-400 text-center max-w-md mb-6 text-sm">
-                Your personalized job matches are being prepared. Check back soon!
+              <p className="mt-6 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--coral-lo)]">
+                Your first shortlist
               </p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-[var(--dawn-ink)]">
+                {productionMode ? "Your matches are still on their way" : "Let’s find your first matches"}
+              </h2>
+              <p className="mx-auto mt-3 max-w-[48ch] text-sm leading-6 text-[var(--dawn-ink-2)]">
+                We’ll search with the preferences you saved during setup and add any new matches directly to this board.
+              </p>
+              {searchError && (
+                <p role="alert" className="mx-auto mt-4 max-w-[48ch] rounded-xl bg-[var(--coral-soft)] px-4 py-3 text-sm text-[var(--coral-lo)]">
+                  {searchError}
+                </p>
+              )}
+              <Button
+                type="button"
+                disabled={isSearching}
+                className="mt-6 min-h-11 rounded-full bg-[var(--coral)] px-6 text-[var(--coral-ink)] hover:bg-[var(--coral-hi)] motion-reduce:transition-none"
+                onClick={() => void handleSearch(EMPTY_SEARCH_FILTERS)}
+              >
+                {isSearching ? (
+                  <LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                ) : (
+                  <Search aria-hidden="true" />
+                )}
+                {isSearching ? "Finding matches…" : "Find my matches"}
+              </Button>
+              <span className="sr-only" aria-live="polite">
+                {isSearching ? "Searching for matches" : ""}
+              </span>
             </>
-          ) : (
+                ) : (
             <>
-              <h2 className="text-lg font-semibold mb-2 text-zinc-900 dark:text-white">Start your job search</h2>
-              <p className="text-zinc-500 dark:text-zinc-400 text-center max-w-md mb-6 text-sm">
-                Use the search bar to find jobs that match your skills.
-                AI-powered matching helps you find the best opportunities.
+              <h2 className="mt-6 text-2xl font-semibold tracking-[-0.02em] text-[var(--dawn-ink)]">Start your job search</h2>
+              <p className="mx-auto mt-3 max-w-[48ch] text-sm leading-6 text-[var(--dawn-ink-2)]">
+                Use the search tools above to find and test matching roles.
               </p>
               <Button
-                variant="metallic"
-                className="gap-2"
+                type="button"
+                variant="outline"
+                className="mt-6 rounded-full border-[var(--dawn-line-2)] bg-[var(--dawn-surface)] px-6 text-[var(--dawn-ink)] hover:border-[var(--coral)] hover:bg-[var(--coral-soft)] motion-reduce:transition-none"
                 onClick={() => {
                   const searchInput = document.querySelector('input[placeholder*="Job title"]') as HTMLInputElement
                   searchInput?.focus()
@@ -1000,8 +1188,11 @@ function DashboardPageContent() {
                 Search Jobs
               </Button>
             </>
+                )}
+              </div>
+            </motion.div>
           )}
-        </motion.div>
+        </>
       )}
 
       {/* Discard confirmation dialog */}
@@ -1050,5 +1241,6 @@ function DashboardPageContent() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+    </MotionConfig>
   )
 }

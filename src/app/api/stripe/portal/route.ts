@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { stripe } from '@/lib/stripe/client'
 import { checkRateLimit } from '@/lib/security/rate-limit'
+import { getAppOrigin, getTrustedSameOriginUrl } from '@/lib/security/urls'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,20 +33,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse optional return URL
+    const baseUrl = getAppOrigin(request.url)
     let returnUrl: string | undefined
     try {
       const body = await request.json()
       if (body.returnUrl && typeof body.returnUrl === 'string') {
-        // Validate return URL - must be relative path or same origin
-        const baseUrl = getBaseUrl(request)
-        if (body.returnUrl.startsWith('/')) {
-          // Relative URL - safe, construct full URL
-          returnUrl = baseUrl + body.returnUrl
-        } else if (body.returnUrl.startsWith(baseUrl)) {
-          // Same origin - safe
-          returnUrl = body.returnUrl
-        }
-        // Ignore other URLs (potential SSRF/redirect attack)
+        returnUrl = getTrustedSameOriginUrl(body.returnUrl, baseUrl)
       }
     } catch {
       // No body or invalid JSON, use default return URL
@@ -87,7 +80,7 @@ export async function POST(request: NextRequest) {
           { status: 404 }
         )
       }
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         {
           error: {
@@ -102,7 +95,7 @@ export async function POST(request: NextRequest) {
     // Create billing portal session
     const session = await stripe.billingPortal.sessions.create({
       customer: customer.stripe_customer_id,
-      return_url: returnUrl || getBaseUrl(request) + '/dashboard',
+      return_url: returnUrl || baseUrl + '/dashboard',
     })
 
     return NextResponse.json({
@@ -123,13 +116,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
-
-/**
- * Get base URL from request
- */
-function getBaseUrl(request: NextRequest): string {
-  const host = request.headers.get('host') || 'localhost:3000'
-  const protocol = host.includes('localhost') ? 'http' : 'https'
-  return `${protocol}://${host}`
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
 import { checkAdminAuth } from '@/lib/admin/auth'
 import {
   uuidSchema,
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
 
     const { limit, offset } = queryValidation.data
 
-    const supabase = await createClient()
+    const supabase = createServiceClient()
 
     // Get all tester invites with creator and user info
     const { data: invites, count: invitesCount, error: invitesError } = await supabase
@@ -263,7 +263,7 @@ export async function DELETE(request: NextRequest) {
 
     const { invite_id } = bodyValidation.data
 
-    const supabase = await createClient()
+    const supabase = createServiceClient()
 
     // Revoke the invite (set is_active = false)
     const { data, error } = await supabase
@@ -271,7 +271,7 @@ export async function DELETE(request: NextRequest) {
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('id', invite_id)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('Error revoking tester invite:', error)
@@ -339,18 +339,15 @@ export async function PATCH(request: NextRequest) {
 
     const { user_id, is_tester } = bodyValidation.data
 
-    const supabase = await createClient()
+    const serviceClient = createServiceClient()
 
-    // Update user's tester status
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        is_tester,
-        updated_at: new Date().toISOString(),
-        // Clear invite code if removing tester status
-        ...(is_tester === false ? { tester_invite_code: null } : {}),
-      })
-      .eq('id', user_id)
+    // Keep tester access separate from billing entitlement. Revocation
+    // atomically restores the plan represented by the subscription ledger.
+    const { error } = await serviceClient.rpc('set_tester_status', {
+      p_user_id: user_id,
+      p_is_tester: is_tester,
+      p_invite_code: is_tester ? 'ADMIN_GRANTED' : null,
+    })
 
     if (error) {
       console.error('Error updating tester status:', error)

@@ -91,11 +91,51 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
   const [showIndustryDropdown, setShowIndustryDropdown] = React.useState(false)
   const [showJobTitleDropdown, setShowJobTitleDropdown] = React.useState(false)
   const [jobTitleSearch, setJobTitleSearch] = React.useState("")
+  const industryTriggerRef = React.useRef<HTMLButtonElement>(null)
   const countryInputRef = React.useRef<HTMLInputElement>(null)
   const dropdownRef = React.useRef<HTMLDivElement>(null)
   const industryDropdownRef = React.useRef<HTMLDivElement>(null)
   const jobTitleDropdownRef = React.useRef<HTMLDivElement>(null)
   const jobTitleInputRef = React.useRef<HTMLInputElement>(null)
+  const industryListId = "setup-industry-listbox"
+  const jobTitleListId = "setup-job-title-listbox"
+  const countryListId = "setup-country-listbox"
+
+  const focusFirstOption = (listId: string) => {
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(`#${listId} [role="option"]`)?.focus()
+    })
+  }
+
+  const handleListboxKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    close: () => void,
+    returnFocus: React.RefObject<HTMLElement | null>
+  ) => {
+    const options = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>('[role="option"]:not([disabled])')
+    )
+    const currentIndex = options.indexOf(document.activeElement as HTMLElement)
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault()
+      const direction = event.key === "ArrowDown" ? 1 : -1
+      const nextIndex = currentIndex < 0
+        ? direction > 0 ? 0 : options.length - 1
+        : (currentIndex + direction + options.length) % options.length
+      options[nextIndex]?.focus()
+    } else if (event.key === "Home") {
+      event.preventDefault()
+      options[0]?.focus()
+    } else if (event.key === "End") {
+      event.preventDefault()
+      options.at(-1)?.focus()
+    } else if (event.key === "Escape") {
+      event.preventDefault()
+      close()
+      returnFocus.current?.focus()
+    }
+  }
 
   // Get selected industry for job title suggestions
   const selectedIndustry = data.industries?.[0] || null
@@ -170,6 +210,14 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
   // Close dropdown when clicking outside
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      if (
+        industryDropdownRef.current &&
+        !industryDropdownRef.current.contains(event.target as Node) &&
+        industryTriggerRef.current &&
+        !industryTriggerRef.current.contains(event.target as Node)
+      ) {
+        setShowIndustryDropdown(false)
+      }
       if (
         dropdownRef.current &&
         !dropdownRef.current.contains(event.target as Node) &&
@@ -266,7 +314,7 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-            <Briefcase className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+            <Briefcase className="w-5 h-5 text-muted-foreground" />
             Job Preferences
           </h2>
           <p className="text-muted-foreground text-sm">
@@ -287,7 +335,7 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
       {/* Step 1: Industry Section - Required */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <Factory className="w-4 h-4 text-zinc-500" />
+          <Factory className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Step 1: Industry</h3>
           <span className="text-xs text-red-500 font-medium">* Required</span>
         </div>
@@ -298,7 +346,7 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
 
         {/* Validation Warning */}
         {!selectedIndustry && (
-          <div className="flex items-center gap-2 text-amber-600 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+          <div className="flex items-center gap-2 rounded-lg bg-[var(--coral-soft)] p-3 text-sm text-[var(--coral-lo)]">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             Select an industry to continue
           </div>
@@ -307,18 +355,32 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
         {/* Industry Selector */}
         <div className="relative">
           <button
+            id="industry-trigger"
+            ref={industryTriggerRef}
             type="button"
             onClick={() => setShowIndustryDropdown(!showIndustryDropdown)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault()
+                setShowIndustryDropdown(true)
+                focusFirstOption(industryListId)
+              } else if (event.key === "Escape") {
+                setShowIndustryDropdown(false)
+              }
+            }}
+            aria-haspopup="listbox"
+            aria-expanded={showIndustryDropdown}
+            aria-controls={industryListId}
             className={cn(
               "w-full flex items-center justify-between p-3 rounded-lg border-2 transition-all text-left",
               selectedIndustry
-                ? "border-zinc-400 bg-zinc-50 dark:bg-white/[0.05]"
-                : "border-zinc-200 dark:border-white/[0.06] hover:border-zinc-400"
+                ? "border-[var(--coral)] bg-[var(--coral-soft)]"
+                : "border-border hover:border-muted-foreground/40"
             )}
           >
             <span className={cn(
               "text-sm",
-              selectedIndustry ? "text-zinc-700 dark:text-zinc-300 font-medium" : "text-muted-foreground"
+              selectedIndustry ? "text-foreground font-medium" : "text-muted-foreground"
             )}>
               {selectedIndustry
                 ? INDUSTRY_CATEGORIES[selectedIndustry as keyof typeof INDUSTRY_CATEGORIES]?.label || selectedIndustry
@@ -332,8 +394,16 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
 
           {showIndustryDropdown && (
             <div
+              id={industryListId}
               ref={industryDropdownRef}
-              className="absolute z-[100] w-full mt-1 py-2 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-xl max-h-80 overflow-auto"
+              role="listbox"
+              aria-label="Industry"
+              onKeyDown={(event) => handleListboxKeyDown(
+                event,
+                () => setShowIndustryDropdown(false),
+                industryTriggerRef
+              )}
+              className="absolute z-[100] w-full mt-1 py-2 bg-popover rounded-lg border border-border shadow-xl max-h-80 overflow-auto"
             >
               {CATEGORY_ORDER.map(category => {
                 const industriesInCategory = INDUSTRIES_BY_CATEGORY[category]
@@ -341,7 +411,7 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
 
                 return (
                   <div key={category}>
-                    <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-zinc-50 dark:bg-white/[0.02]">
+                    <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-muted">
                       {category}
                     </div>
                     {industriesInCategory.map((industry) => {
@@ -350,17 +420,16 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
                         <button
                           key={industry.id}
                           type="button"
+                          role="option"
+                          aria-selected={isSelected}
                           className={cn(
-                            "w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-white/[0.05] transition-colors",
-                            isSelected && "bg-zinc-50 dark:bg-white/[0.03]"
+                            "w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-accent transition-colors",
+                            isSelected && "bg-secondary"
                           )}
-                          onMouseDown={(e) => {
-                            e.preventDefault()
-                            selectIndustry(industry.id)
-                          }}
+                          onClick={() => selectIndustry(industry.id)}
                         >
                           <span>{industry.label}</span>
-                          {isSelected && <Check className="w-4 h-4 text-emerald-500" />}
+                          {isSelected && <Check className="w-4 h-4 text-[var(--coral-lo)]" />}
                         </button>
                       )
                     })}
@@ -376,7 +445,7 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Briefcase className="w-4 h-4 text-zinc-500" />
+            <Briefcase className="w-4 h-4 text-muted-foreground" />
             <h3 className="font-medium">Step 2: Job Titles</h3>
             <span className="text-xs text-red-500 font-medium">* Required</span>
           </div>
@@ -393,7 +462,7 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
 
         {/* Validation Warning */}
         {data.job_titles.length === 0 && (
-          <div className="flex items-center gap-2 text-amber-600 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+          <div className="flex items-center gap-2 rounded-lg bg-[var(--coral-soft)] p-3 text-sm text-[var(--coral-lo)]">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             {selectedIndustry ? "Select at least one job title" : "Select an industry first"}
           </div>
@@ -403,6 +472,7 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
         <div className="relative">
           <div className="relative">
             <Input
+              id="job-title-input"
               ref={jobTitleInputRef}
               placeholder={selectedIndustry ? "Search job titles..." : "Select an industry first"}
               value={jobTitleSearch}
@@ -411,6 +481,20 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
                 setShowJobTitleDropdown(true)
               }}
               onFocus={() => setShowJobTitleDropdown(true)}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault()
+                  setShowJobTitleDropdown(true)
+                  focusFirstOption(jobTitleListId)
+                } else if (event.key === "Escape") {
+                  setShowJobTitleDropdown(false)
+                }
+              }}
+              role="combobox"
+              aria-label="Job titles"
+              aria-autocomplete="list"
+              aria-expanded={showJobTitleDropdown && filteredJobTitles.length > 0}
+              aria-controls={jobTitleListId}
               disabled={!selectedIndustry || data.job_titles.length >= 5}
               className="pl-10"
             />
@@ -420,18 +504,25 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
           {/* Job Title Dropdown */}
           {showJobTitleDropdown && selectedIndustry && filteredJobTitles.length > 0 && (
             <div
+              id={jobTitleListId}
               ref={jobTitleDropdownRef}
-              className="absolute z-[100] w-full mt-1 py-1 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-xl max-h-48 overflow-auto"
+              role="listbox"
+              aria-label="Job title suggestions"
+              onKeyDown={(event) => handleListboxKeyDown(
+                event,
+                () => setShowJobTitleDropdown(false),
+                jobTitleInputRef
+              )}
+              className="absolute z-[100] w-full mt-1 py-1 bg-popover rounded-lg border border-border shadow-xl max-h-48 overflow-auto"
             >
               {filteredJobTitles.map((title) => (
                 <button
                   key={title}
                   type="button"
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-white/[0.05] transition-colors"
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    addJobTitle(title)
-                  }}
+                  role="option"
+                  aria-selected="false"
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors"
+                  onClick={() => addJobTitle(title)}
                 >
                   {title}
                 </button>
@@ -446,12 +537,14 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
             {data.job_titles.map((title) => (
               <Badge
                 key={title}
-                className="bg-gradient-to-r from-zinc-500 to-zinc-600 text-white hover:from-zinc-400 hover:to-zinc-500 pl-3 pr-1.5 py-1.5 gap-1.5 transition-colors"
+                className="bg-[var(--coral)] text-[var(--coral-ink)] hover:bg-[var(--coral-hi)] pl-3 pr-1.5 py-1.5 gap-1.5 transition-colors"
               >
                 {title}
                 <button
+                  type="button"
+                  aria-label={`Remove ${title}`}
                   onClick={() => removeJobTitle(title)}
-                  className="hover:bg-zinc-400 rounded-full p-0.5 transition-colors"
+                  className="hover:bg-[var(--coral-hi)] rounded-full p-0.5 transition-colors"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -464,7 +557,7 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
       {/* Step 3: Work Arrangement Section */}
       <div className="space-y-5">
         <div className="flex items-center gap-2">
-          <MapPin className="w-4 h-4 text-zinc-500" />
+          <MapPin className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Step 3: Work Arrangement</h3>
           <span className="text-xs text-red-500 font-medium">* Required</span>
         </div>
@@ -475,14 +568,19 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
 
         {/* Validation Warning */}
         {workArrangements.length === 0 && (
-          <div className="flex items-center gap-2 text-amber-600 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+          <div className="flex items-center gap-2 rounded-lg bg-[var(--coral-soft)] p-3 text-sm text-[var(--coral-lo)]">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             Select at least one work arrangement
           </div>
         )}
 
         {/* Work Arrangement Grid */}
-        <div className="grid grid-cols-2 gap-3">
+        <div
+          className="grid grid-cols-2 gap-3"
+          role="group"
+          aria-label="Work arrangements"
+          data-setup-field="work-arrangements"
+        >
           {WORK_ARRANGEMENTS.map((arrangement) => {
             const isSelected = workArrangements.includes(arrangement.id)
             const Icon = arrangement.icon
@@ -492,32 +590,33 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
                 key={arrangement.id}
                 type="button"
                 onClick={() => toggleWorkArrangement(arrangement.id)}
+                aria-pressed={isSelected}
                 className={cn(
                   "relative flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200 text-left",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2",
                   isSelected
-                    ? "border-zinc-400 bg-zinc-50 dark:bg-white/[0.05]"
-                    : "border-zinc-200 dark:border-white/[0.06] hover:border-zinc-400"
+                    ? "border-[var(--coral)] bg-[var(--coral-soft)]"
+                    : "border-border hover:border-muted-foreground/40"
                 )}
               >
                 <div
                   className={cn(
                     "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors",
                     isSelected
-                      ? "bg-gradient-to-r from-zinc-500 to-zinc-600 text-white"
-                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                      ? "bg-[var(--coral)] text-[var(--coral-ink)]"
+                      : "bg-secondary text-muted-foreground"
                   )}
                 >
                   <Icon className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className={cn("font-medium text-sm", isSelected ? "text-zinc-700 dark:text-zinc-300" : "text-zinc-600 dark:text-zinc-400")}>
+                  <p className={cn("font-medium text-sm", isSelected ? "text-foreground" : "text-muted-foreground")}>
                     {arrangement.label}
                   </p>
                   <p className="text-xs text-muted-foreground truncate">{arrangement.description}</p>
                 </div>
                 {isSelected && (
-                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-gradient-to-r from-zinc-500 to-zinc-600 text-white flex items-center justify-center">
+                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[var(--coral)] text-[var(--coral-ink)] flex items-center justify-center">
                     <Check className="w-3 h-3" />
                   </div>
                 )}
@@ -537,7 +636,7 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
 
             {/* Validation Warning for location */}
             {requiresLocation && selectedLocations.length === 0 && (
-              <div className="flex items-center gap-2 text-amber-600 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+              <div className="flex items-center gap-2 rounded-lg bg-[var(--coral-soft)] p-3 text-sm text-[var(--coral-lo)]">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 Add at least one location for on-site or hybrid work
               </div>
@@ -545,6 +644,7 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
 
             <div className="relative">
               <Input
+                id="job-location-input"
                 ref={countryInputRef}
                 placeholder="Search and select countries..."
                 value={countrySearch}
@@ -553,6 +653,20 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
                   setShowCountryDropdown(true)
                 }}
                 onFocus={() => setShowCountryDropdown(true)}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault()
+                    setShowCountryDropdown(true)
+                    focusFirstOption(countryListId)
+                  } else if (event.key === "Escape") {
+                    setShowCountryDropdown(false)
+                  }
+                }}
+                role="combobox"
+                aria-label="Work locations"
+                aria-autocomplete="list"
+                aria-expanded={showCountryDropdown && filteredCountries.length > 0}
+                aria-controls={countryListId}
                 className="pl-10"
               />
               <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -560,18 +674,25 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
               {/* Dropdown */}
               {showCountryDropdown && filteredCountries.length > 0 && (
                 <div
+                  id={countryListId}
                   ref={dropdownRef}
-                  className="absolute z-[100] w-full mt-1 py-1 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-xl max-h-48 overflow-auto"
+                  role="listbox"
+                  aria-label="Location suggestions"
+                  onKeyDown={(event) => handleListboxKeyDown(
+                    event,
+                    () => setShowCountryDropdown(false),
+                    countryInputRef
+                  )}
+                  className="absolute z-[100] w-full mt-1 py-1 bg-popover rounded-lg border border-border shadow-xl max-h-48 overflow-auto"
                 >
                   {filteredCountries.map((country) => (
                     <button
                       key={country}
                       type="button"
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-white/[0.05] transition-colors"
-                      onMouseDown={(e) => {
-                        e.preventDefault()
-                        addCountry(country)
-                      }}
+                      role="option"
+                      aria-selected="false"
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors"
+                      onClick={() => addCountry(country)}
                     >
                       {country}
                     </button>
@@ -586,12 +707,14 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
                 {selectedLocations.map((country) => (
                   <Badge
                     key={country}
-                    className="bg-zinc-100 text-zinc-700 dark:bg-white/[0.05] dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-white/[0.08] pl-3 pr-1.5 py-1.5 gap-1.5 transition-colors"
+                    className="bg-secondary text-foreground hover:bg-accent pl-3 pr-1.5 py-1.5 gap-1.5 transition-colors"
                   >
                     {country}
                     <button
+                      type="button"
+                      aria-label={`Remove ${country}`}
                       onClick={() => removeCountry(country)}
-                      className="hover:bg-zinc-300/50 dark:hover:bg-white/[0.1] rounded-full p-0.5 transition-colors"
+                      className="hover:bg-muted-foreground/20 rounded-full p-0.5 transition-colors"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -606,7 +729,7 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
       {/* Step 4: Job Types Section */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <Briefcase className="w-4 h-4 text-zinc-500" />
+          <Briefcase className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Step 4: Job Types</h3>
           <span className="text-xs text-red-500 font-medium">* Required</span>
         </div>
@@ -617,13 +740,18 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
 
         {/* Validation Warning */}
         {data.job_types.length === 0 && (
-          <div className="flex items-center gap-2 text-amber-600 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+          <div className="flex items-center gap-2 rounded-lg bg-[var(--coral-soft)] p-3 text-sm text-[var(--coral-lo)]">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             Select at least one job type
           </div>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div
+          className="grid grid-cols-2 sm:grid-cols-4 gap-3"
+          role="group"
+          aria-label="Job types"
+          data-setup-field="job-types"
+        >
           {JOB_TYPES.map((type) => {
             const isSelected = data.job_types.includes(type.id)
             const Icon = type.icon
@@ -631,28 +759,30 @@ export function StepJobPreferences({ data, onUpdate, onReset }: StepJobPreferenc
             return (
               <button
                 key={type.id}
+                type="button"
                 onClick={() => toggleJobType(type.id)}
+                aria-pressed={isSelected}
                 className={cn(
                   "relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2",
                   isSelected
-                    ? "border-zinc-400 bg-zinc-50 dark:bg-white/[0.05] text-zinc-700 dark:text-zinc-300"
-                    : "border-zinc-200 dark:border-white/[0.06] hover:border-zinc-400 text-zinc-600 dark:text-zinc-400"
+                    ? "border-[var(--coral)] bg-[var(--coral-soft)] text-foreground"
+                    : "border-border hover:border-muted-foreground/40 text-muted-foreground"
                 )}
               >
                 <div
                   className={cn(
                     "w-10 h-10 rounded-lg flex items-center justify-center transition-colors",
                     isSelected
-                      ? "bg-gradient-to-r from-zinc-500 to-zinc-600 text-white"
-                      : "bg-zinc-100 dark:bg-zinc-800"
+                      ? "bg-[var(--coral)] text-[var(--coral-ink)]"
+                      : "bg-secondary text-muted-foreground"
                   )}
                 >
                   <Icon className="w-5 h-5" />
                 </div>
                 <span className="text-sm font-medium">{type.label}</span>
                 {isSelected && (
-                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-gradient-to-r from-zinc-500 to-zinc-600 text-white flex items-center justify-center">
+                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[var(--coral)] text-[var(--coral-ink)] flex items-center justify-center">
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>

@@ -44,8 +44,28 @@ export function UsageIndicator({ className, variant = "compact" }: UsageIndicato
         if (!response.ok) {
           throw new Error("Failed to fetch usage")
         }
-        const data = await response.json()
-        setUsage(data)
+        // /api/ai/usage returns { data: { limits: { aiResponses: { used, limit }, ... } } }
+        // — map that envelope into this component's shape (limit === -1 means unlimited).
+        const payload = await response.json()
+        const limits = payload?.data?.limits
+        if (!limits?.aiResponses || !limits?.coverLetters) {
+          throw new Error("Unexpected usage payload shape")
+        }
+        const endOfDay = new Date()
+        endOfDay.setHours(24, 0, 0, 0) // daily quotas reset at local midnight
+        setUsage({
+          aiResponses: {
+            used: limits.aiResponses.used,
+            limit: limits.aiResponses.limit,
+            unlimited: limits.aiResponses.limit === -1,
+          },
+          coverLetters: {
+            used: limits.coverLetters.used,
+            limit: limits.coverLetters.limit,
+            unlimited: limits.coverLetters.limit === -1,
+          },
+          resetsAt: endOfDay.toISOString(),
+        })
       } catch (err) {
         setError("Could not load usage")
         console.error("Failed to fetch AI usage:", err)
@@ -63,7 +83,7 @@ export function UsageIndicator({ className, variant = "compact" }: UsageIndicato
   if (isLoading) {
     return (
       <div className={cn("animate-pulse", className)}>
-        <div className="h-8 w-32 bg-zinc-200 dark:bg-white/[0.05] rounded-lg" />
+        <div className="h-8 w-32 bg-muted rounded-lg" />
       </div>
     )
   }
@@ -71,13 +91,6 @@ export function UsageIndicator({ className, variant = "compact" }: UsageIndicato
   if (error || !usage) {
     return null // Silently fail
   }
-
-  const aiPercentage = usage.aiResponses.unlimited
-    ? 100
-    : Math.round((usage.aiResponses.used / usage.aiResponses.limit) * 100)
-  const coverLetterPercentage = usage.coverLetters.unlimited
-    ? 100
-    : Math.round((usage.coverLetters.used / usage.coverLetters.limit) * 100)
 
   const isLowOnResponses = !usage.aiResponses.unlimited && usage.aiResponses.used >= usage.aiResponses.limit * 0.8
   const isLowOnCoverLetters = !usage.coverLetters.unlimited && usage.coverLetters.used >= usage.coverLetters.limit * 0.8
@@ -111,8 +124,8 @@ export function UsageIndicator({ className, variant = "compact" }: UsageIndicato
               animate={{ opacity: 1, scale: 1 }}
               className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-help",
-                "bg-white/[0.02] border border-white/[0.06]",
-                "hover:bg-white/[0.04] transition-colors duration-200",
+                "bg-card border border-border",
+                "hover:bg-muted transition-colors duration-200",
                 (isLowOnResponses || isLowOnCoverLetters) && "border-amber-500/30",
                 (isOutOfResponses || isOutOfCoverLetters) && "border-red-500/30",
                 className
@@ -120,14 +133,14 @@ export function UsageIndicator({ className, variant = "compact" }: UsageIndicato
             >
               <Sparkles className={cn(
                 "w-3.5 h-3.5",
-                isOutOfResponses ? "text-red-400" : isLowOnResponses ? "text-amber-400" : "text-zinc-400"
+                isOutOfResponses ? "text-red-600" : isLowOnResponses ? "text-amber-600" : "text-muted-foreground"
               )} />
               <span className={cn(
                 "text-xs font-medium",
-                isOutOfResponses ? "text-red-400" : isLowOnResponses ? "text-amber-400" : "text-zinc-400"
+                isOutOfResponses ? "text-red-600" : isLowOnResponses ? "text-amber-600" : "text-muted-foreground"
               )}>
                 {usage.aiResponses.unlimited ? (
-                  <span className="text-emerald-400">Unlimited</span>
+                  <span className="text-[hsl(var(--status-offer))]">Unlimited</span>
                 ) : (
                   `${usage.aiResponses.limit - usage.aiResponses.used} left`
                 )}
@@ -149,17 +162,17 @@ export function UsageIndicator({ className, variant = "compact" }: UsageIndicato
       animate={{ opacity: 1, y: 0 }}
       className={cn(
         "rounded-xl p-4",
-        "bg-white dark:bg-white/[0.02]",
-        "border border-zinc-200 dark:border-white/[0.06]",
+        "bg-card",
+        "border border-border",
         className
       )}
     >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-violet-500" />
-          <h3 className="text-sm font-medium text-zinc-900 dark:text-white">AI Usage</h3>
+          <Sparkles className="w-4 h-4 text-[var(--coral)]" />
+          <h3 className="text-sm font-medium text-foreground">AI Usage</h3>
         </div>
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+        <span className="text-xs text-muted-foreground">
           Resets in {getTimeUntilReset()}
         </span>
       </div>
@@ -193,17 +206,17 @@ function UsageDetails({ usage, showUpgradeLink = false }: { usage: AIUsage; show
       {/* AI Responses */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs">
-          <span className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
             <MessageSquare className="w-3 h-3" />
             AI Responses
           </span>
           <span className={cn(
             "font-medium",
             usage.aiResponses.unlimited
-              ? "text-emerald-500"
+              ? "text-[hsl(var(--status-offer))]"
               : isLowOnResponses
                 ? "text-amber-500"
-                : "text-zinc-700 dark:text-zinc-300"
+                : "text-foreground"
           )}>
             {aiRemaining} remaining
           </span>
@@ -222,17 +235,17 @@ function UsageDetails({ usage, showUpgradeLink = false }: { usage: AIUsage; show
       {/* Cover Letters */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs">
-          <span className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
             <FileEdit className="w-3 h-3" />
             Cover Letters
           </span>
           <span className={cn(
             "font-medium",
             usage.coverLetters.unlimited
-              ? "text-emerald-500"
+              ? "text-[hsl(var(--status-offer))]"
               : isLowOnCoverLetters
                 ? "text-amber-500"
-                : "text-zinc-700 dark:text-zinc-300"
+                : "text-foreground"
           )}>
             {coverLettersRemaining} remaining
           </span>
@@ -252,7 +265,7 @@ function UsageDetails({ usage, showUpgradeLink = false }: { usage: AIUsage; show
       {showUpgradeLink && shouldShowUpgrade && (
         <Link
           href="/pricing"
-          className="flex items-center justify-center gap-1.5 mt-3 pt-3 border-t border-zinc-200 dark:border-white/[0.06] text-xs font-medium text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 transition-colors"
+          className="flex items-center justify-center gap-1.5 mt-3 pt-3 border-t border-border text-xs font-medium text-[var(--coral)] hover:text-[var(--coral-lo)] transition-colors"
         >
           Upgrade for more
           <ArrowUpRight className="w-3 h-3" />

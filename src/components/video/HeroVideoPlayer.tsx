@@ -1,8 +1,10 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { Player } from '@remotion/player'
 import { LandingHero, landingHeroConfig } from '@/remotion/compositions/LandingHero'
+import { useHydrated } from '@/hooks/use-hydrated'
+import { useReducedMotion } from '@/hooks/useReducedMotion'
 
 interface HeroVideoPlayerProps {
   className?: string
@@ -11,23 +13,8 @@ interface HeroVideoPlayerProps {
 export const HeroVideoPlayer: React.FC<HeroVideoPlayerProps> = ({
   className = '',
 }) => {
-  const [isClient, setIsClient] = useState(false)
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
-
-  useEffect(() => {
-    setIsClient(true)
-
-    // Check for reduced motion preference
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-    setPrefersReducedMotion(mediaQuery.matches)
-
-    const handleChange = (e: MediaQueryListEvent) => {
-      setPrefersReducedMotion(e.matches)
-    }
-
-    mediaQuery.addEventListener('change', handleChange)
-    return () => mediaQuery.removeEventListener('change', handleChange)
-  }, [])
+  const isClient = useHydrated()
+  const prefersReducedMotion = useReducedMotion()
 
   // Show static fallback for SSR or reduced motion
   if (!isClient || prefersReducedMotion) {

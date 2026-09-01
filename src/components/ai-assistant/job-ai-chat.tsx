@@ -21,6 +21,7 @@ import {
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
+import { canAccessFeature } from "@/lib/features/config"
 import type { Job, Profile } from "@/lib/supabase/types"
 
 interface Message {
@@ -535,19 +536,20 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
     { label: "Salary negotiation tips", prompt: "What salary range should I expect for this role, and do you have any negotiation tips?" },
   ]
 
-  // Check if user is on free plan (no AI access)
+  // Check the effective entitlement so testers and admins retain full access.
   const subscriptionPlan = profile?.subscription_plan || 'free'
-  const isFreeUser = subscriptionPlan === 'free'
+  const hasFullFeatureAccess = profile?.is_tester === true || profile?.is_admin === true
+  const canUseAIAssistant = canAccessFeature(subscriptionPlan, 'ai_assistant', hasFullFeatureAccess)
 
-  // If free user, show upgrade overlay instead of functional chat
-  if (isFreeUser) {
+  // If the user lacks access, show the upgrade overlay instead of functional chat.
+  if (!canUseAIAssistant) {
     return (
       <div className="flex flex-col h-[500px] border rounded-lg bg-card overflow-hidden relative">
         {/* Header - same as normal */}
         <div className="px-3 py-2 border-b bg-muted/30 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-md bg-violet-500/10">
-              <Sparkles className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+            <div className="p-1.5 rounded-md bg-[var(--coral-soft)]">
+              <Sparkles className="w-3.5 h-3.5 text-[var(--coral-lo)]" />
             </div>
             <div>
               <h3 className="text-xs font-semibold">AI Application Assistant</h3>
@@ -564,8 +566,8 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
           <div className="absolute inset-0 p-3 blur-[2px] opacity-40 pointer-events-none select-none">
             <div className="space-y-3">
               <div className="flex gap-2 justify-start">
-                <div className="w-6 h-6 rounded-full bg-violet-500/10 flex items-center justify-center flex-shrink-0">
-                  <Bot className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                <div className="w-6 h-6 rounded-full bg-[var(--coral-soft)] flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-3.5 h-3.5 text-[var(--coral-lo)]" />
                 </div>
                 <div className="max-w-[85%] rounded-lg px-3 py-2 text-[11px] bg-muted">
                   <p>Hi! I can help you with cover letters, application questions, and interview prep for this role...</p>
@@ -580,8 +582,8 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
                 </div>
               </div>
               <div className="flex gap-2 justify-start">
-                <div className="w-6 h-6 rounded-full bg-violet-500/10 flex items-center justify-center flex-shrink-0">
-                  <Bot className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                <div className="w-6 h-6 rounded-full bg-[var(--coral-soft)] flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-3.5 h-3.5 text-[var(--coral-lo)]" />
                 </div>
                 <div className="max-w-[85%] rounded-lg px-3 py-2 text-[11px] bg-muted">
                   <p>Dear Hiring Manager, I am writing to express my strong interest in...</p>
@@ -593,15 +595,15 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
           {/* Upgrade overlay */}
           <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-[1px]">
             <div className="text-center p-6 max-w-xs">
-              <div className="mx-auto w-12 h-12 rounded-full bg-gradient-to-br from-violet-500/20 to-cyan-500/20 flex items-center justify-center mb-4">
-                <Lock className="w-6 h-6 text-violet-500" />
+              <div className="mx-auto w-12 h-12 rounded-full bg-[var(--coral-soft)] flex items-center justify-center mb-4">
+                <Lock className="w-6 h-6 text-[var(--coral-lo)]" />
               </div>
               <h3 className="text-sm font-semibold mb-2">AI Assistant is a Pro Feature</h3>
               <p className="text-xs text-muted-foreground mb-4">
                 Get personalized cover letters, application answers, and interview prep tailored to each job.
               </p>
               <Link href="/choose-plan">
-                <Button className="bg-gradient-to-r from-violet-500 to-cyan-500 hover:from-violet-600 hover:to-cyan-600 text-white text-xs h-8 px-4">
+                <Button className="bg-[var(--coral)] hover:bg-[var(--coral-hi)] text-[var(--coral-ink)] text-xs h-8 px-4">
                   <Crown className="w-3.5 h-3.5 mr-1.5" />
                   Upgrade to Pro
                 </Button>
@@ -642,8 +644,8 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
       {/* Header */}
       <div className="px-3 py-2 border-b bg-muted/30 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-md bg-violet-500/10">
-            <Sparkles className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+          <div className="p-1.5 rounded-md bg-[var(--coral-soft)]">
+            <Sparkles className="w-3.5 h-3.5 text-[var(--coral-lo)]" />
           </div>
           <div>
             <h3 className="text-xs font-semibold">AI Application Assistant</h3>
@@ -671,8 +673,8 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
               )}
             >
               {message.role === "assistant" && (
-                <div className="w-6 h-6 rounded-full bg-violet-500/10 flex items-center justify-center flex-shrink-0">
-                  <Bot className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                <div className="w-6 h-6 rounded-full bg-[var(--coral-soft)] flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-3.5 h-3.5 text-[var(--coral-lo)]" />
                 </div>
               )}
               <div
@@ -791,12 +793,14 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
                   className="max-h-16 rounded-md border"
                 />
                 <Button
+                  type="button"
                   variant="destructive"
                   size="sm"
                   className="absolute -top-2 -right-2 h-5 w-5 p-0 rounded-full"
                   onClick={() => removeImage(index)}
+                  aria-label={`Remove image ${index + 1}`}
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-3 h-3" aria-hidden="true" />
                 </Button>
               </div>
             ))}
@@ -818,14 +822,16 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
             className="hidden"
           />
           <Button
+            type="button"
             variant="outline"
             size="sm"
             className="h-8 w-8 p-0 flex-shrink-0"
             onClick={() => fileInputRef.current?.click()}
             title="Upload screenshot of application questions"
+            aria-label="Upload screenshot of application questions"
             disabled={isLoading}
           >
-            <ImageIcon className="w-4 h-4" />
+            <ImageIcon className="w-4 h-4" aria-hidden="true" />
           </Button>
           <Textarea
             ref={inputRef}
@@ -833,20 +839,23 @@ export function JobAIChat({ job, profile }: JobAIChatProps) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Paste application questions or ask for help..."
+            aria-label="Application question or message"
             className="min-h-[36px] max-h-[100px] text-[11px] resize-none"
             rows={1}
             disabled={isLoading}
           />
           <Button
+            type="button"
             size="sm"
-            className="h-8 w-8 p-0 flex-shrink-0"
+            className="h-8 w-8 p-0 flex-shrink-0 bg-[var(--coral)] hover:bg-[var(--coral-hi)] text-[var(--coral-ink)]"
             onClick={() => handleSend()}
             disabled={(!input.trim() && imageFiles.length === 0) || isLoading}
+            aria-label={isLoading ? "Sending message" : "Send message"}
           >
             {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
             ) : (
-              <Send className="w-4 h-4" />
+              <Send className="w-4 h-4" aria-hidden="true" />
             )}
           </Button>
         </div>

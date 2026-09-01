@@ -32,8 +32,15 @@ export async function POST(request: NextRequest) {
     // Parse request body for invite code
     let inviteCode: string | undefined
     try {
-      const body = await request.json()
-      inviteCode = body.inviteCode
+      const body: unknown = await request.json()
+      if (
+        typeof body === 'object' &&
+        body !== null &&
+        'inviteCode' in body &&
+        typeof body.inviteCode === 'string'
+      ) {
+        inviteCode = body.inviteCode
+      }
     } catch {
       // No body or invalid JSON
     }
@@ -90,7 +97,9 @@ export async function POST(request: NextRequest) {
     )
 
     // If the RPC doesn't exist, fall back to the manual approach with optimistic locking
-    if (redeemError?.code === '42883' || redeemError?.code === 'PGRST202') {
+    const usedFallback = redeemError?.code === '42883' || redeemError?.code === 'PGRST202'
+
+    if (usedFallback) {
       // Function doesn't exist - use optimistic locking approach
       console.warn('redeem_tester_invite function not found, using fallback')
 
@@ -183,14 +192,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Grant tester status with Pro plan and skip plan selection
+    if (!usedFallback) {
+      const redemption = redeemResult as { success?: boolean; reason?: string } | null
+      if (redemption?.success !== true) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid or unavailable invite code' },
+          { status: 400 }
+        )
+      }
+
+      // The hardened RPC grants tester access atomically with invite redemption.
+      return NextResponse.json({
+        success: true,
+        message: 'Tester status granted',
+      })
+    }
+
+    // The legacy fallback only redeems the invite, so complete the profile grant here.
     const { error: updateError } = await supabaseService
       .from('profiles')
       .update({
         is_tester: true,
         tester_invite_code: normalizedInviteCode,
         has_selected_plan: true,
-        subscription_plan: 'pro',
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id)

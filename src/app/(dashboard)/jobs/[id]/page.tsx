@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { MapPin, Calendar, ExternalLink, ArrowLeft, Trash2, Flag, Sparkles, Check, MessageSquare, Briefcase, FileText, Loader2 } from "lucide-react"
+import { MapPin, Calendar, ExternalLink, ArrowLeft, Trash2, Flag, Sparkles, Check, MessageSquare, Briefcase, FileText, Loader2, CircleCheck, NotebookPen } from "lucide-react"
 import type { Job, Profile } from "@/lib/supabase/types"
 import { ReportProblemDialog } from "@/components/report"
 import { dispatchSetJobContext } from "@/lib/events/chat-events"
@@ -18,7 +18,17 @@ import { JobAIChat } from "@/components/ai-assistant"
 import { CVGeneratorDialog } from "@/components/cv"
 import { FeatureGate } from "@/components/ui/feature-gate"
 import { JobNotes } from "@/components/job-notes"
-import { ApplicationForm } from "@/components/auto-apply/application-form"
+
+function sanitizeJobDescription(description: string | null): string {
+  const sanitized = DOMPurify.sanitize(description || "No description available.", {
+    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'br', 'p', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'a'],
+    ALLOWED_ATTR: ['href', 'target', 'rel'],
+  })
+
+  return sanitized
+    .replace(/<h[1-6]\b[^>]*>/gi, '<h3>')
+    .replace(/<\/h[1-6]>/gi, '</h3>')
+}
 
 export default function JobDetailPage() {
   const params = useParams()
@@ -76,7 +86,7 @@ export default function JobDetailPage() {
               const prefData = await prefResponse.json()
               setPreferenceReasons(prefData.reasons || [])
             }
-          } catch (e) {
+          } catch {
             // Silently fail - not critical
           }
         }
@@ -177,13 +187,13 @@ export default function JobDetailPage() {
     return (
       <div className="min-h-[calc(100vh-3.5rem)] bg-background flex items-center justify-center p-4">
         <div className="max-w-md w-full text-center">
-          <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
-            <Briefcase className="w-8 h-8 text-zinc-400" />
+          <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-muted flex items-center justify-center">
+            <Briefcase className="w-8 h-8 text-muted-foreground" />
           </div>
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-white mb-2">
+          <h1 className="text-xl font-semibold text-foreground mb-2">
             Job Not Found
           </h1>
-          <p className="text-zinc-600 dark:text-zinc-400 mb-6">
+          <p className="text-muted-foreground mb-6">
             This job may have been removed or is no longer available.
           </p>
           <Button onClick={() => router.push("/dashboard")} variant="default">
@@ -194,161 +204,198 @@ export default function JobDetailPage() {
     )
   }
 
+  const hasApplied = job.status === "applied" || job.status === "interviewing" || job.status === "offer"
+  const descriptionHtml = sanitizeJobDescription(job.description)
+
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] bg-background">
-      {/* Compact Sticky Header */}
-      <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="max-w-7xl mx-auto px-3 py-1.5">
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" className="h-6 px-1.5" onClick={() => router.push("/dashboard")}>
-              <ArrowLeft className="w-3.5 h-3.5" />
-            </Button>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm font-semibold truncate">{job.title}</h1>
-                {isPremium && (
-                  <FavoriteButton
-                    jobId={job.id}
-                    initialFavorited={isFavorited}
-                    onToggle={setIsFavorited}
-                    size="sm"
-                    showTooltip={false}
-                  />
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                <span>{job.company || "Unknown Company"}</span>
-                {job.location && <><span>•</span><MapPin className="w-2.5 h-2.5" /><span>{job.location}</span></>}
-                {job.job_type && <Badge variant="outline" className="text-[9px] h-3.5 px-1">{job.job_type}</Badge>}
-              </div>
+    <div className="min-h-[calc(100vh-3.5rem)] bg-[var(--dawn-bg)] dark:bg-background">
+      <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="mx-auto flex max-w-7xl items-start gap-3 px-4 py-4 sm:items-center sm:px-6">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-0.5 h-9 w-9 shrink-0 p-0 sm:mt-0"
+            onClick={() => router.push("/dashboard")}
+            aria-label="Back to dashboard"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-2">
+              <h1 className="text-lg font-semibold leading-tight tracking-tight sm:text-xl">{job.title}</h1>
+              {isPremium && (
+                <FavoriteButton
+                  jobId={job.id}
+                  initialFavorited={isFavorited}
+                  onToggle={setIsFavorited}
+                  size="sm"
+                  showTooltip={false}
+                />
+              )}
             </div>
-            <FeatureGate
-              feature="cv_generator"
-              mode="button"
-              buttonLabel="Generate CV"
-              buttonVariant="outline"
-              buttonSize="sm"
-              buttonClassName="h-6 text-[10px] px-2"
-            >
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-6 text-[10px] px-2"
-                onClick={() => setShowCvGenerator(true)}
-              >
-                <FileText className="w-3 h-3 mr-0.5" />Generate CV
-              </Button>
-            </FeatureGate>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 text-[10px] px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950"
-              onClick={() => setShowReportDialog(true)}
-            >
-              <Flag className="w-3 h-3 mr-0.5" />Report Issue
-            </Button>
-            <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950" onClick={handleDiscard}>
-              <Trash2 className="w-3 h-3 mr-0.5" />Discard
-            </Button>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{job.company || "Unknown company"}</span>
+              {job.location && (
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5" />
+                  {job.location}
+                </span>
+              )}
+              {job.job_type && <Badge variant="outline" className="h-6 px-2 text-xs">{job.job_type}</Badge>}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Main Content - Both columns scroll together */}
-      <div className="max-w-7xl mx-auto px-3 py-3">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Job Description - Left side */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xs font-semibold">Job Description</h2>
-              <span className="text-[9px] text-muted-foreground flex items-center gap-0.5">
-                <Calendar className="w-2.5 h-2.5" />{formatDate(job.created_at)}
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-5 lg:items-start lg:gap-10">
+          <article className="min-w-0 lg:col-span-3">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-border pb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--coral-lo)]">Role overview</p>
+                <h2 className="mt-1 text-xl font-semibold tracking-tight">Job description</h2>
+              </div>
+              <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <Calendar className="h-4 w-4" />
+                Added {formatDate(job.created_at)}
               </span>
             </div>
             <div
-              className="prose prose-xs dark:prose-invert max-w-none text-[11px] leading-relaxed [&_p]:my-1 [&_li]:my-0 [&_ul]:my-1 [&_ol]:my-1 [&_h1]:text-sm [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-xs [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-xs [&_h3]:mt-1.5 [&_h3]:mb-0.5 [&_strong]:text-[11px]"
+              className="prose prose-zinc dark:prose-invert max-w-[72ch] text-[15px] leading-7 [&_a]:text-[color:var(--coral-lo)] [&_a]:decoration-[var(--coral)]/40 [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:decoration-[var(--coral)] [&_h3]:mt-6 [&_h3]:text-lg [&_li]:my-1.5 [&_p]:my-4"
               dangerouslySetInnerHTML={{
-                __html: DOMPurify.sanitize(job.description || "No description available.", {
-                  ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'br', 'p', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'a'],
-                  ALLOWED_ATTR: ['href', 'target', 'rel']
-                }),
+                __html: descriptionHtml,
               }}
             />
-            {/* Why I might like this - for Pro/Ultra users with preference data */}
-            {isPremium && preferenceReasons.length > 0 && (
-              <div className="mt-4 p-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-500/10">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="p-1 rounded-md bg-emerald-500/10">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <h3 className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                    Why you might like this
-                  </h3>
+          </article>
+
+          <aside className="space-y-4 lg:col-span-2 lg:sticky lg:top-28">
+            <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+              <div className="border-b border-border bg-[var(--coral-soft)]/55 px-5 py-5 dark:bg-[var(--coral-soft)]/10">
+                <div className="flex items-center gap-2 text-[var(--coral-lo)]">
+                  <Briefcase className="h-4 w-4" />
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em]">Application prep</p>
                 </div>
-                <ul className="space-y-1.5">
-                  {preferenceReasons.map((reason, index) => (
-                    <li
-                      key={index}
-                      className="flex items-start gap-2 text-[11px] text-emerald-800 dark:text-emerald-300"
-                    >
-                      <Check className="w-3 h-3 flex-shrink-0 mt-0.5 text-emerald-500" />
-                      <span>{reason}</span>
-                    </li>
-                  ))}
-                </ul>
+                <h2 className="mt-2 text-xl font-semibold tracking-tight">Prepare a strong handoff</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Review your materials here, then finish and submit on the employer&apos;s site.
+                </p>
               </div>
-            )}
 
-            {job.application_url && (
-              <div className="mt-3 pt-2 border-t">
-                <Button variant="outline" size="sm" asChild className="gap-1.5 h-6 text-[10px]">
-                  <a href={job.application_url || '#'} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="w-3 h-3" />View Original
-                  </a>
-                </Button>
-              </div>
-            )}
+              <div className="space-y-5 p-5">
+                {isPremium && preferenceReasons.length > 0 && (
+                  <div>
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <h3 className="flex items-center gap-2 text-sm font-semibold">
+                        <Sparkles className="h-4 w-4 text-emerald-600" />
+                        Why this role fits
+                      </h3>
+                      {job.match_score != null && (
+                        <Badge variant="outline" className="text-xs">{job.match_score}% match</Badge>
+                      )}
+                    </div>
+                    <ul className="space-y-2.5">
+                      {preferenceReasons.map((reason, index) => (
+                        <li key={index} className="flex items-start gap-2 text-sm leading-5 text-muted-foreground">
+                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                          <span>{reason}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-            {/* AI Application Assistant */}
-            <div className="mt-4">
-              <div className="flex items-center gap-1.5 mb-2">
-                <MessageSquare className="w-3 h-3" />
-                <h2 className="text-xs font-semibold">AI Application Assistant</h2>
+                <div className="rounded-xl border border-border bg-background p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-lg bg-muted p-2 text-muted-foreground">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-semibold">Tailor your CV</h3>
+                      <p className="mt-1 text-sm leading-5 text-muted-foreground">Create a version focused on this role before you continue.</p>
+                      <FeatureGate
+                        feature="cv_generator"
+                        mode="button"
+                        buttonLabel="Generate tailored CV"
+                        buttonVariant="outline"
+                        buttonSize="sm"
+                        buttonClassName="mt-3 h-9"
+                      >
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-3 h-9 gap-2"
+                          onClick={handleQuickGenerateCV}
+                          disabled={isGeneratingCV}
+                        >
+                          {isGeneratingCV ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                          {isGeneratingCV ? "Preparing CV" : "Generate tailored CV"}
+                        </Button>
+                      </FeatureGate>
+                    </div>
+                  </div>
+                </div>
+
+                {job.application_url ? (
+                  <Button asChild className="h-11 w-full gap-2 bg-[var(--coral)] text-[var(--coral-ink)] hover:bg-[var(--coral-hi)]">
+                    <a href={job.application_url} target="_blank" rel="noopener noreferrer">
+                      Open company application
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </Button>
+                ) : (
+                  <Button className="h-11 w-full" disabled>
+                    Company application unavailable
+                  </Button>
+                )}
+
+                {hasApplied ? (
+                  <div className="flex items-center justify-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                    <CircleCheck className="h-4 w-4" />
+                    Tracked as applied
+                  </div>
+                ) : (
+                  <Button variant="ghost" className="h-10 w-full gap-2" onClick={handleMarkAsApplied}>
+                    <CircleCheck className="h-4 w-4" />
+                    Mark as applied
+                  </Button>
+                )}
               </div>
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-[var(--coral-lo)]" />
+                <h2 className="text-base font-semibold">Prepare your answers</h2>
+              </div>
+              <p className="mb-4 text-sm leading-6 text-muted-foreground">Use the role context to draft talking points and application answers.</p>
               <JobAIChat job={job} profile={profile} />
-            </div>
+            </section>
 
-            {/* Notes Section */}
-            <JobNotes
-              jobId={job.id}
-              initialNotes={job.notes}
-              onNotesChange={handleNotesChange}
-            />
-          </div>
-
-          {/* Application Form - Right side */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                <Briefcase className="w-3 h-3" />
-                <h2 className="text-xs font-semibold">Application Questions</h2>
+            <section className="rounded-2xl border border-border bg-card p-5">
+              <div className="mb-1 flex items-center gap-2">
+                <NotebookPen className="h-4 w-4 text-[var(--coral-lo)]" />
+                <h2 className="text-base font-semibold">Your notes</h2>
               </div>
-              {job.application_url && (
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="h-6 text-[10px] px-2"
-                  onClick={() => window.open(job.application_url!, '_blank', 'noopener,noreferrer')}
-                >
-                  <ExternalLink className="w-3 h-3 mr-1" />
-                  Apply Now
-                </Button>
-              )}
+              <JobNotes
+                jobId={job.id}
+                initialNotes={job.notes}
+                onNotesChange={handleNotesChange}
+              />
+            </section>
+
+            <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+              <Button variant="ghost" size="sm" className="h-9 gap-2 text-muted-foreground" onClick={() => setShowReportDialog(true)}>
+                <Flag className="h-4 w-4" />
+                Report issue
+              </Button>
+              <Button variant="ghost" size="sm" className="h-9 gap-2 text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950" onClick={handleDiscard}>
+                <Trash2 className="h-4 w-4" />
+                Discard
+              </Button>
             </div>
-            <ApplicationForm jobId={job.id} company={job.company ?? undefined} />
-          </div>
+          </aside>
         </div>
-      </div>
+      </main>
 
       {/* Report dialog with job context */}
       {job && (

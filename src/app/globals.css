@@ -1,43 +1,50 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@config "../../tailwind.config.mjs";
+@import "tailwindcss";
 
 @layer base {
-  /* Light mode - Metallic silver theme adapted for light backgrounds */
+  /* ============================================================
+     DAWN THEME — warm-white + coral (light-only product).
+     Maps the shadcn semantic tokens onto the Dawn palette so every
+     token-based component inherits the redesign. Contrast ladder is
+     deliberate: page = warm-white (#FFFDFB), cards = white (#FFFFFF)
+     with a warm hairline border for elevation, muted = cream (#FBF6EF).
+     --primary = warm INK (neutral) so default buttons are NOT coral —
+     coral is a precious, hand-applied accent (--coral, defined below).
+     --ring = coral to match the landing's focus treatment. */
   :root {
-    --background: 0 0% 98%;              /* Near-white: #fafafa */
-    --foreground: 240 6% 10%;            /* Near-black text: #18181b */
-    --card: 0 0% 100%;                   /* White cards: #ffffff */
-    --card-foreground: 240 6% 10%;
+    --background: 40 100% 99%;           /* warm-white page: #FFFDFB */
+    --foreground: 30 12% 11%;            /* warm near-black ink: #1F1B18 */
+    --card: 0 0% 100%;                   /* white cards: #FFFFFF (raised vs page) */
+    --card-foreground: 30 12% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 6% 10%;
-    --primary: 240 6% 20%;               /* Dark zinc for primary: #333338 */
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 5% 96%;             /* Light zinc: #f4f4f5 */
-    --secondary-foreground: 240 6% 20%;
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;      /* zinc-500 */
-    --accent: 240 5% 96%;
-    --accent-foreground: 240 6% 10%;
-    --destructive: 0 62% 45%;
+    --popover-foreground: 30 12% 11%;
+    --primary: 30 12% 11%;               /* warm ink — neutral primary, NOT coral */
+    --primary-foreground: 40 100% 99%;
+    --secondary: 37 48% 96%;             /* soft cream: #FBF6EF */
+    --secondary-foreground: 30 12% 11%;
+    --muted: 37 48% 96%;
+    --muted-foreground: 30 8% 40%;       /* warm grey (AA): #6B645E */
+    --accent: 37 48% 96%;
+    --accent-foreground: 30 12% 11%;
+    --destructive: 8 72% 52%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 6% 90%;                /* zinc-200 */
-    --input: 240 6% 90%;
-    --ring: 240 6% 20%;
-    --radius: 0.5rem;
+    --border: 36 24% 90%;                /* warm hairline */
+    --input: 36 24% 90%;
+    --ring: 12 69% 47%;                  /* accessible coral focus ring: #C94425 */
+    --radius: 0.75rem;
 
-    /* JobSilver specific tokens - Light mode */
-    --silver-bg-base: 0 0% 98%;          /* #fafafa */
-    --silver-bg-elevated: 0 0% 100%;     /* #ffffff */
-    --silver-border-faint: 240 6% 92%;   /* Very subtle */
-    --silver-border-subtle: 240 6% 88%;
-    --silver-border-medium: 240 6% 82%;
+    /* JobSilver specific tokens - Dawn light */
+    --silver-bg-base: 40 100% 99%;       /* #FFFDFB */
+    --silver-bg-elevated: 0 0% 100%;     /* #FFFFFF */
+    --silver-border-faint: 36 24% 92%;   /* Very subtle warm */
+    --silver-border-subtle: 36 22% 89%;
+    --silver-border-medium: 36 20% 84%;
     --silver-shine: 0 0% 100%;
 
-    /* Status Colors - Light mode (darker for readability) */
-    --status-new: 240 5% 34%;            /* zinc-600 */
-    --status-applied: 265 75% 40%;       /* Purple */
-    --status-offer: 152 75% 30%;         /* Green */
+    /* Status Colors - Dawn light (New = coral to tie into the accent) */
+    --status-new: 12 69% 47%;            /* coral */
+    --status-applied: 265 60% 52%;       /* Purple */
+    --status-offer: 152 55% 36%;         /* Green */
   }
 
   /* Dark mode - Primary JobSilver metallic theme */
@@ -96,7 +103,7 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-inter), 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: var(--font-geist), var(--font-inter), 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     font-feature-settings: 'rlig' 1, 'calt' 1;
     letter-spacing: -0.01em;
   }
@@ -116,6 +123,15 @@
 
   h3 {
     @apply text-lg;
+  }
+
+  /* Safety net: a heading's line-height must scale with its font-size. Components
+     that override the size (e.g. text-[clamp(...)]) WITHOUT a leading- utility
+     would otherwise inherit the fixed px line-height baked in by @apply
+     text-xl/2xl above, so at large sizes the wrapped lines collapse and overlap.
+     A unitless value scales correctly; explicit `leading-*` utilities still win. */
+  h1, h2, h3, h4, h5, h6 {
+    line-height: 1.15;
   }
 
   p {
@@ -492,7 +508,8 @@
 }
 
 .drag-overlay {
-  @apply shadow-elevated scale-[1.02];
+  @apply scale-[1.02];
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
 }
 
 /* Print styles */
@@ -535,116 +552,28 @@
    marketing surfaces are dark-only by spec.
    ============================================================ */
 :root {
-  /* Base palette */
+  /* Retained marketing tokens. The v1 landing's chrome/gradient tokens and its
+     JS motion library have been removed with that landing; everything kept below
+     is still referenced by other surfaces (notably the login page module). */
   --bg-base: #0A0A0A;
   --bg-raised: #111114;
   --bg-raised-2: #16161A;
-  --bg-sunken: #060606;
-
-  /* Silver scale — 8 stops, full luminance range */
-  --silver-0: #FFFFFF;
-  --silver-1: #F5F5F7;
-  --silver-2: #E8E8EB;
-  --silver-3: #C8C8CC;
-  --silver-4: #8A8A90;
-  --silver-5: #6A6A70;
-  --silver-6: #4A4A52;
-  --silver-7: #2A2A30;
 
   /* Foreground / ink */
   --fg-1: #F5F5F7;
   --fg-2: #B5B5BA;
   --fg-3: #7A7A80;
-  --fg-4: #4A4A50;
-  --fg-on-silver: #18181B;
 
-  /* Hairline borders */
+  /* Hairline border */
   --line-1: rgba(255, 255, 255, 0.06);
-  --line-2: rgba(255, 255, 255, 0.10);
-  --line-3: rgba(255, 255, 255, 0.16);
 
   /* Single warm accent — CTAs and Pro tier only */
   --copper: #B87333;
   --copper-hi: #D2904A;
   --copper-lo: #8E5A28;
-  --copper-glow: rgba(184, 115, 51, 0.35);
-
-  /* Polished copper face — for primary CTAs */
-  --copper-face: linear-gradient(
-    180deg,
-    #E8A87C 0%,
-    #D2904A 18%,
-    #B87333 40%,
-    #6E4220 60%,
-    #B87333 82%,
-    #8E5A28 100%
-  );
-
-  /* Component-surface silver variants */
-  --silver-face-button: linear-gradient(
-    180deg,
-    #FAFAFB 0%,
-    #D8D8DC 50%,
-    #A8A8AC 100%
-  );
-
-  --silver-face-card: linear-gradient(
-    180deg,
-    #FBFBFC 0%,
-    #ECECEF 35%,
-    #D6D6DB 70%,
-    #BCBCC2 100%
-  );
-
-  /* Display-surface silver — full 6-stop curve */
-  --silver-face: linear-gradient(
-    180deg,
-    #FAFAFB 0%,
-    #E8E8EB 18%,
-    #B8B8BC 38%,
-    #5A5A60 58%,
-    #C8C8CC 82%,
-    #8A8A90 100%
-  );
-
-  /* Polished chrome — hero text reference */
-  --metal-gradient: linear-gradient(
-    180deg,
-    #FFFFFF 0%,
-    #E8E8EB 15%,
-    #C8C8CC 40%,
-    #6A6A70 60%,
-    #C8C8CC 85%,
-    #FFFFFF 100%
-  );
-  --metal-gradient-h: linear-gradient(
-    90deg,
-    #FFFFFF 0%,
-    #E8E8EB 15%,
-    #C8C8CC 40%,
-    #2A2A30 60%,
-    #C8C8CC 85%,
-    #FFFFFF 100%
-  );
-
-  --silver-inset:
-    inset 0 1px 0 rgba(0, 0, 0, 0.35),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.55),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.06);
-  --silver-edge:
-    0 0 0 1px rgba(255, 255, 255, 0.06),
-    0 30px 80px rgba(0, 0, 0, 0.6);
-
-  /* Marketing typography */
-  --js-serif: var(--font-fraunces), 'Fraunces', 'Times New Roman', Georgia, serif;
-  --js-sans:  var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-
-  /* Section vertical rhythm */
-  --section-y: clamp(96px, 12vw, 192px);
 
   /* Layout */
   --content-w: 1280px;
-  --content-w-wide: 1440px;
   --gutter: clamp(20px, 4vw, 48px);
 
   /* Motion easing */
@@ -654,164 +583,217 @@
   /* Motion durations */
   --d-fast: 200ms;
   --d-base: 360ms;
-  --d-slow: 600ms;
-
-  --loop-chrome: 6s;
-  --loop-mesh: 90s;
-  --loop-shimmer: 2.7s;
-  --loop-deal: 0.6s;
 }
 
-/* ============================================================
-   JobSilver motion library
-   All cycles are 4-8s for sweeps, sub-second for entry pulses.
-   prefers-reduced-motion freezes everything.
-   ============================================================ */
+/* Dawn public surfaces. Legacy dark marketing tokens above remain because the
+   login module still references them. The retired Sift landing tokens were
+   removed after a repository-wide reference scan found no consumers. */
+:root {
+  --dawn-bg: #FFFDFB;
+  --dawn-bg-rgb: 255 253 251;
+  --dawn-cream: #FBF6EF;
+  --dawn-hero: #F4F1E9;
+  --dawn-hero-art: #F7F3EA;
+  --dawn-surface: #FFFFFF;
 
-@keyframes js-chrome-sweep {
-  0%   { background-position: 0% 50%; }
-  100% { background-position: 200% 50%; }
+  --dawn-ink: #1F1B18;
+  --dawn-ink-2: #6B645E;
+  --dawn-ink-3: #746D66;
+
+  --dawn-line: rgba(31, 27, 24, 0.09);
+  --dawn-line-2: rgba(31, 27, 24, 0.15);
+
+  --coral: #C94425;
+  --coral-hi: #B93C21;
+  --coral-active: #A9341B;
+  --coral-lo: #B93C21;
+  --coral-ink: #FFFFFF;
+  --coral-soft: #FBE8E2;
+  --coral-soft-2: #F7D8CE;
+
+  --dawn-content: 1200px;
+  --dawn-gutter: clamp(20px, 4vw, 44px);
+  --dawn-section: clamp(72px, 8vw, 132px);
 }
 
-.js-chrome-sweep-text {
-  background: var(--metal-gradient-h);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-          background-clip: text;
-  color: transparent;
-  /* Grow the painted box past cap height + descender so background-clip:text
-     doesn't crop ascenders/descenders on display-size Fraunces (opsz 144).
-     Fraunces' OS/2 ascent + descent is ~1.3em; line-height 1.5 adds a
-     ~0.15em buffer on each side so j/p/y/T render in full. */
-  display: inline-block;
-  line-height: 1.5;
-  animation: js-chrome-sweep var(--loop-chrome, 6s) linear infinite;
+[data-landing="dawn"] {
+  text-rendering: optimizeLegibility;
 }
 
-@keyframes js-mesh-drift {
-  0%, 100% { transform: translate(0%, 0%) rotate(0deg) scale(1); }
-  50%      { transform: translate(-5%, 4%) rotate(2.5deg) scale(1.04); }
+[data-landing="dawn"] ::selection {
+  color: var(--dawn-ink);
+  background: var(--coral-soft-2);
 }
 
-.js-mesh {
-  position: fixed;
-  inset: -10%;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(58% 48% at 18% 28%, rgba(210, 210, 215, 0.22), transparent 62%),
-    radial-gradient(52% 42% at 82% 18%, rgba(245, 245, 247, 0.16), transparent 60%),
-    radial-gradient(70% 55% at 62% 88%, rgba(138, 138, 144, 0.18), transparent 62%),
-    radial-gradient(46% 38% at 8% 78%, rgba(180, 180, 186, 0.12), transparent 60%);
-  filter: blur(48px);
-  animation: js-mesh-drift var(--loop-mesh, 90s) ease-in-out infinite;
-  opacity: 0.13;
+@keyframes dawn-hero-copy-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.js-grain {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.05;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+@keyframes dawn-hero-frame-in {
+  from { opacity: 0; transform: scale(1.015); }
+  to { opacity: 1; transform: scale(1); }
 }
 
-@keyframes js-shimmer {
-  0%   { transform: translateX(-120%) skewX(-12deg); }
-  100% { transform: translateX(220%)  skewX(-12deg); }
+.dawn-hero-copy {
+  animation: dawn-hero-copy-in 550ms var(--ease-out-expo) both;
 }
 
-.js-shimmer-host {
-  position: relative;
-  overflow: hidden;
-  /* clip-path is the only reliable way to confine a transformed pseudo-
-     element with mix-blend-mode to a rounded shape — overflow:hidden
-     and contain:paint both leak the shimmer past rounded corners in
-     Safari and (intermittently) Chrome when the ::after is translated
-     past the host's bounds. clip-path runs at paint time and respects
-     the inset() rounding regardless of descendant transforms.
-     Default radius is pill (9999px) since shimmer-host is primarily a
-     CTA pattern. Consumers with a different shape can override via
-     --shimmer-clip-radius (e.g. style={{"--shimmer-clip-radius":"14px"}}). */
-  clip-path: inset(0 round var(--shimmer-clip-radius, 9999px));
-  -webkit-clip-path: inset(0 round var(--shimmer-clip-radius, 9999px));
-  contain: paint;
+.dawn-hero-frame {
   isolation: isolate;
-}
-.js-shimmer-host::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 35%;
-  height: 100%;
-  background: linear-gradient(
-    100deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.0) 30%,
-    rgba(255, 255, 255, 0.55) 50%,
-    rgba(255, 255, 255, 0.0) 70%,
-    transparent 100%
-  );
-  pointer-events: none;
-  transform: translateX(-120%) skewX(-12deg);
-  mix-blend-mode: screen;
-  opacity: 0;
-}
-.js-shimmer-host:hover::after,
-.js-shimmer-host.js-shimmer-pulse::after {
-  opacity: 1;
-  animation: js-shimmer var(--loop-shimmer, 2.7s) cubic-bezier(0.32, 0.72, 0, 1) 1;
-}
-.js-shimmer-host:hover::after {
-  animation-iteration-count: infinite;
+  box-shadow: none;
+  animation: dawn-hero-frame-in 900ms var(--ease-out-expo) 80ms both;
 }
 
-.js-spotlight {
-  position: relative;
-  isolation: isolate;
-}
-.js-spotlight::before {
-  content: '';
+.dawn-hero-frame::after {
   position: absolute;
+  z-index: 20;
   inset: 0;
+  content: "";
+  pointer-events: none;
   border-radius: inherit;
-  background: radial-gradient(
-    220px circle at var(--mx, 50%) var(--my, 50%),
-    rgba(255, 255, 255, 0.18),
-    transparent 60%
-  );
-  opacity: 0;
-  transition: opacity 240ms var(--ease-standard, ease);
-  pointer-events: none;
-  z-index: 2;
-  mix-blend-mode: screen;
-}
-.js-spotlight:hover::before {
-  opacity: 1;
-}
-
-@keyframes js-deal {
-  0%   { opacity: 0; transform: translateY(28px) rotate(var(--js-deal-r, 0deg)) scale(0.98); }
-  100% { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
-}
-.js-deal {
-  animation: js-deal 600ms var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) both;
-  animation-delay: var(--js-deal-delay, 0ms);
+  background:
+    linear-gradient(
+      90deg,
+      var(--dawn-hero) 0%,
+      rgba(244, 241, 233, 0.94) 3.5%,
+      rgba(244, 241, 233, 0.62) 8%,
+      rgba(244, 241, 233, 0) 16%
+    ),
+    linear-gradient(
+      0deg,
+      var(--dawn-hero) 0%,
+      rgba(244, 241, 233, 0.92) 3.5%,
+      rgba(244, 241, 233, 0.5) 8%,
+      rgba(244, 241, 233, 0) 15%
+    );
 }
 
-.js-magnetic {
-  transform: translate(var(--js-mx, 0), var(--js-my, 0));
-  transition: transform 200ms var(--ease-standard, ease);
+.dawn-hero-overlay-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.dawn-hero-finder-chrome {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.dawn-hero-finder-outer {
+  fill: rgba(201, 68, 37, 0.1);
+  stroke: rgba(201, 68, 37, 0.42);
+  stroke-width: 2;
+}
+
+.dawn-hero-finder-ring {
+  fill: rgba(201, 68, 37, 0.16);
+  stroke: var(--coral);
+  stroke-width: 3;
+}
+
+.dawn-hero-check-viewport,
+.dawn-hero-ready-viewport {
+  overflow: visible;
+}
+
+.dawn-hero-check {
+  position: relative;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: var(--coral);
+  background: var(--dawn-surface);
+  border: 2px solid var(--coral);
+  border-radius: 999px;
+  box-shadow:
+    0 8px 18px rgba(31, 27, 24, 0.16),
+    0 0 0 1px rgba(255, 255, 255, 0.72);
+  transform-origin: center;
+}
+
+.dawn-hero-check-pulse {
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--coral);
+  border-radius: inherit;
+  transform-origin: center;
+}
+
+.dawn-hero-check-icon {
+  position: relative;
+  width: 18px;
+  height: 18px;
+}
+
+.dawn-hero-ready-align {
+  position: absolute;
+  top: 4.5%;
+  right: 4.5%;
+  transform-origin: top right;
+}
+
+.dawn-hero-ready-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 13px;
+  color: var(--dawn-ink);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--dawn-line-2);
+  border-radius: 999px;
+  box-shadow: 0 10px 26px rgba(31, 27, 24, 0.13);
+  transform-origin: top right;
+}
+
+.dawn-hero-ready-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background: var(--coral);
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px var(--coral-soft);
+  transform-origin: center;
+}
+
+.dawn-hero-ready-time {
+  color: var(--dawn-ink-2);
+  font-weight: 500;
+}
+
+@media (max-width: 389px) {
+  .dawn-hero-finder-chrome,
+  .dawn-hero-check {
+    transform: scale(1.75);
+  }
+
+  .dawn-hero-ready-align {
+    top: 3.5%;
+    right: 3.5%;
+    transform: scale(1.75);
+  }
+
+  .dawn-hero-ready-time {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .js-chrome-sweep-text { animation: none; }
-  .js-mesh { animation: none; }
-  .js-shimmer-host::after { display: none; }
-  .js-spotlight::before { display: none; }
-  .js-deal { animation: none; opacity: 1; transform: none; }
-  .js-magnetic { transform: none; }
+  [data-landing="dawn"] {
+    scroll-behavior: auto;
+  }
+
+  .dawn-hero-copy,
+  .dawn-hero-frame {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }

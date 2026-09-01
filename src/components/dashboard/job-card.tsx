@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { motion } from "framer-motion"
@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
-  MapPin,
   X,
   GripVertical,
   CheckCircle2,
@@ -22,11 +21,6 @@ import { useSubscription } from "@/contexts/SubscriptionContext"
 interface JobCardProps {
   job: Job
   onDiscard?: (jobId: string) => void
-  onFavoriteToggle?: (jobId: string, favorited: boolean) => void
-  onReviewSubmit?: (jobId: string) => void
-  onAIHelp?: (jobId: string) => void
-  onCoverLetter?: (jobId: string) => void
-  onMatchAnalysis?: (jobId: string) => void
   isDragging?: boolean
   isCompact?: boolean
   preferenceReasons?: string[]
@@ -41,11 +35,6 @@ interface JobCardProps {
 export function JobCard({
   job,
   onDiscard,
-  onFavoriteToggle,
-  onReviewSubmit,
-  onAIHelp,
-  onCoverLetter,
-  onMatchAnalysis,
   isDragging,
   isCompact = true,
   preferenceReasons,
@@ -54,7 +43,6 @@ export function JobCard({
   isSelected = false,
   onSelectionChange,
 }: JobCardProps) {
-  const router = useRouter()
   const { plan, isTester } = useSubscription()
   const isPremium = plan === "pro" || plan === "ultra" || plan === "mega" || isTester
   const {
@@ -109,14 +97,11 @@ export function JobCard({
     return location
   }
 
-  // Handle clicking on the job item
-  const handleClick = () => {
-    router.push(`/jobs/${job.id}`)
-  }
-
   // Check if job was applied or has offer (hide action buttons for these)
   const isApplied = job.status === "applied"
   const isAppliedOrOffer = job.status === "applied" || job.status === "offer"
+  const workLocation = formatWorkLocation(job.location)
+  const jobType = formatJobType(job.job_type)
 
   // Format applied date
   const formatAppliedDate = (date: string | null) => {
@@ -144,51 +129,61 @@ export function JobCard({
         className={cn(
           "group relative",
           isDragging && "opacity-60 z-50",
-          isSelected && "ring-2 ring-cyan-500/50 rounded-lg"
+          isSelected && "ring-2 ring-[var(--coral)] rounded-lg"
         )}
       >
-        <div
-          onClick={handleClick}
+        <Link
+          href={`/jobs/${job.id}`}
+          aria-label={`View ${job.title} at ${job.company || "Unknown company"}`}
           className={cn(
-            "flex items-center gap-2 px-3 py-2.5 rounded-lg transition-all duration-200 cursor-pointer",
-            "border border-transparent",
-            "hover:border-zinc-300 dark:hover:border-white/[0.08] hover:bg-zinc-50 dark:hover:bg-white/[0.03]",
-            isDragging && "bg-zinc-100 dark:bg-white/[0.05] border-zinc-300 dark:border-white/[0.10]",
-            isSelected && "bg-cyan-50 dark:bg-cyan-500/5 border-cyan-200 dark:border-cyan-500/20"
+            "absolute inset-0 z-0 rounded-lg border border-transparent transition-all duration-200",
+            "group-hover:-translate-y-px group-hover:border-border group-hover:bg-accent group-hover:shadow-[0_1px_2px_rgba(24,20,16,0.04),0_6px_16px_-8px_rgba(24,20,16,0.10)]",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            "active:translate-y-0 active:shadow-none dark:group-hover:border-white/[0.08] dark:group-hover:bg-white/[0.03]",
+            isDragging && "bg-muted dark:bg-white/[0.05] border-border dark:border-white/[0.10]",
+            isSelected && "bg-[var(--coral-soft)] dark:bg-cyan-500/5 border-[var(--coral-soft)] dark:border-cyan-500/20"
           )}
         >
+          <span className="sr-only">View job details</span>
+        </Link>
+
+        <div className="pointer-events-none relative z-10 flex items-center gap-2.5 rounded-lg px-3 py-2.5">
           {/* Checkbox for selection */}
           {isSelectable && (
             <div
               onClick={(e) => e.stopPropagation()}
-              className="flex-shrink-0"
+              className="pointer-events-auto relative z-20 flex-shrink-0"
             >
               <Checkbox
                 checked={isSelected}
                 onCheckedChange={(checked) => onSelectionChange?.(job.id, checked as boolean)}
                 className="h-4 w-4"
+                aria-label={`Select ${job.title} at ${job.company || "Unknown company"}`}
               />
             </div>
           )}
 
           {/* Drag handle - appears on hover */}
-          <div
+          <button
+            type="button"
             {...attributes}
             {...listeners}
             onClick={(e) => e.stopPropagation()}
+            aria-label={`Move ${job.title}`}
             className={cn(
-              "transition-opacity duration-200 cursor-grab active:cursor-grabbing flex-shrink-0",
-              isSelectable ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+              "pointer-events-auto relative z-20 flex-shrink-0 cursor-grab rounded-sm transition-opacity duration-200 active:cursor-grabbing",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2",
+              isSelectable ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
             )}
           >
-            <GripVertical className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500" />
-          </div>
+            <GripVertical className="w-3.5 h-3.5 text-muted-foreground dark:text-zinc-500" />
+          </button>
 
           {/* Job info - three lines: company, title, details */}
           <div className="flex-1 min-w-0 overflow-hidden">
             {/* Company name - prominent */}
             <div className="flex items-center gap-2">
-              <span className="font-medium text-sm text-zinc-900 dark:text-white truncate">
+              <span className="font-medium text-sm tracking-tight text-foreground dark:text-white truncate">
                 {job.company || "Unknown"}
               </span>
               {/* Applied badge */}
@@ -201,26 +196,26 @@ export function JobCard({
             </div>
             {/* Job title - truncated with ellipsis if too long */}
             <div
-              className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 truncate max-w-[280px]"
+              className="text-xs text-muted-foreground dark:text-zinc-400 mt-0.5 leading-snug truncate max-w-[280px]"
               title={job.title || ''} // Show full title on hover
             >
               {job.title}
             </div>
             {/* Work location + job type + applied info */}
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-500 mt-0.5">
-              {formatWorkLocation(job.location) && (
-                <span className="flex-shrink-0">{formatWorkLocation(job.location)}</span>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground dark:text-zinc-500 mt-1.5">
+              {workLocation && (
+                <span className="flex-shrink-0">{workLocation}</span>
               )}
-              {formatWorkLocation(job.location) && formatJobType(job.job_type) && (
-                <span className="text-zinc-400 dark:text-zinc-600 flex-shrink-0">·</span>
+              {workLocation && jobType && (
+                <span className="text-muted-foreground dark:text-zinc-600 flex-shrink-0">·</span>
               )}
-              {formatJobType(job.job_type) && (
-                <span className="flex-shrink-0">{formatJobType(job.job_type)}</span>
+              {jobType && (
+                <span className="flex-shrink-0">{jobType}</span>
               )}
               {/* Applied date */}
               {isApplied && job.applied_at && (
                 <>
-                  <span className="text-zinc-400 dark:text-zinc-600 flex-shrink-0">·</span>
+                  <span className="text-muted-foreground dark:text-zinc-600 flex-shrink-0">·</span>
                   <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
                     <Clock className="w-2.5 h-2.5" />
                     {formatAppliedDate(job.applied_at)}
@@ -232,11 +227,13 @@ export function JobCard({
 
           {/* Preference match indicator for Pro/Ultra */}
           {isPremium && preferenceScore !== undefined && preferenceScore > 0 && (
-            <PreferenceMatch
-              reasons={preferenceReasons || []}
-              score={preferenceScore}
-              size="sm"
-            />
+            <div className="pointer-events-auto relative z-20">
+              <PreferenceMatch
+                reasons={preferenceReasons || []}
+                score={preferenceScore}
+                size="sm"
+              />
+            </div>
           )}
 
           {/* Discard button - appears on hover */}
@@ -244,11 +241,12 @@ export function JobCard({
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 w-6 p-0 hover:bg-red-500/10 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex-shrink-0"
+              className="pointer-events-auto relative z-20 h-6 w-6 flex-shrink-0 p-0 opacity-0 transition-opacity duration-200 hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 dark:hover:text-red-400"
               onClick={(e) => {
                 e.stopPropagation()
                 onDiscard(job.id)
               }}
+              aria-label={`Discard ${job.title}`}
             >
               <X className="w-3.5 h-3.5" />
             </Button>
@@ -265,12 +263,12 @@ export function JobCard({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "p-3 bg-white dark:bg-zinc-900/80 border border-zinc-200 dark:border-white/[0.06] rounded-lg",
+        "p-3 bg-card dark:bg-zinc-900/80 border border-border dark:border-white/[0.06] rounded-lg",
         isDragging && "shadow-lg scale-[1.02]"
       )}
     >
-      <div className="font-medium text-sm text-zinc-900 dark:text-white truncate">{job.company || "Unknown"}</div>
-      <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 truncate max-w-[280px]" title={job.title || ''}>{job.title}</div>
+      <div className="font-medium text-sm text-foreground dark:text-white truncate">{job.company || "Unknown"}</div>
+      <div className="text-xs text-muted-foreground dark:text-zinc-400 mt-0.5 truncate max-w-[280px]" title={job.title || ''}>{job.title}</div>
     </motion.div>
   )
 }
@@ -279,10 +277,10 @@ export function JobCard({
 export function JobCardSkeleton() {
   return (
     <div className="px-3 py-2.5">
-      <div className="h-4 w-28 bg-zinc-200 dark:bg-white/[0.05] rounded animate-pulse" />
+      <div className="h-4 w-28 bg-muted dark:bg-white/[0.05] rounded animate-pulse" />
       <div className="flex items-center gap-2 mt-1">
-        <div className="h-3 w-40 bg-zinc-200 dark:bg-white/[0.05] rounded animate-pulse" />
-        <div className="h-3 w-12 bg-zinc-200 dark:bg-white/[0.05] rounded animate-pulse" />
+        <div className="h-3 w-40 bg-muted dark:bg-white/[0.05] rounded animate-pulse" />
+        <div className="h-3 w-12 bg-muted dark:bg-white/[0.05] rounded animate-pulse" />
       </div>
     </div>
   )

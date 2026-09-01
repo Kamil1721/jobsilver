@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Job, Profile, SubscriptionPlan } from '@/lib/supabase/types'
+import type { SubscriptionPlan } from '@/lib/supabase/types'
 import OpenAI from 'openai'
 import { canAccessFeature } from '@/lib/features/config'
 import { canUseAI, incrementUsage } from '@/lib/ai/usage-tracker'

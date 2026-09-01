@@ -16,10 +16,6 @@ import {
   mapJobTypeToEmploymentType,
   mapSeniorityToExperienceLevel,
   mapRemoteToWorkArrangement,
-  isSpamJob,
-  isJobFresh,
-  validateJobLocation,
-  isWorldwideRemote,
 } from '../lib/api/fantasticjobs'
 
 async function testAPI() {

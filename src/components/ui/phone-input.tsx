@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { countries, parsePhoneNumber, formatPhoneNumber, type Country } from '@/lib/data/countries'
+import { countries, parsePhoneNumber, formatPhoneNumber } from '@/lib/data/countries'
 
 interface PhoneInputProps {
   value: string

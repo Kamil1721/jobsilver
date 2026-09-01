@@ -19,13 +19,11 @@ import {
   TrendingUp,
   Zap,
   ChevronDown,
-  Settings,
   Users,
   Rocket,
   Building,
   Landmark,
   Factory,
-  Lock,
   Crown,
   DollarSign,
   RotateCcw,
@@ -133,7 +131,7 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
         {/* Section Header */}
         <div className="space-y-1">
           <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-            <Filter className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+            <Filter className="w-5 h-5 text-muted-foreground" />
             Advanced Filters
             <LockedBadge feature="advanced_filters" className="ml-1" />
           </h2>
@@ -143,9 +141,9 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
         </div>
 
         {/* Upgrade Prompt */}
-        <div className="rounded-xl border-2 border-dashed border-zinc-200 dark:border-white/[0.08] p-6 text-center">
-          <div className="mx-auto w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center mb-4">
-            <Crown className="w-6 h-6 text-white" />
+        <div className="rounded-xl border-2 border-dashed border-border p-6 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--coral-soft)]">
+            <Crown className="h-6 w-6 text-[var(--coral-lo)]" />
           </div>
 
           <h3 className="text-lg font-semibold mb-2">Upgrade to Pro for Advanced Filters</h3>
@@ -158,19 +156,19 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-left max-w-md mx-auto mb-6">
             {PRO_FILTER_FEATURES.map((feature) => (
               <div key={feature} className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-3 h-3 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[var(--coral-soft)]">
+                  <svg className="h-3 w-3 text-[var(--coral-lo)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <span className="text-zinc-600 dark:text-zinc-400">{feature}</span>
+                <span className="text-muted-foreground">{feature}</span>
               </div>
             ))}
           </div>
 
           <Button
             onClick={() => showUpgradeModal()}
-            className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white"
+            className="bg-[var(--coral)] text-[var(--coral-ink)] hover:bg-[var(--coral-hi)]"
           >
             <Crown className="w-4 h-4 mr-2" />
             Upgrade to Pro
@@ -191,9 +189,9 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-            <Filter className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+            <Filter className="w-5 h-5 text-muted-foreground" />
             Advanced Filters
-            <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs py-0">
+            <Badge className="border border-[var(--coral)]/20 bg-[var(--coral-soft)] py-0 text-xs text-[var(--coral-lo)]">
               Pro
             </Badge>
           </h2>
@@ -217,7 +215,7 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
       {/* Job Match Threshold */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <Sliders className="w-4 h-4 text-zinc-500" />
+          <Sliders className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Job Match Threshold</h3>
         </div>
 
@@ -225,7 +223,7 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
           Control how strictly jobs must match your profile. Lower threshold = more jobs.
         </p>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-3" role="group" aria-label="Job match threshold">
           {MATCH_LEVELS.map((level) => {
             const isSelected = data.match_threshold === level.id
             const Icon = level.icon
@@ -233,21 +231,23 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
             return (
               <button
                 key={level.id}
+                type="button"
                 onClick={() => onUpdate({ match_threshold: level.id })}
+                aria-pressed={isSelected}
                 className={cn(
                   "relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2",
                   isSelected
-                    ? "border-zinc-400 bg-gradient-to-br from-zinc-50 to-zinc-50 dark:from-white/[0.03] dark:to-white/[0.03]"
-                    : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-400"
+                    ? "border-[var(--coral)] bg-[var(--coral-soft)]"
+                    : "border-border hover:border-muted-foreground/40"
                 )}
               >
                 <div
                   className={cn(
                     "w-10 h-10 rounded-lg flex items-center justify-center",
                     isSelected
-                      ? "bg-gradient-to-br from-zinc-400 via-zinc-500 to-zinc-600 text-white"
-                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
+                      ? "bg-[var(--coral)] text-[var(--coral-ink)]"
+                      : "bg-secondary text-muted-foreground"
                   )}
                 >
                   <Icon className="w-5 h-5" />
@@ -255,7 +255,7 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
                 <div className="text-center">
                   <span className={cn(
                     "text-sm font-medium",
-                    isSelected ? "text-zinc-700 dark:text-zinc-300" : "text-foreground"
+                    isSelected ? "text-foreground" : "text-foreground"
                   )}>
                     {level.label}
                   </span>
@@ -272,7 +272,7 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
       {/* Seniority Level */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-zinc-500" />
+          <TrendingUp className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Seniority Level</h3>
           <span className="text-xs text-muted-foreground">(Optional - scoring only)</span>
         </div>
@@ -281,20 +281,22 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
           Prioritize jobs at specific experience levels. Non-matching jobs still appear but rank lower.
         </p>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Seniority levels">
           {SENIORITY_LEVELS.map((level) => {
             const isSelected = data.seniority_levels.includes(level.id)
 
             return (
               <button
                 key={level.id}
+                type="button"
                 onClick={() => toggleSeniority(level.id)}
+                aria-pressed={isSelected}
                 className={cn(
                   "px-4 py-2.5 rounded-full text-sm font-medium transition-all duration-200",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2",
                   isSelected
-                    ? "bg-gradient-to-r from-zinc-500 to-zinc-600 text-white shadow-md shadow-zinc-500/25"
-                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                    ? "bg-[var(--coral)] text-[var(--coral-ink)] shadow-md shadow-[var(--coral)]/25"
+                    : "bg-secondary text-muted-foreground hover:bg-accent"
                 )}
               >
                 {level.label}
@@ -307,7 +309,7 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
       {/* Company Size */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <Users className="w-4 h-4 text-zinc-500" />
+          <Users className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Company Size</h3>
           <span className="text-xs text-muted-foreground">(Optional - scoring only)</span>
         </div>
@@ -316,7 +318,7 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
           Prefer jobs at specific company sizes. All companies still appear, matching sizes rank higher.
         </p>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Company sizes">
           {COMPANY_SIZES.map((size) => {
             const isSelected = (data.company_size || []).includes(size.id)
             const Icon = size.icon
@@ -324,13 +326,15 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
             return (
               <button
                 key={size.id}
+                type="button"
                 onClick={() => toggleCompanySize(size.id)}
+                aria-pressed={isSelected}
                 className={cn(
                   "flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition-all duration-200",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2",
                   isSelected
-                    ? "bg-gradient-to-r from-zinc-500 to-zinc-600 text-white shadow-md shadow-zinc-500/25"
-                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                    ? "bg-[var(--coral)] text-[var(--coral-ink)] shadow-md shadow-[var(--coral)]/25"
+                    : "bg-secondary text-muted-foreground hover:bg-accent"
                 )}
               >
                 <Icon className="w-4 h-4" />
@@ -344,7 +348,7 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
       {/* Time Zones */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <Clock className="w-4 h-4 text-zinc-500" />
+          <Clock className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Time Zones</h3>
           <span className="text-xs text-muted-foreground">(Optional - scoring only)</span>
         </div>
@@ -355,8 +359,12 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
 
         <div className="relative">
           <button
+            type="button"
             onClick={() => setShowTimeZoneDropdown(!showTimeZoneDropdown)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-zinc-50 dark:bg-white/[0.02] rounded-xl border border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 transition-colors"
+            aria-haspopup="listbox"
+            aria-expanded={showTimeZoneDropdown}
+            aria-controls="setup-time-zone-listbox"
+            className="w-full flex items-center justify-between px-4 py-3 bg-muted rounded-xl border border-border hover:border-muted-foreground/40 transition-colors"
           >
             <span className="text-sm text-muted-foreground">
               {data.time_zones.length > 0
@@ -370,24 +378,32 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
           </button>
 
           {showTimeZoneDropdown && (
-            <div className="absolute z-50 w-full mt-1 py-2 bg-white dark:bg-[#111113] rounded-xl border border-zinc-200 dark:border-white/[0.06] shadow-lg max-h-60 overflow-auto">
+            <div
+              id="setup-time-zone-listbox"
+              role="listbox"
+              aria-label="Time zones"
+              className="absolute z-50 w-full mt-1 py-2 bg-popover rounded-xl border border-border shadow-lg max-h-60 overflow-auto"
+            >
               {TIME_ZONES.map((tz) => (
                 <button
                   key={tz}
+                  type="button"
+                  role="option"
+                  aria-selected={data.time_zones.includes(tz)}
                   className={cn(
-                    "w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-zinc-50 dark:hover:bg-white/[0.05] transition-colors",
-                    data.time_zones.includes(tz) && "bg-zinc-50 dark:bg-white/[0.05]"
+                    "w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-accent transition-colors",
+                    data.time_zones.includes(tz) && "bg-secondary"
                   )}
                   onClick={() => toggleTimeZone(tz)}
                 >
                   <div className={cn(
                     "w-5 h-5 rounded border-2 flex items-center justify-center transition-colors",
                     data.time_zones.includes(tz)
-                      ? "bg-zinc-500 border-zinc-500"
-                      : "border-zinc-300 dark:border-zinc-600"
+                      ? "bg-[var(--coral)] border-[var(--coral)]"
+                      : "border-input"
                   )}>
                     {data.time_zones.includes(tz) && (
-                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-3 h-3 text-[var(--coral-ink)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                       </svg>
                     )}
@@ -419,12 +435,14 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
             {data.time_zones.map((tz) => (
               <Badge
                 key={tz}
-                className="bg-zinc-100 text-zinc-700 dark:bg-white/[0.05] dark:text-zinc-300 pl-3 pr-1.5 py-1.5 gap-1.5"
+                className="bg-secondary text-foreground pl-3 pr-1.5 py-1.5 gap-1.5"
               >
                 {tz.split(' ')[0]}
-                <button
-                  onClick={() => toggleTimeZone(tz)}
-                  className="hover:bg-zinc-300/50 dark:hover:bg-white/[0.1] rounded-full p-0.5"
+                  <button
+                    type="button"
+                    aria-label={`Remove ${tz}`}
+                    onClick={() => toggleTimeZone(tz)}
+                  className="hover:bg-muted-foreground/20 rounded-full p-0.5"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -437,7 +455,7 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
       {/* Salary Range */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <DollarSign className="w-4 h-4 text-zinc-500" />
+          <DollarSign className="w-4 h-4 text-muted-foreground" />
           <h3 className="font-medium">Salary Range</h3>
           <span className="text-xs text-muted-foreground">(Optional - scoring only)</span>
         </div>
@@ -472,7 +490,7 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
           <select
             value={data.salary_currency || "USD"}
             onChange={(e) => onUpdate({ salary_currency: e.target.value })}
-            className="text-sm px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-[#111113]"
+            className="text-sm px-2 py-1 rounded-lg border border-border bg-card"
           >
             <option value="USD">USD</option>
             <option value="EUR">EUR</option>
@@ -508,10 +526,12 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
                   addExcludeKeyword()
                 }
               }}
-              className="bg-white dark:bg-[#111113]"
+              className="bg-card"
             />
             <button
+              type="button"
               onClick={addExcludeKeyword}
+              aria-label="Add excluded keyword"
               className="px-3 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
             >
               <Plus className="w-5 h-5" />
@@ -526,6 +546,8 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
                 >
                   {kw}
                   <button
+                    type="button"
+                    aria-label={`Remove excluded keyword ${kw}`}
                     onClick={() => onUpdate({
                       exclude_keywords: data.exclude_keywords.filter((k) => k !== kw),
                     })}
@@ -565,8 +587,10 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
             }}
           />
           <button
+            type="button"
             onClick={addExcludeCompany}
-            className="px-4 rounded-lg bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors"
+            aria-label="Add excluded company"
+            className="px-4 rounded-lg bg-secondary text-foreground hover:bg-accent transition-colors"
           >
             <Plus className="w-5 h-5" />
           </button>
@@ -578,14 +602,16 @@ export function StepJobFilters({ data, onUpdate, onReset }: StepJobFiltersProps)
               <Badge
                 key={company}
                 variant="outline"
-                className="pl-3 pr-1.5 py-1.5 gap-1.5 border-zinc-300 dark:border-zinc-600"
+                className="pl-3 pr-1.5 py-1.5 gap-1.5 border-border"
               >
                 {company}
                 <button
+                  type="button"
+                  aria-label={`Remove excluded company ${company}`}
                   onClick={() => onUpdate({
                     exclude_companies: data.exclude_companies.filter((c) => c !== company),
                   })}
-                  className="hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full p-0.5"
+                  className="hover:bg-accent rounded-full p-0.5"
                 >
                   <X className="w-3 h-3" />
                 </button>

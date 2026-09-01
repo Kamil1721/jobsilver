@@ -1,7 +1,9 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { Player } from '@remotion/player'
+import { useHydrated } from '@/hooks/use-hydrated'
+import { useReducedMotion } from '@/hooks/useReducedMotion'
 import {
   AIMatchingDemo,
   aiMatchingDemoConfig,
@@ -43,22 +45,8 @@ export const FeatureVideoPlayer: React.FC<FeatureVideoPlayerProps> = ({
   feature,
   className = '',
 }) => {
-  const [isClient, setIsClient] = useState(false)
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
-
-  useEffect(() => {
-    setIsClient(true)
-
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-    setPrefersReducedMotion(mediaQuery.matches)
-
-    const handleChange = (e: MediaQueryListEvent) => {
-      setPrefersReducedMotion(e.matches)
-    }
-
-    mediaQuery.addEventListener('change', handleChange)
-    return () => mediaQuery.removeEventListener('change', handleChange)
-  }, [])
+  const isClient = useHydrated()
+  const prefersReducedMotion = useReducedMotion()
 
   const featureData = featureConfigs[feature]
 

@@ -65,11 +65,11 @@ export function BulkActionsToolbar({
             transition={{ duration: 0.2 }}
             className="fixed top-20 left-1/2 -translate-x-1/2 z-50"
           >
-            <div className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/[0.08] rounded-xl shadow-lg">
+            <div className="flex items-center gap-3 px-4 py-2.5 bg-card dark:bg-zinc-900 border border-border dark:border-white/[0.08] rounded-xl shadow-lg">
               {/* Selection count */}
-              <div className="flex items-center gap-2 pr-3 border-r border-zinc-200 dark:border-white/[0.08]">
-                <CheckSquare className="w-4 h-4 text-cyan-500" />
-                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              <div className="flex items-center gap-2 pr-3 border-r border-border dark:border-white/[0.08]">
+                <CheckSquare className="w-4 h-4 text-[var(--coral)]" />
+                <span className="text-sm font-medium text-foreground dark:text-zinc-300">
                   {selectedCount} selected
                 </span>
               </div>
@@ -112,6 +112,7 @@ export function BulkActionsToolbar({
                 onClick={onClearSelection}
                 disabled={isProcessing}
                 className="h-8 w-8 p-0"
+                aria-label="Clear selection"
               >
                 <X className="w-4 h-4" />
               </Button>

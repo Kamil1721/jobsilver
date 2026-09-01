@@ -17,7 +17,7 @@ const TabsList = React.forwardRef<
     className={cn(
       "inline-flex items-center justify-center rounded-xl p-1.5",
       // Light mode
-      "bg-zinc-100",
+      "bg-muted",
       // Dark mode - metallic style
       "dark:bg-white/[0.03] dark:border dark:border-white/[0.06]",
       className
@@ -38,8 +38,8 @@ const TabsTrigger = React.forwardRef<
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
       "disabled:pointer-events-none disabled:opacity-50",
       // Light mode
-      "text-zinc-500 hover:text-zinc-700",
-      "data-[state=active]:text-zinc-900 data-[state=active]:bg-white data-[state=active]:shadow-sm",
+      "text-muted-foreground hover:text-foreground",
+      "data-[state=active]:text-[var(--coral-lo)] data-[state=active]:bg-card data-[state=active]:shadow-sm",
       // Dark mode
       "dark:text-zinc-500 dark:hover:text-zinc-300",
       "dark:data-[state=active]:text-white dark:data-[state=active]:bg-white/[0.08]",
@@ -78,7 +78,7 @@ function AnimatedTabs({ tabs, activeTab, onTabChange, className }: AnimatedTabsP
     <div
       className={cn(
         "inline-flex items-center p-1.5 rounded-xl",
-        "bg-zinc-100 dark:bg-white/[0.03] dark:border dark:border-white/[0.06]",
+        "bg-muted dark:bg-white/[0.03] dark:border dark:border-white/[0.06]",
         className
       )}
     >
@@ -89,14 +89,14 @@ function AnimatedTabs({ tabs, activeTab, onTabChange, className }: AnimatedTabsP
           className={cn(
             "relative px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200",
             activeTab === tab.id
-              ? "text-zinc-900 dark:text-white"
-              : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+              ? "text-[var(--coral-lo)] dark:text-white"
+              : "text-muted-foreground hover:text-foreground dark:hover:text-zinc-300"
           )}
         >
           {activeTab === tab.id && (
             <motion.div
               layoutId="animated-tab-indicator"
-              className="absolute inset-0 bg-white dark:bg-white/[0.08] rounded-lg shadow-sm dark:shadow-none dark:border dark:border-white/[0.08]"
+              className="absolute inset-0 bg-card dark:bg-white/[0.08] rounded-lg shadow-sm dark:shadow-none dark:border dark:border-white/[0.08]"
               transition={{
                 type: "spring",
                 bounce: 0.15,

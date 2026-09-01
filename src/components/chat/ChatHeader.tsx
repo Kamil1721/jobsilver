@@ -36,20 +36,20 @@ export function ChatHeader({ pageContext }: ChatHeaderProps) {
   return (
     <div
       className={cn(
-        'flex items-center justify-between px-4 py-3 border-b border-white/[0.06] flex-shrink-0',
-        'bg-gradient-to-r from-zinc-800 via-zinc-700 to-zinc-800'
+        'flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0',
+        'bg-muted'
       )}
     >
       {/* Header left side */}
       <div className="flex items-center gap-3">
         <div className="relative flex h-9 w-9 items-center justify-center rounded-lg overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-zinc-400 via-zinc-500 to-zinc-600" />
-          <div className="absolute inset-[1px] rounded-[6px] bg-gradient-to-br from-zinc-600 via-zinc-700 to-zinc-800" />
-          <Bot className="relative z-10 h-5 w-5 text-zinc-300" />
+          <div className="absolute inset-0 bg-border" />
+          <div className="absolute inset-[1px] rounded-[6px] bg-card" />
+          <Bot className="relative z-10 h-5 w-5 text-muted-foreground" />
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-white">JobSilver AI</h3>
-          <p className="text-xs text-zinc-400">
+          <h3 className="text-sm font-semibold text-foreground">JobSilver AI</h3>
+          <p className="text-xs text-muted-foreground">
             {pageContext ? `Helping with ${pageContext.title}` : 'Your AI assistant'}
           </p>
         </div>
@@ -62,7 +62,7 @@ export function ChatHeader({ pageContext }: ChatHeaderProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-white/80 hover:text-white hover:bg-white/20 transition-colors"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             >
               <GripVertical className="h-4 w-4" />
               <span className="sr-only">Chat settings</span>
@@ -76,7 +76,7 @@ export function ChatHeader({ pageContext }: ChatHeaderProps) {
                 onClick={() => setPosition(pos as ChatState['position'])}
                 className={cn(
                   'transition-colors',
-                  position === pos && 'bg-white/[0.05] text-white'
+                  position === pos && 'bg-accent text-foreground'
                 )}
               >
                 {label}
@@ -87,7 +87,7 @@ export function ChatHeader({ pageContext }: ChatHeaderProps) {
                 <DropdownMenuSeparator className="bg-border/50" />
                 <DropdownMenuItem
                   onClick={handleClearChat}
-                  className="text-red-400 focus:text-red-400 focus:bg-red-500/10"
+                  className="text-destructive focus:text-destructive focus:bg-destructive/10"
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Clear chat
@@ -102,7 +102,7 @@ export function ChatHeader({ pageContext }: ChatHeaderProps) {
           variant="ghost"
           size="icon"
           onClick={closeChat}
-          className="h-7 w-7 text-white/80 hover:text-white hover:bg-white/20 transition-colors"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
         >
           <X className="h-4 w-4" />
           <span className="sr-only">Close chat</span>

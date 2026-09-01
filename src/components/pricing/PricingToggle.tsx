@@ -24,9 +24,9 @@ export function PricingToggle({ billingCycle, onToggle }: PricingToggleProps) {
           key={option.value}
           onClick={() => onToggle(option.value)}
           className={cn(
-            "relative px-6 py-2.5 text-sm font-medium rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500/50",
+            "relative px-6 py-2.5 text-sm font-medium rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             billingCycle === option.value
-              ? "text-white"
+              ? "text-[var(--coral-ink)]"
               : "text-muted-foreground hover:text-foreground"
           )}
           aria-label={`Switch to ${option.label.toLowerCase()} billing`}
@@ -34,7 +34,7 @@ export function PricingToggle({ billingCycle, onToggle }: PricingToggleProps) {
           {billingCycle === option.value && (
             <motion.div
               layoutId="billing-toggle"
-              className="absolute inset-0 rounded-full bg-gradient-to-r from-zinc-600 to-zinc-500"
+              className="absolute inset-0 rounded-full bg-[var(--coral)]"
               transition={{
                 type: "spring",
                 stiffness: 500,
@@ -48,7 +48,7 @@ export function PricingToggle({ billingCycle, onToggle }: PricingToggleProps) {
               <span className={cn(
                 "text-[10px] mt-0.5",
                 billingCycle === option.value
-                  ? "text-white/80"
+                  ? "text-[var(--coral-ink)]/80"
                   : "text-muted-foreground"
               )}>
                 {option.subtext}

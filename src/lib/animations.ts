@@ -384,12 +384,21 @@ export const spinAnimation = {
 
 // Helper to create delay variants
 export const withDelay = (variants: Variants, delay: number): Variants => {
+  const animate =
+    variants.animate && typeof variants.animate === "object"
+      ? variants.animate
+      : {}
+  const transition =
+    animate.transition && typeof animate.transition === "object"
+      ? animate.transition
+      : {}
+
   return {
     ...variants,
     animate: {
-      ...variants.animate,
+      ...animate,
       transition: {
-        ...(variants.animate as any)?.transition,
+        ...transition,
         delay,
       },
     },

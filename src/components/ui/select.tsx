@@ -21,13 +21,13 @@ const SelectTrigger = React.forwardRef<
     className={cn(
       "flex h-9 w-full items-center justify-between rounded-lg border px-3 py-2 text-sm transition-all duration-200",
       "placeholder:text-muted-foreground",
-      "focus:outline-none focus:ring-2 focus:ring-offset-0",
+      "focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-offset-background",
       "disabled:cursor-not-allowed disabled:opacity-50",
       "[&>span]:line-clamp-1",
       // Light mode
-      "bg-white border-zinc-200 text-zinc-900",
-      "hover:border-zinc-300",
-      "focus:ring-zinc-200 focus:border-zinc-400",
+      "bg-card border-input text-foreground",
+      "hover:border-border",
+      "focus:ring-[var(--coral)] focus:border-[var(--coral)]",
       // Dark mode - metallic style
       "dark:bg-white/[0.02] dark:border-white/[0.06] dark:text-white",
       "dark:hover:border-white/[0.10]",
@@ -38,7 +38,7 @@ const SelectTrigger = React.forwardRef<
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 text-zinc-400 dark:text-zinc-500" />
+      <ChevronDown className="h-4 w-4 text-muted-foreground dark:text-zinc-500" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ))
@@ -51,7 +51,7 @@ const SelectScrollUpButton = React.forwardRef<
   <SelectPrimitive.ScrollUpButton
     ref={ref}
     className={cn(
-      "flex cursor-default items-center justify-center py-1 text-zinc-400 dark:text-zinc-500",
+      "flex cursor-default items-center justify-center py-1 text-muted-foreground dark:text-zinc-500",
       className
     )}
     {...props}
@@ -68,7 +68,7 @@ const SelectScrollDownButton = React.forwardRef<
   <SelectPrimitive.ScrollDownButton
     ref={ref}
     className={cn(
-      "flex cursor-default items-center justify-center py-1 text-zinc-400 dark:text-zinc-500",
+      "flex cursor-default items-center justify-center py-1 text-muted-foreground dark:text-zinc-500",
       className
     )}
     {...props}
@@ -94,7 +94,7 @@ const SelectContent = React.forwardRef<
         "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2",
         "data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
         // Light mode
-        "bg-white border-zinc-200 text-zinc-900",
+        "bg-popover border-border text-foreground",
         // Dark mode - metallic style
         "dark:bg-[#111113]/95 dark:backdrop-blur-xl dark:border-white/[0.06] dark:text-white",
         position === "popper" &&
@@ -127,7 +127,7 @@ const SelectLabel = React.forwardRef<
   <SelectPrimitive.Label
     ref={ref}
     className={cn(
-      "py-1.5 pl-8 pr-2 text-sm font-semibold text-zinc-500 dark:text-zinc-400",
+      "py-1.5 pl-8 pr-2 text-sm font-semibold text-muted-foreground dark:text-zinc-400",
       className
     )}
     {...props}
@@ -144,7 +144,7 @@ const SelectItem = React.forwardRef<
     className={cn(
       "relative flex w-full cursor-default select-none items-center rounded-lg py-2 pl-8 pr-2 text-sm outline-none transition-colors duration-150",
       // Light mode
-      "focus:bg-zinc-100 focus:text-zinc-900",
+      "focus:bg-accent focus:text-accent-foreground",
       // Dark mode
       "dark:focus:bg-white/[0.05] dark:focus:text-white",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
@@ -154,7 +154,7 @@ const SelectItem = React.forwardRef<
   >
     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <Check className="h-4 w-4 text-zinc-600 dark:text-zinc-300" />
+        <Check className="h-4 w-4 text-[var(--coral-lo)] dark:text-zinc-300" />
       </SelectPrimitive.ItemIndicator>
     </span>
 
@@ -169,7 +169,7 @@ const SelectSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.Separator
     ref={ref}
-    className={cn("-mx-1 my-1 h-px bg-zinc-200 dark:bg-white/[0.06]", className)}
+    className={cn("-mx-1 my-1 h-px bg-border dark:bg-white/[0.06]", className)}
     {...props}
   />
 ))

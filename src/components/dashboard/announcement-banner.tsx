@@ -18,15 +18,15 @@ type DismissedRecord = Record<string, string>
 function getTypeStyles(type: AnnouncementType): string {
   switch (type) {
     case 'info':
-      return 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20'
+      return 'bg-muted text-foreground border-border'
     case 'warning':
       return 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20'
     case 'promo':
-      return 'bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20'
+      return 'bg-[var(--coral-soft)] text-[var(--coral)] border-[var(--coral)]/20'
     case 'maintenance':
       return 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-500/20'
     default:
-      return 'bg-zinc-50 dark:bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-200 dark:border-zinc-500/20'
+      return 'bg-muted text-foreground border-border'
   }
 }
 
@@ -106,19 +106,20 @@ export function AnnouncementBanner({ plan }: AnnouncementBannerProps) {
   return (
     <div
       className={cn(
-        "flex items-center gap-3 px-4 py-2.5 rounded-xl text-base font-medium border overflow-hidden min-w-[600px] max-w-3xl",
+        "flex w-full min-w-0 max-w-3xl items-center gap-3 overflow-hidden rounded-xl border px-3 py-2.5 text-sm font-medium sm:px-4 sm:text-base",
         getTypeStyles(currentAnnouncement.type)
       )}
     >
       {/* Scrolling area - takes available space */}
       <div className="flex-1 overflow-hidden">
-        <span className="inline-block whitespace-nowrap animate-marquee motion-reduce:animate-none">
+        <span className="inline-block whitespace-nowrap animate-marquee motion-reduce:block motion-reduce:whitespace-normal motion-reduce:animate-none">
           {currentAnnouncement.message}
         </span>
       </div>
 
       {/* Dismiss button - always visible on the right */}
       <button
+        type="button"
         onClick={() => dismissAnnouncement(currentAnnouncement)}
         className="shrink-0 p-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
         aria-label="Dismiss announcement"

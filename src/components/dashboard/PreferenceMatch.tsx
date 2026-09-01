@@ -43,10 +43,10 @@ function getScoreTheme(score: number) {
 
   if (percentage >= 85) {
     return {
-      bg: "bg-emerald-500/10 dark:bg-emerald-500/15",
-      border: "border-emerald-500/20 dark:border-emerald-500/30",
-      text: "text-emerald-700 dark:text-emerald-400",
-      glow: "shadow-emerald-500/10",
+      bg: "bg-[var(--coral-soft)]",
+      border: "border-[var(--coral-soft)]",
+      text: "text-[var(--coral-lo)]",
+      glow: "shadow-[var(--coral-soft)]",
       label: "Excellent match",
     }
   } else if (percentage >= 70) {
@@ -67,9 +67,9 @@ function getScoreTheme(score: number) {
     }
   } else {
     return {
-      bg: "bg-zinc-500/10 dark:bg-zinc-500/15",
-      border: "border-zinc-500/20 dark:border-zinc-500/30",
-      text: "text-zinc-600 dark:text-zinc-400",
+      bg: "bg-muted dark:bg-zinc-500/15",
+      border: "border-border dark:border-zinc-500/30",
+      text: "text-muted-foreground dark:text-zinc-400",
       glow: "shadow-zinc-500/10",
       label: "Partial match",
     }
@@ -111,7 +111,7 @@ export function PreferenceMatch({
       whileTap={{ scale: 0.98 }}
     >
       <Sparkles className={cn(config.icon, "flex-shrink-0")} />
-      <span className="font-semibold">{percentage}%</span>
+      <span className="font-semibold tabular-nums">{percentage}%</span>
       {showReasons && reasons.length > 0 && (
         <motion.div
           animate={{ rotate: isExpanded ? 180 : 0 }}
@@ -137,14 +137,14 @@ export function PreferenceMatch({
               transition={{ duration: 0.2 }}
               className={cn(
                 "absolute top-full left-0 mt-1 z-50 min-w-[200px] p-2 rounded-lg border shadow-lg",
-                "bg-white dark:bg-zinc-900",
-                "border-zinc-200 dark:border-white/[0.08]"
+                "bg-popover dark:bg-zinc-900",
+                "border-border dark:border-white/[0.08]"
               )}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center gap-1.5 mb-2 px-1">
-                <Target className="w-3 h-3 text-zinc-500" />
-                <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                <Target className="w-3 h-3 text-muted-foreground" />
+                <span className="text-[10px] font-medium text-muted-foreground dark:text-zinc-400 uppercase tracking-wider">
                   {theme.label}
                 </span>
               </div>
@@ -155,7 +155,7 @@ export function PreferenceMatch({
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    className="flex items-start gap-1.5 text-xs text-zinc-600 dark:text-zinc-300"
+                    className="flex items-start gap-1.5 text-xs text-muted-foreground dark:text-zinc-300"
                   >
                     <Check className="w-3 h-3 flex-shrink-0 mt-0.5 text-emerald-500" />
                     <span>{reason}</span>
@@ -194,7 +194,7 @@ export function PreferenceMatch({
               {reasons.map((reason, index) => (
                 <li
                   key={index}
-                  className="flex items-start gap-1.5 text-xs text-zinc-600 dark:text-zinc-300"
+                  className="flex items-start gap-1.5 text-xs text-muted-foreground dark:text-zinc-300"
                 >
                   <Check className="w-3 h-3 flex-shrink-0 mt-0.5 text-emerald-500" />
                   <span>{reason}</span>

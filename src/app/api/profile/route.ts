@@ -65,7 +65,6 @@ const jobFiltersSchema = z.object({
 // Zod schema for profile update validation
 const profileUpdateSchema = z.object({
   full_name: z.string().max(100).optional(),
-  email: z.string().email().max(255).optional(),
   phone: z.string().max(30).optional().nullable(),
   location: z.string().max(200).optional().nullable(),
   job_filters: jobFiltersSchema.optional().nullable(),
@@ -152,14 +151,13 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const { full_name, email, phone, location, job_filters } = validationResult.data
+    const { full_name, phone, location, job_filters } = validationResult.data
 
     const { data: profile, error } = await supabase
       .from('profiles')
       .upsert({
         id: user.id,
         full_name,
-        email: email || user.email,
         phone,
         location,
         job_filters,

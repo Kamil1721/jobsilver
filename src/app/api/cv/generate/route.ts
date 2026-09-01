@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { checkRateLimit } from '@/lib/security/rate-limit'
 import { mapParsedCVToScreeningAnswers, type ParsedCV } from '@/lib/cv/data-mapper'
 import { tailorCVForJob, shouldUseAITailoring, sanitizeAIOutput } from '@/lib/cv/ai-tailor'
-import type { ScreeningAnswers, Json, AllSubscriptionPlans } from '@/lib/supabase/types'
+import type { ScreeningAnswers, Json } from '@/lib/supabase/types'
 import { canUseAI, incrementUsage } from '@/lib/ai/usage-tracker'
 
 export const dynamic = 'force-dynamic'
@@ -101,8 +101,11 @@ async function generateCVLocally(
 }
 
 export async function POST(request: NextRequest) {
+  let releaseFirstGenerationClaim: (() => Promise<void>) | null = null
+
   try {
     const supabase = await createClient()
+    const serviceClient = createServiceClient()
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
@@ -119,34 +122,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if this is first-time setup (user hasn't generated a CV yet)
-    // First CV generation is free for all users to complete onboarding
-    const { data: profileForSetup } = await supabase
-      .from('profiles')
-      .select('cv_is_generated')
-      .eq('id', user.id)
-      .single()
-
-    const isFirstTimeSetup = !profileForSetup?.cv_is_generated
-
-    // Check plan-based CV generation limit
-    // In 3-tier model: Free=0/day, Pro=3/day, Ultra=unlimited
-    // EXCEPTION: First CV generation during setup is always free
-    if (!isFirstTimeSetup) {
-      const cvAccessCheck = await canUseAI(user.id, supabase as unknown as Parameters<typeof canUseAI>[1], 'cv_generations')
-      if (!cvAccessCheck.allowed) {
-        return NextResponse.json(
-          {
-            error: cvAccessCheck.message || 'CV generation limit reached',
-            suggestUpgrade: cvAccessCheck.suggestUpgrade,
-          },
-          { status: 403 }
-        )
-      }
-    }
-
     const body = await request.json() as GenerateRequest
-    let { screeningAnswers, jobContext, quickGenerate, aiTailor } = body
+    let { screeningAnswers, aiTailor } = body
+    const { jobContext, quickGenerate } = body
 
     // Default aiTailor to true when job context is provided
     if (aiTailor === undefined && jobContext) {
@@ -264,6 +242,67 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Atomically reserve the one free onboarding generation. The entitlement
+    // flag is server-managed and never reset by upload/delete operations.
+    const { data: claimedProfile, error: claimError } = await serviceClient
+      .from('profiles')
+      .update({
+        cv_is_generated: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id)
+      .or('cv_is_generated.is.null,cv_is_generated.eq.false')
+      .select('cv_url')
+      .maybeSingle()
+
+    if (claimError) {
+      console.error('CV generation entitlement claim failed:', claimError)
+      return NextResponse.json(
+        { error: 'Failed to verify CV generation access' },
+        { status: 500 }
+      )
+    }
+
+    const isFirstTimeSetup = Boolean(claimedProfile)
+
+    if (claimedProfile) {
+      const previousCvUrl = claimedProfile.cv_url
+      releaseFirstGenerationClaim = async () => {
+        let releaseQuery = serviceClient
+          .from('profiles')
+          .update({
+            cv_is_generated: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id)
+          .eq('cv_is_generated', true)
+
+        releaseQuery = previousCvUrl
+          ? releaseQuery.eq('cv_url', previousCvUrl)
+          : releaseQuery.is('cv_url', null)
+
+        const { error: releaseError } = await releaseQuery
+        if (releaseError) {
+          console.error('Failed to release CV generation entitlement claim:', releaseError)
+        }
+      }
+    } else {
+      const cvAccessCheck = await canUseAI(
+        user.id,
+        serviceClient as unknown as Parameters<typeof canUseAI>[1],
+        'cv_generations'
+      )
+      if (!cvAccessCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: cvAccessCheck.message || 'CV generation limit reached',
+            suggestUpgrade: cvAccessCheck.suggestUpgrade,
+          },
+          { status: 403 }
+        )
+      }
+    }
+
     // Build phone number with country code
     const phone = screeningAnswers.phone_country_code && screeningAnswers.phone_number
       ? `${screeningAnswers.phone_country_code} ${screeningAnswers.phone_number}`
@@ -352,6 +391,8 @@ export async function POST(request: NextRequest) {
       pdfBytes = await generateCVLocally(sanitizedCVData, jobContext, aiTailor)
     } catch (genError) {
       console.error('PDF generation error:', genError)
+      await releaseFirstGenerationClaim?.()
+      releaseFirstGenerationClaim = null
       return NextResponse.json(
         { error: 'Failed to generate CV PDF' },
         { status: 500 }
@@ -374,6 +415,8 @@ export async function POST(request: NextRequest) {
 
     if (uploadError) {
       console.error('Upload error:', uploadError)
+      await releaseFirstGenerationClaim?.()
+      releaseFirstGenerationClaim = null
       return NextResponse.json(
         { error: 'Failed to upload generated CV' },
         { status: 500 }
@@ -382,7 +425,7 @@ export async function POST(request: NextRequest) {
 
     // Update profile with CV URL and set cv_is_generated flag (only if not job-specific)
     if (!jobContext) {
-      const { error: updateError } = await supabase
+      const { error: updateError } = await serviceClient
         .from('profiles')
         .upsert({
           id: user.id,
@@ -393,6 +436,9 @@ export async function POST(request: NextRequest) {
 
       if (updateError) {
         console.error('Profile update error:', updateError)
+        await supabase.storage.from('cvs').remove([uploadData.path])
+        await releaseFirstGenerationClaim?.()
+        releaseFirstGenerationClaim = null
         return NextResponse.json(
           { error: 'Failed to update profile' },
           { status: 500 }
@@ -400,10 +446,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // The generated artifact is now durable. Do not release the reservation
+    // if later best-effort preview or form-persistence work fails.
+    releaseFirstGenerationClaim = null
+
     // Get signed URL for the generated CV
-    const { data: signedUrlData } = await supabase.storage
-      .from('cvs')
-      .createSignedUrl(uploadData.path, 3600) // 1 hour expiry
+    let signedUrl: string | undefined
+    try {
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+        .from('cvs')
+        .createSignedUrl(uploadData.path, 3600) // 1 hour expiry
+
+      if (signedUrlError) {
+        console.warn('Failed to create generated CV preview URL:', signedUrlError)
+      } else {
+        signedUrl = signedUrlData?.signedUrl
+      }
+    } catch (signedUrlError) {
+      console.warn('Failed to create generated CV preview URL:', signedUrlError)
+    }
 
     // Save work_history, education, and skills to screening_answers for persistence
     // This ensures user data is pre-filled next time they open the CV generator
@@ -458,7 +519,11 @@ export async function POST(request: NextRequest) {
     // Increment CV generation usage (skip for free first-time setup generation)
     if (!isFirstTimeSetup) {
       try {
-        await incrementUsage(user.id, 'cv_generations', supabase as unknown as Parameters<typeof incrementUsage>[2])
+        await incrementUsage(
+          user.id,
+          'cv_generations',
+          serviceClient as unknown as Parameters<typeof incrementUsage>[2]
+        )
       } catch (usageError) {
         console.error('Failed to increment CV generation usage:', usageError)
         // Don't fail the request if usage tracking fails
@@ -468,13 +533,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       cv_url: uploadData.path,
-      signed_url: signedUrlData?.signedUrl,
+      signed_url: signedUrl,
       message: 'CV generated successfully',
       warning: dataSaveWarning,
     })
 
   } catch (error) {
     console.error('CV generation error:', error)
+    await releaseFirstGenerationClaim?.()
     return NextResponse.json(
       { error: 'Failed to generate CV' },
       { status: 500 }

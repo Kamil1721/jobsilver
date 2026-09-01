@@ -12,7 +12,6 @@ import {
   addMessage,
   updateMessage,
   setStreaming,
-  clearMessages,
 } from '@/hooks/use-chat'
 import {
   onSetJobContext,
@@ -34,8 +33,6 @@ interface ChatProviderProps {
 
 // Maximum message length to prevent API abuse
 const MAX_MESSAGE_LENGTH = 4000
-// Maximum messages to keep in history (to prevent memory issues)
-const MAX_MESSAGES = 50
 // Stream timeout - abort if no data received for 60 seconds
 const STREAM_TIMEOUT_MS = 60000
 

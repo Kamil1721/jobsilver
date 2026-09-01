@@ -173,7 +173,7 @@ export function checkRateLimit(
  */
 export async function checkRateLimitDistributed(
   supabase: {
-    rpc: (fn: string, params: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>
+    rpc: (fn: string, params: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }>
   },
   identifier: string,
   config: RateLimitConfig,

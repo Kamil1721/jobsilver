@@ -164,7 +164,6 @@ function scoreSalaryMatch(
 
   // Calculate how well the job salary fits the preference range
   if (prefMin !== null && prefMax !== null) {
-    const prefMid = (prefMin + prefMax) / 2
     const prefRange = prefMax - prefMin
 
     if (jobSalary >= prefMin && jobSalary <= prefMax) {
@@ -293,8 +292,8 @@ function scoreKeywordMatch(
 
   let positiveScore = 0
   let negativeScore = 0
-  let positiveMatches: string[] = []
-  let negativeMatches: string[] = []
+  const positiveMatches: string[] = []
+  const negativeMatches: string[] = []
 
   for (const keyword of keywordKeys) {
     const weight = weights[keyword] as number

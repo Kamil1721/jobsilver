@@ -59,8 +59,8 @@ const PLAN_DETAILS: Record<
   free: {
     name: "Free",
     icon: Zap,
-    color: "text-zinc-600 dark:text-zinc-400",
-    bgColor: "bg-zinc-100 dark:bg-zinc-800",
+    color: "text-[var(--dawn-ink-2)]",
+    bgColor: "bg-[var(--dawn-cream)]",
     description: "Basic job search",
     jobsPerDay: 3,
     aiInfo: "No AI access",
@@ -77,8 +77,8 @@ const PLAN_DETAILS: Record<
   starter: {
     name: "Starter",
     icon: Sparkles,
-    color: "text-blue-600 dark:text-blue-400",
-    bgColor: "bg-blue-100 dark:bg-blue-900/30",
+    color: "text-[var(--coral-lo)]",
+    bgColor: "bg-[var(--coral-soft)]",
     description: "Legacy plan",
     jobsPerDay: 10,
     aiInfo: "Limited AI access",
@@ -90,8 +90,8 @@ const PLAN_DETAILS: Record<
   pro: {
     name: "Pro",
     icon: Rocket,
-    color: "text-violet-600 dark:text-violet-400",
-    bgColor: "bg-violet-100 dark:bg-violet-900/30",
+    color: "text-[var(--coral-lo)]",
+    bgColor: "bg-[var(--coral-soft)]",
     description: "AI assistance with daily limits",
     jobsPerDay: 15,
     aiInfo: "30 AI responses/day",
@@ -110,8 +110,8 @@ const PLAN_DETAILS: Record<
   ultra: {
     name: "Ultra",
     icon: Crown,
-    color: "text-amber-600 dark:text-amber-400",
-    bgColor: "bg-amber-100 dark:bg-amber-900/30",
+    color: "text-[var(--coral-lo)]",
+    bgColor: "bg-[var(--coral-soft)]",
     description: "Unlimited AI for power users",
     jobsPerDay: 35,
     aiInfo: "Unlimited AI",
@@ -130,8 +130,10 @@ const PLAN_DETAILS: Record<
 }
 
 export function SubscriptionManagement({ userId }: SubscriptionManagementProps) {
+  void userId
   const [subscription, setSubscription] = React.useState<SubscriptionInfo | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
+  const [referenceTime] = React.useState(() => Date.now())
   const router = useRouter()
 
   // Fetch subscription info
@@ -191,7 +193,7 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
     return (
       <Card>
         <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </CardContent>
       </Card>
     )
@@ -213,7 +215,7 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
     ? Math.max(
         0,
         Math.ceil(
-          (new Date(subscription.trialEnd).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+          (new Date(subscription.trialEnd).getTime() - referenceTime) / (1000 * 60 * 60 * 24)
         )
       )
     : 0
@@ -223,7 +225,7 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
     ? Math.max(
         0,
         Math.ceil(
-          (new Date(subscription.currentPeriodEnd).getTime() - Date.now()) /
+          (new Date(subscription.currentPeriodEnd).getTime() - referenceTime) /
             (1000 * 60 * 60 * 24)
         )
       )
@@ -233,7 +235,7 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <CreditCard className="w-5 h-5 text-zinc-500" />
+          <CreditCard className="w-5 h-5 text-muted-foreground" />
           Subscription
         </CardTitle>
         <CardDescription>Manage your plan and billing</CardDescription>
@@ -242,9 +244,7 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
         {/* Current Plan Display */}
         <div
           className={cn(
-            "p-4 rounded-xl border",
-            planInfo.bgColor,
-            "border-transparent"
+            "rounded-2xl border border-[var(--coral)]/25 bg-[var(--coral-soft)] p-4 sm:p-5"
           )}
         >
           <div className="flex items-start justify-between">
@@ -253,8 +253,8 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
                 className={cn(
                   "w-12 h-12 rounded-xl flex items-center justify-center",
                   isFreePlan
-                    ? "bg-zinc-200 dark:bg-zinc-700"
-                    : "bg-white/50 dark:bg-black/20"
+                    ? "bg-[var(--dawn-surface)]"
+                    : "bg-card/70"
                 )}
               >
                 <PlanIcon className={cn("w-6 h-6", planInfo.color)} />
@@ -265,7 +265,7 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
                   {subscription.isTester && (
                     <Badge
                       variant="outline"
-                      className="gap-1 bg-violet-100 dark:bg-violet-900/30 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300"
+                      className="gap-1 border-[var(--coral)]/20 bg-[var(--coral-soft)] text-[var(--coral-lo)]"
                     >
                       <FlaskConical className="w-3 h-3" />
                       Tester
@@ -274,7 +274,7 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
                   {isTrialing && (
                     <Badge
                       variant="outline"
-                      className="gap-1 bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300"
+                      className="gap-1 border-[var(--coral)]/20 bg-[var(--coral-soft)] text-[var(--coral-lo)]"
                     >
                       <Clock className="w-3 h-3" />
                       Trial
@@ -294,7 +294,7 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
                     {planInfo.jobsPerDay} jobs/day
                   </span>
                   {!isFreePlan && (
-                    <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                    <span className="flex items-center gap-1 text-[var(--coral-lo)]">
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       {planInfo.aiInfo}
                     </span>
@@ -311,9 +311,9 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
         </div>
 
         {/* Features List */}
-        <div className="space-y-2">
+        <div className="space-y-3">
           <h4 className="text-sm font-medium text-muted-foreground">Plan Features</h4>
-          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
             {planInfo.features.map((feature, i) => (
               <li
                 key={i}
@@ -323,7 +323,7 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
                 )}
               >
                 {feature.included ? (
-                  <div className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                  <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-[var(--coral-soft)] text-[var(--coral-lo)]">
                     <Check className="w-2.5 h-2.5" strokeWidth={3} />
                   </div>
                 ) : (
@@ -339,15 +339,15 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
 
         {/* Trial Warning */}
         {isTrialing && trialDaysRemaining > 0 && (
-          <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800">
+          <div className="rounded-xl border border-[var(--coral)]/25 bg-[var(--coral-soft)] p-4">
             <div className="flex items-start gap-3">
-              <Clock className="w-5 h-5 text-amber-600 mt-0.5" />
+              <Clock className="mt-0.5 h-5 w-5 text-[var(--coral-lo)]" />
               <div>
-                <p className="font-medium text-amber-800 dark:text-amber-200">
+                <p className="font-medium text-[var(--dawn-ink)]">
                   {trialDaysRemaining} day{trialDaysRemaining !== 1 ? "s" : ""}{" "}
                   left in your trial
                 </p>
-                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                <p className="mt-1 text-sm text-[var(--dawn-ink-2)]">
                   Your card will be charged when the trial ends.
                 </p>
               </div>
@@ -375,14 +375,14 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
 
         {/* Canceling Notice */}
         {isCanceling && subscription.currentPeriodEnd && (
-          <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700">
+          <div className="p-4 bg-muted rounded-xl border border-border">
             <div className="flex items-start gap-3">
-              <Calendar className="w-5 h-5 text-zinc-600 mt-0.5" />
+              <Calendar className="w-5 h-5 text-muted-foreground mt-0.5" />
               <div>
-                <p className="font-medium text-zinc-800 dark:text-zinc-200">
+                <p className="font-medium text-foreground">
                   Subscription ending
                 </p>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
+                <p className="text-sm text-muted-foreground mt-1">
                   Your subscription will end on{" "}
                   {new Date(subscription.currentPeriodEnd).toLocaleDateString()}.
                   You can reactivate anytime before then.
@@ -394,7 +394,7 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
 
         {/* Billing Info */}
         {!isFreePlan && !subscription.isTester && subscription.currentPeriodEnd && (
-          <div className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-white/[0.02] rounded-lg border border-zinc-200 dark:border-white/[0.06]">
+          <div className="flex items-center justify-between p-3 bg-muted rounded-lg border border-border">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Calendar className="w-4 h-4" />
               <span>
@@ -412,16 +412,16 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
 
         {/* Tester Notice */}
         {subscription.isTester && (
-          <div className="p-4 bg-violet-50 dark:bg-violet-900/20 rounded-xl border border-violet-200 dark:border-violet-800">
+          <div className="rounded-xl border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-4">
             <div className="flex items-start gap-3">
-              <FlaskConical className="w-5 h-5 text-violet-600 mt-0.5" />
+              <FlaskConical className="mt-0.5 h-5 w-5 text-[var(--coral-lo)]" />
               <div>
-                <p className="font-medium text-violet-800 dark:text-violet-200">
+                <p className="font-medium text-[var(--dawn-ink)]">
                   Beta Tester Access
                 </p>
-                <p className="text-sm text-violet-700 dark:text-violet-300 mt-1">
+                <p className="mt-1 text-sm text-[var(--dawn-ink-2)]">
                   You have free access to all Ultra plan features as a beta
-                  tester. Thank you for helping us improve!
+                  tester. Thank you for helping us improve.
                 </p>
               </div>
             </div>
@@ -434,7 +434,7 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
             <Button
               onClick={handleUpgrade}
               className={isFreePlan
-                ? "flex-1 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white/10 dark:hover:bg-white/20"
+                ? "flex-1 bg-[var(--coral)] text-[var(--coral-ink)] hover:bg-[var(--coral-hi)] active:bg-[var(--coral-active)]"
                 : "flex-1"
               }
               variant={isFreePlan ? "default" : "outline"}

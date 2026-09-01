@@ -7,28 +7,28 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default:
           "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98]",
         destructive:
-          "bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 active:scale-[0.98]",
+          "bg-red-500/10 text-red-600 border border-red-500/20 hover:bg-red-500/20 active:scale-[0.98]",
         outline:
-          "border bg-transparent hover:bg-white/[0.03] active:scale-[0.98] dark:border-white/[0.08] dark:hover:border-white/[0.12] dark:text-zinc-300 dark:hover:text-white",
+          "border border-input bg-background hover:bg-accent active:scale-[0.98] dark:border-white/[0.08] dark:hover:border-white/[0.12] dark:text-zinc-300 dark:hover:text-white",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-[0.98] dark:bg-white/[0.05] dark:hover:bg-white/[0.08]",
         ghost:
-          "hover:bg-white/[0.05] hover:text-foreground dark:text-zinc-400 dark:hover:text-white",
+          "hover:bg-accent hover:text-foreground dark:text-zinc-400 dark:hover:text-white",
         link:
-          "text-zinc-400 underline-offset-4 hover:underline hover:text-white",
+          "text-[var(--coral-lo)] underline-offset-4 hover:underline",
         // Metallic silver button - primary action
         metallic:
-          "relative overflow-hidden text-zinc-200 hover:text-white active:scale-[0.98]",
+          "relative overflow-hidden text-foreground active:scale-[0.98]",
         // White button for CTAs on dark backgrounds
         white:
-          "bg-white text-zinc-900 hover:bg-zinc-100 active:scale-[0.98]",
+          "bg-card text-foreground border border-border hover:bg-secondary active:scale-[0.98]",
       },
       size: {
         default: "h-9 px-4 py-2",
@@ -67,11 +67,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           {...props}
         >
           {/* Outer gradient border */}
-          <div className="absolute inset-0 bg-gradient-to-r from-zinc-700 via-zinc-600 to-zinc-700 transition-all duration-300 group-hover:scale-[1.02]" />
-          {/* Inner dark layer */}
-          <div className="absolute inset-[1px] bg-gradient-to-b from-zinc-800 to-zinc-900 rounded-[10px]" />
+          <div className="absolute inset-0 bg-gradient-to-r from-border via-muted-foreground/30 to-border transition-all duration-300 group-hover:scale-[1.02]" />
+          {/* Inner light layer */}
+          <div className="absolute inset-[1px] bg-gradient-to-b from-card to-secondary rounded-[10px]" />
           {/* Top shine highlight */}
-          <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/5" />
+          <div className="absolute inset-0 bg-gradient-to-t from-transparent to-white/40" />
           {/* Content */}
           <span className="relative z-10 flex items-center gap-2">
             {children}

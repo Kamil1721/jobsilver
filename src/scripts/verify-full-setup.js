@@ -33,7 +33,7 @@ async function verify() {
 
   // Check if screening_answers column exists
   console.log('\nProfile Columns:');
-  const { data: profileData, error: profileError } = await supabase
+  const { error: profileError } = await supabase
     .from('profiles')
     .select('id, job_filters, screening_answers')
     .limit(1);

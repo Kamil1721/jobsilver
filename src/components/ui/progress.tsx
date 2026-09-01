@@ -14,7 +14,7 @@ const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
       className={cn(
         "relative h-2 w-full overflow-hidden rounded-full",
         // Light mode
-        "bg-zinc-200",
+        "bg-muted",
         // Dark mode
         "dark:bg-white/[0.05]",
         className
@@ -29,7 +29,7 @@ const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
         className={cn(
           "h-full transition-all duration-200",
           // Light mode
-          "bg-zinc-900",
+          "bg-[var(--coral)]",
           // Dark mode - metallic
           "dark:bg-gradient-to-r dark:from-zinc-400 dark:via-zinc-300 dark:to-zinc-400"
         )}

@@ -3,16 +3,49 @@
 import * as React from "react"
 import { Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { motion, MotionConfig } from "framer-motion"
 import { Loader2 } from "lucide-react"
 import { createCheckoutSession, BillingCycle } from "@/lib/stripe/browser"
 
 function LoadingSpinner() {
   return (
-    <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center">
-      <div className="text-center">
-        <Loader2 className="w-8 h-8 animate-spin text-zinc-400 mx-auto mb-4" />
-        <p className="text-zinc-400">Redirecting to checkout...</p>
-      </div>
+    <div
+      className="relative flex min-h-screen items-center justify-center overflow-hidden px-[var(--dawn-gutter)]"
+      style={{ background: "var(--dawn-bg)", color: "var(--dawn-ink)" }}
+    >
+      {/* Soft coral wash — same system as the tester page, decorative only */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px]"
+        style={{
+          background:
+            "radial-gradient(60% 100% at 50% 0%, var(--coral-soft) 0%, rgba(252,233,226,0) 70%)",
+        }}
+      />
+
+      <MotionConfig reducedMotion="user">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="text-center"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", bounce: 0.35, duration: 0.6, delay: 0.05 }}
+            className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--coral-soft)]"
+          >
+            <Loader2 className="h-7 w-7 animate-spin text-[var(--coral)]" aria-hidden="true" />
+          </motion.div>
+          <h1 className="text-[22px] font-semibold leading-[1.18] tracking-[-0.02em] text-[var(--dawn-ink)]">
+            Taking you to checkout&hellip;
+          </h1>
+          <p className="mt-2 text-[15px] leading-[1.6] text-[var(--dawn-ink-2)]">
+            One moment while we open a secure Stripe session.
+          </p>
+        </motion.div>
+      </MotionConfig>
     </div>
   )
 }
@@ -53,12 +86,30 @@ function CheckoutRedirectContent() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-400 mb-4">{error}</p>
+      <div
+        className="relative flex min-h-screen items-center justify-center overflow-hidden px-[var(--dawn-gutter)]"
+        style={{ background: "var(--dawn-bg)", color: "var(--dawn-ink)" }}
+      >
+        {/* Soft coral wash — same system as the tester page, decorative only */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px]"
+          style={{
+            background:
+              "radial-gradient(60% 100% at 50% 0%, var(--coral-soft) 0%, rgba(252,233,226,0) 70%)",
+          }}
+        />
+
+        <div className="w-full max-w-sm rounded-[16px] border border-[var(--dawn-line)] bg-[var(--dawn-surface)] p-9 text-center shadow-[0_1px_2px_rgba(31,27,24,0.04)]">
+          <h1 className="text-balance text-[22px] font-semibold leading-[1.18] tracking-[-0.02em] text-[var(--dawn-ink)]">
+            We couldn&rsquo;t start checkout
+          </h1>
+          <p className="mx-auto mt-2 max-w-[38ch] text-[15px] leading-[1.6] text-[var(--dawn-ink-2)]">
+            {error}
+          </p>
           <button
             onClick={() => router.push("/pricing")}
-            className="text-zinc-400 hover:text-white underline"
+            className="mt-6 inline-flex min-h-[44px] items-center justify-center rounded-full bg-[var(--coral)] px-6 text-[14px] font-medium text-[var(--coral-ink)] transition-[background-color,transform] duration-200 hover:bg-[var(--coral-hi)] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-surface)]"
           >
             Return to pricing
           </button>

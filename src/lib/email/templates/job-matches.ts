@@ -29,7 +29,7 @@ export async function sendJobMatchesEmail({
   topMatches,
   date,
 }: JobMatchesEmailParams): Promise<EmailResult> {
-  const { appName, appUrl } = EMAIL_CONFIG
+  const { appUrl } = EMAIL_CONFIG
   const firstName = userName.split(' ')[0] || 'there'
   const formattedDate = date || new Date().toLocaleDateString('en-US', {
     weekday: 'long',

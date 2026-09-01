@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       requireVercelInProduction: true,
     })
 
-    let isInternalCall = internalAuth.valid
+    const isInternalCall = internalAuth.valid
 
     // If not internal call, require admin user authentication
     if (!isInternalCall) {

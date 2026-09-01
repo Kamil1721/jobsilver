@@ -96,10 +96,17 @@ export function ReportProblemDialog({
 
   // Reset form when dialog opens
   React.useEffect(() => {
+    let cancelled = false
     if (open) {
-      setReportType("")
-      setTitle("")
-      setDescription("")
+      queueMicrotask(() => {
+        if (cancelled) return
+        setReportType("")
+        setTitle("")
+        setDescription("")
+      })
+    }
+    return () => {
+      cancelled = true
     }
   }, [open])
 

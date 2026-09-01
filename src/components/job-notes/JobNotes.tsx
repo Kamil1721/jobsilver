@@ -34,8 +34,15 @@ export function JobNotes({ jobId, initialNotes, onNotesChange }: JobNotesProps) 
 
   // Sync with initialNotes prop changes (e.g., parent refetch)
   React.useEffect(() => {
-    setNotes(initialNotes || '')
-    setSavedNotes(initialNotes || '')
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) return
+      setNotes(initialNotes || '')
+      setSavedNotes(initialNotes || '')
+    })
+    return () => {
+      cancelled = true
+    }
   }, [initialNotes])
 
   // Cleanup on unmount
@@ -55,7 +62,7 @@ export function JobNotes({ jobId, initialNotes, onNotesChange }: JobNotesProps) 
     }
   }, [])
 
-  const saveNotes = React.useCallback(async (notesToSave: string) => {
+  async function saveNotes(notesToSave: string) {
     if (!isMountedRef.current) return
 
     // Prevent concurrent saves - queue the latest value
@@ -143,9 +150,9 @@ export function JobNotes({ jobId, initialNotes, onNotesChange }: JobNotesProps) 
         saveNotes(pending)
       }
     }
-  }, [jobId, onNotesChange, toast])
+  }
 
-  const handleNotesChange = React.useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value
     setNotes(newValue)
 
@@ -158,9 +165,9 @@ export function JobNotes({ jobId, initialNotes, onNotesChange }: JobNotesProps) 
     debounceRef.current = setTimeout(() => {
       saveNotes(newValue)
     }, 2000)
-  }, [saveNotes])
+  }
 
-  const handleBlur = React.useCallback(() => {
+  const handleBlur = () => {
     // Save immediately on blur if there are unsaved changes and not already saving
     if (notes !== savedNotes && !isSavingRef.current) {
       if (debounceRef.current) {
@@ -168,14 +175,14 @@ export function JobNotes({ jobId, initialNotes, onNotesChange }: JobNotesProps) 
       }
       saveNotes(notes)
     }
-  }, [notes, savedNotes, saveNotes])
+  }
 
-  const handleManualSave = React.useCallback(() => {
+  const handleManualSave = () => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current)
     }
     saveNotes(notes)
-  }, [notes, saveNotes])
+  }
 
   return (
     <div className="mt-4">

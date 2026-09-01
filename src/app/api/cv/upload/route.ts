@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { parseCV, extractTextFromFile } from '@/lib/ai/cv-parser'
 import { checkRateLimit } from '@/lib/security/rate-limit'
+import type { Json } from '@/lib/supabase/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +23,24 @@ function sanitizeFileName(fileName: string): string {
   // Fallback if sanitization produced empty name (e.g., non-Latin filenames)
   const baseName = sanitized || 'cv'
   return `${baseName}.${ext}`
+}
+
+const UNREADABLE_CV_ERROR = 'Unable to read CV content. Please upload a valid PDF, DOCX, or TXT file.'
+
+function hasReadableCvText(text: string): boolean {
+  return text.trim().length > 0 && /[\p{L}\p{N}]/u.test(text)
+}
+
+async function removeCvObject(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  path: string
+): Promise<unknown | null> {
+  try {
+    const { error } = await supabase.storage.from('cvs').remove([path])
+    return error
+  } catch (error) {
+    return error
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -59,16 +78,15 @@ export async function POST(request: NextRequest) {
       // Validate file type
       const allowedTypes = [
         'application/pdf',
-        'application/msword',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'text/plain'
       ]
-      const allowedExtensions = ['.pdf', '.doc', '.docx', '.txt']
+      const allowedExtensions = ['.pdf', '.docx', '.txt']
       const fileExtension = '.' + (file.name.split('.').pop()?.toLowerCase() || '')
 
       if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
         return NextResponse.json(
-          { error: 'Invalid file type. Please upload a PDF, DOC, DOCX, or TXT file.' },
+          { error: 'Invalid file type. Please upload a PDF, DOCX, or TXT file.' },
           { status: 400 }
         )
       }
@@ -114,10 +132,22 @@ export async function POST(request: NextRequest) {
       // Store the file path (not public URL since bucket is private)
       cvUrl = uploadData.path
 
-      // Extract text from file if not provided
-      if (!textContent) {
-        const buffer = Buffer.from(await file.arrayBuffer())
-        textContent = await extractTextFromFile(buffer, file.name)
+      // Always validate the uploaded bytes, even if the client also supplied text.
+      const buffer = Buffer.from(await file.arrayBuffer())
+      const extractedText = await extractTextFromFile(buffer, file.name)
+      if (!hasReadableCvText(extractedText)) {
+        const cleanupError = await removeCvObject(supabase, cvUrl)
+        if (cleanupError) {
+          console.error('Failed to clean up unreadable CV upload:', {
+            path: cvUrl,
+            error: cleanupError,
+          })
+        }
+        return NextResponse.json({ error: UNREADABLE_CV_ERROR }, { status: 422 })
+      }
+
+      if (!hasReadableCvText(textContent)) {
+        textContent = extractedText
       }
     }
 
@@ -135,7 +165,6 @@ export async function POST(request: NextRequest) {
     const profileUpdate: Record<string, unknown> = {
       id: user.id,
       cv_url: cvUrl,
-      cv_is_generated: false,
       updated_at: new Date().toISOString(),
     }
     if (!parsingFailed) {
@@ -151,10 +180,12 @@ export async function POST(request: NextRequest) {
       console.error('Update error:', updateError)
       // Clean up newly uploaded file if profile update failed
       if (file && cvUrl && cvUrl !== oldCvUrl) {
-        try {
-          await supabase.storage.from('cvs').remove([cvUrl])
-        } catch {
-          console.warn('Failed to clean up orphaned upload:', cvUrl)
+        const cleanupError = await removeCvObject(supabase, cvUrl)
+        if (cleanupError) {
+          console.error('Failed to clean up orphaned upload:', {
+            path: cvUrl,
+            error: cleanupError,
+          })
         }
       }
       return NextResponse.json(
@@ -165,10 +196,13 @@ export async function POST(request: NextRequest) {
 
     // Profile updated successfully — clean up old file if it was replaced
     if (file && oldCvUrl && oldCvUrl !== cvUrl) {
-      try {
-        await supabase.storage.from('cvs').remove([oldCvUrl])
-      } catch {
-        console.warn('Failed to delete old CV file:', oldCvUrl)
+      const cleanupError = await removeCvObject(supabase, oldCvUrl)
+      if (cleanupError) {
+        console.error('Failed to delete replaced CV file:', {
+          path: oldCvUrl,
+          replacementPath: cvUrl,
+          error: cleanupError,
+        })
       }
     }
 
@@ -196,11 +230,38 @@ export async function DELETE() {
     }
 
     // Get current CV URL to delete from storage
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('cv_url')
+      .select('cv_url, screening_answers')
       .eq('id', user.id)
       .single()
+
+    if (profileError) {
+      console.error('Failed to load CV profile before deletion:', profileError)
+      return NextResponse.json({ error: 'Failed to remove CV' }, { status: 400 })
+    }
+
+    // Storage and Postgres cannot share a transaction. Remove the object first so
+    // a Storage API failure never leaves the profile claiming deletion succeeded.
+    if (profile.cv_url) {
+      const storageError = await removeCvObject(supabase, profile.cv_url)
+      if (storageError) {
+        console.error('Failed to delete CV from storage:', {
+          path: profile.cv_url,
+          error: storageError,
+        })
+        return NextResponse.json({ error: 'Failed to remove CV file' }, { status: 400 })
+      }
+    }
+
+    const screeningAnswers =
+      profile?.screening_answers &&
+      typeof profile.screening_answers === 'object' &&
+      !Array.isArray(profile.screening_answers)
+        ? { ...profile.screening_answers } as Record<string, unknown>
+        : {}
+    delete screeningAnswers.cv_url
+    delete screeningAnswers.cv_generation_mode
 
     // Update profile to remove CV data (single atomic update)
     const { error: updateError } = await supabase
@@ -208,7 +269,7 @@ export async function DELETE() {
       .update({
         cv_url: null,
         cv_parsed_data: null,
-        cv_is_generated: false,
+        screening_answers: screeningAnswers as Json,
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id)
@@ -219,17 +280,6 @@ export async function DELETE() {
         { error: 'Failed to remove CV' },
         { status: 400 }
       )
-    }
-
-    // Delete file from storage after DB update succeeds
-    if (profile?.cv_url) {
-      try {
-        await supabase.storage
-          .from('cvs')
-          .remove([profile.cv_url])
-      } catch (e) {
-        console.warn('Failed to delete CV from storage:', e)
-      }
     }
 
     return NextResponse.json({ success: true })

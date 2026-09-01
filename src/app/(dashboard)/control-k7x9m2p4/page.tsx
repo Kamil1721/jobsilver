@@ -251,18 +251,6 @@ export default function AdminPage() {
     checkAdmin()
   }, [supabase, router, toast])
 
-  // Fetch all data when admin is confirmed
-  React.useEffect(() => {
-    if (isAdmin) {
-      fetchUsers()
-      fetchReports()
-      fetchTesters()
-      fetchAnnouncements()
-      fetchAuditLogs()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only fetch once when isAdmin becomes true
-  }, [isAdmin])
-
   const fetchUsers = async (overridePlan?: string) => {
     try {
       const plan = overridePlan !== undefined ? overridePlan : planFilter
@@ -416,6 +404,27 @@ export default function AdminPage() {
     }
   }
 
+  // Fetch all data when admin is confirmed
+  React.useEffect(() => {
+    let cancelled = false
+    if (isAdmin) {
+      queueMicrotask(() => {
+        if (cancelled) return
+        void Promise.all([
+          fetchUsers(),
+          fetchReports(),
+          fetchTesters(),
+          fetchAnnouncements(),
+          fetchAuditLogs(),
+        ])
+      })
+    }
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only fetch once when isAdmin becomes true
+  }, [isAdmin])
+
   const generateInviteCode = async () => {
     setIsGeneratingInvite(true)
     try {
@@ -438,7 +447,7 @@ export default function AdminPage() {
         setCopiedInviteId(data.invite.id)
         setTimeout(() => setCopiedInviteId(null), 2000)
       }
-    } catch (error) {
+    } catch {
       toast({ title: "Error", description: "Failed to generate invite code", variant: "destructive" })
     } finally {
       setIsGeneratingInvite(false)
@@ -457,7 +466,7 @@ export default function AdminPage() {
       toast({ title: "Success", description: "Invite code revoked" })
       fetchTesters()
       setInviteToRevoke(null)
-    } catch (error) {
+    } catch {
       toast({ title: "Error", description: "Failed to revoke invite", variant: "destructive" })
     }
   }
@@ -474,7 +483,7 @@ export default function AdminPage() {
       toast({ title: "Success", description: "Tester status removed, user demoted to free plan" })
       fetchTesters()
       setTesterToRemove(null)
-    } catch (error) {
+    } catch {
       toast({ title: "Error", description: "Failed to remove tester status", variant: "destructive" })
     }
   }
@@ -500,7 +509,7 @@ export default function AdminPage() {
       fetchAnnouncements()
       setIsCreatingAnnouncement(false)
       setAnnouncementForm({ message: '', type: 'info', priority: 0, target_plans: null, is_active: true })
-    } catch (error) {
+    } catch {
       toast({ title: "Error", description: "Failed to create announcement", variant: "destructive" })
     }
   }
@@ -516,7 +525,7 @@ export default function AdminPage() {
       toast({ title: "Success", description: "Announcement updated" })
       fetchAnnouncements()
       setSelectedAnnouncement(null)
-    } catch (error) {
+    } catch {
       toast({ title: "Error", description: "Failed to update announcement", variant: "destructive" })
     }
   }
@@ -532,18 +541,18 @@ export default function AdminPage() {
       toast({ title: "Success", description: "Announcement deleted" })
       fetchAnnouncements()
       setSelectedAnnouncement(null)
-    } catch (error) {
+    } catch {
       toast({ title: "Error", description: "Failed to delete announcement", variant: "destructive" })
     }
   }
 
   const getAnnouncementTypeBadgeColor = (type: AnnouncementType) => {
     switch (type) {
-      case "info": return "bg-blue-500/20 text-blue-400"
-      case "warning": return "bg-amber-500/20 text-amber-400"
-      case "promo": return "bg-purple-500/20 text-purple-400"
-      case "maintenance": return "bg-red-500/20 text-red-400"
-      default: return "bg-gray-500/20 text-gray-400"
+      case "info": return "bg-blue-500/10 text-blue-700"
+      case "warning": return "bg-amber-500/10 text-amber-700"
+      case "promo": return "bg-purple-500/10 text-purple-700"
+      case "maintenance": return "bg-red-500/10 text-red-700"
+      default: return "bg-muted text-muted-foreground"
     }
   }
 
@@ -553,11 +562,11 @@ export default function AdminPage() {
 
   const getInviteStatusBadgeColor = (status: TesterInviteStatus) => {
     switch (status) {
-      case "active": return "bg-emerald-500/20 text-emerald-400"
-      case "used": return "bg-blue-500/20 text-blue-400"
-      case "revoked": return "bg-red-500/20 text-red-400"
-      case "expired": return "bg-gray-500/20 text-gray-400"
-      default: return "bg-gray-500/20 text-gray-400"
+      case "active": return "bg-emerald-500/10 text-emerald-700"
+      case "used": return "bg-blue-500/10 text-blue-700"
+      case "revoked": return "bg-red-500/10 text-red-700"
+      case "expired": return "bg-muted text-muted-foreground"
+      default: return "bg-muted text-muted-foreground"
     }
   }
 
@@ -576,7 +585,7 @@ export default function AdminPage() {
       toast({ title: "Success", description: "Report updated" })
       fetchReports()
       setSelectedReport(null)
-    } catch (error) {
+    } catch {
       toast({ title: "Error", description: "Failed to update report", variant: "destructive" })
     }
   }
@@ -592,7 +601,7 @@ export default function AdminPage() {
       toast({ title: "Success", description: "Report deleted" })
       fetchReports()
       setSelectedReport(null)
-    } catch (error) {
+    } catch {
       toast({ title: "Error", description: "Failed to delete report", variant: "destructive" })
     }
   }
@@ -614,7 +623,7 @@ export default function AdminPage() {
       fetchUsers()
       fetchTesters()
       setSelectedUser(null)
-    } catch (error) {
+    } catch {
       toast({ title: "Error", description: "Failed to update tester status", variant: "destructive" })
     }
   }
@@ -631,7 +640,7 @@ export default function AdminPage() {
       toast({ title: "Success", description: "User deleted successfully" })
       fetchUsers()
       setUserToDelete(null)
-    } catch (error) {
+    } catch {
       toast({ title: "Error", description: "Failed to delete user", variant: "destructive" })
     }
   }
@@ -649,13 +658,13 @@ export default function AdminPage() {
   const getPlanBadgeColor = (plan: string) => {
     switch (plan) {
       // Current 3-tier model plans
-      case "ultra": return "bg-amber-500/20 text-amber-400"
-      case "pro": return "bg-violet-500/20 text-violet-400"
+      case "ultra": return "bg-amber-500/10 text-amber-700"
+      case "pro": return "bg-violet-500/10 text-violet-700"
       // Legacy plans (for backwards compatibility display)
-      case "mega": return "bg-purple-500/20 text-purple-400"
-      case "basic": return "bg-green-500/20 text-green-400"
-      case "starter": return "bg-emerald-500/20 text-emerald-400"
-      default: return "bg-gray-500/20 text-gray-400" // free
+      case "mega": return "bg-purple-500/10 text-purple-700"
+      case "basic": return "bg-green-500/10 text-green-700"
+      case "starter": return "bg-emerald-500/10 text-emerald-700"
+      default: return "bg-muted text-muted-foreground" // free
     }
   }
 
@@ -667,22 +676,22 @@ export default function AdminPage() {
 
   const getReportTypeBadgeColor = (type: string) => {
     switch (type) {
-      case "incorrect_questions": return "bg-orange-500/20 text-orange-400"
-      case "incorrect_description": return "bg-yellow-500/20 text-yellow-400"
-      case "bug": return "bg-red-500/20 text-red-400"
-      case "suggestion": return "bg-zinc-500/20 text-zinc-300"
-      default: return "bg-gray-500/20 text-gray-400"
+      case "incorrect_questions": return "bg-orange-500/10 text-orange-700"
+      case "incorrect_description": return "bg-yellow-500/10 text-yellow-700"
+      case "bug": return "bg-red-500/10 text-red-700"
+      case "suggestion": return "bg-muted text-muted-foreground"
+      default: return "bg-muted text-muted-foreground"
     }
   }
 
   const getReportStatusBadgeColor = (status: string) => {
     switch (status) {
-      case "open": return "bg-blue-500/20 text-blue-400"
-      case "in_progress": return "bg-yellow-500/20 text-yellow-400"
-      case "resolved": return "bg-green-500/20 text-green-400"
-      case "wont_fix": return "bg-gray-500/20 text-gray-400"
-      case "duplicate": return "bg-purple-500/20 text-purple-400"
-      default: return "bg-gray-500/20 text-gray-400"
+      case "open": return "bg-blue-500/10 text-blue-700"
+      case "in_progress": return "bg-yellow-500/10 text-yellow-700"
+      case "resolved": return "bg-green-500/10 text-green-700"
+      case "wont_fix": return "bg-muted text-muted-foreground"
+      case "duplicate": return "bg-purple-500/10 text-purple-700"
+      default: return "bg-muted text-muted-foreground"
     }
   }
 
@@ -707,7 +716,7 @@ export default function AdminPage() {
   if (isAdmin === null) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <RefreshCw className="w-8 h-8 animate-spin text-zinc-400" />
+        <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground" />
       </div>
     )
   }
@@ -725,8 +734,8 @@ export default function AdminPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-3">
-            <Shield className="w-8 h-8 text-zinc-400" />
+          <h1 className="text-3xl font-bold leading-[1.1] flex items-center gap-3">
+            <Shield className="w-8 h-8 text-muted-foreground" />
             Admin Dashboard
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -748,7 +757,7 @@ export default function AdminPage() {
                 <p className="text-sm text-muted-foreground">Total Users</p>
                 <p className="text-3xl font-bold">{usersTotal}</p>
               </div>
-              <Users className="w-10 h-10 text-zinc-600/70 dark:text-zinc-400/50" />
+              <Users className="w-10 h-10 text-muted-foreground/70 dark:text-zinc-400/50" />
             </div>
           </CardContent>
         </Card>
@@ -888,13 +897,13 @@ export default function AdminPage() {
                               {getEffectivePlanDisplay(user.subscription_plan, user.is_tester, user.is_admin)}
                             </Badge>
                             {user.is_tester && (
-                              <Badge className="bg-teal-500/20 text-teal-400 border-teal-500/30">
+                              <Badge className="bg-teal-500/10 text-teal-700 border-teal-500/20">
                                 <FlaskConical className="w-3 h-3 mr-1" />
                                 Tester
                               </Badge>
                             )}
                             {user.is_admin && (
-                              <Badge className="bg-red-500/20 text-red-400">Admin</Badge>
+                              <Badge className="bg-red-500/10 text-red-700">Admin</Badge>
                             )}
                           </div>
                         </TableCell>
@@ -908,7 +917,7 @@ export default function AdminPage() {
                               <Eye className="w-4 h-4" />
                             </Button>
                             {!user.is_admin && (
-                              <Button size="sm" variant="ghost" className="text-red-400" onClick={() => setUserToDelete(user)}>
+                              <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setUserToDelete(user)}>
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                             )}
@@ -1108,7 +1117,7 @@ export default function AdminPage() {
                     <p className="text-sm text-muted-foreground">Expired/Revoked</p>
                     <p className="text-2xl font-bold">{testerStats.expired_invites}</p>
                   </div>
-                  <XCircle className="w-8 h-8 text-zinc-600/70 dark:text-zinc-500/50" />
+                  <XCircle className="w-8 h-8 text-muted-foreground/70 dark:text-zinc-500/50" />
                 </div>
               </CardContent>
             </Card>
@@ -1226,7 +1235,7 @@ export default function AdminPage() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              className={copiedInviteId === invite.id ? "text-green-400" : ""}
+                              className={copiedInviteId === invite.id ? "text-green-600" : ""}
                               onClick={() => copyInviteLink(invite)}
                             >
                               {copiedInviteId === invite.id ? (
@@ -1239,7 +1248,7 @@ export default function AdminPage() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="text-red-400 hover:text-red-300"
+                                className="text-red-600 hover:text-red-700"
                                 onClick={() => setInviteToRevoke(invite)}
                               >
                                 <XCircle className="w-4 h-4" />
@@ -1298,7 +1307,7 @@ export default function AdminPage() {
                             <Badge className={getPlanBadgeColor("ultra")}>
                               ultra
                             </Badge>
-                            <Badge className="bg-teal-500/20 text-teal-400 border-teal-500/30">
+                            <Badge className="bg-teal-500/10 text-teal-700 border-teal-500/20">
                               <FlaskConical className="w-3 h-3 mr-1" />
                               Tester
                             </Badge>
@@ -1318,7 +1327,7 @@ export default function AdminPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-red-400 hover:text-red-300 gap-1"
+                            className="text-red-600 hover:text-red-700 gap-1"
                             onClick={() => setTesterToRemove(tester)}
                           >
                             <UserMinus className="w-4 h-4" />
@@ -1412,12 +1421,12 @@ export default function AdminPage() {
                               variant="ghost"
                               onClick={() => updateAnnouncement(ann.id, { is_active: !ann.is_active })}
                             >
-                              <Power className={`w-4 h-4 ${ann.is_active ? 'text-green-400' : 'text-red-400'}`} />
+                              <Power className={`w-4 h-4 ${ann.is_active ? 'text-green-600' : 'text-red-600'}`} />
                             </Button>
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="text-red-400"
+                              className="text-red-600"
                               onClick={() => deleteAnnouncement(ann.id)}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1460,7 +1469,7 @@ export default function AdminPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2">
-                    <ClipboardList className="w-5 h-5 text-zinc-500" />
+                    <ClipboardList className="w-5 h-5 text-muted-foreground" />
                     Activity Log
                   </CardTitle>
                   <CardDescription>Audit trail of all admin actions</CardDescription>
@@ -1696,7 +1705,7 @@ export default function AdminPage() {
                       href={`/jobs/${selectedReport.job_id}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="ml-auto text-zinc-300 hover:underline flex items-center gap-0.5"
+                      className="ml-auto text-muted-foreground hover:underline flex items-center gap-0.5"
                     >
                       <ExternalLink className="w-3 h-3" /> View
                     </a>
@@ -1709,7 +1718,7 @@ export default function AdminPage() {
                   {selectedReport.job_details?.application_url && (
                     <div className="truncate">
                       <span className="text-muted-foreground">Apply URL:</span>{" "}
-                      <a href={selectedReport.job_details.application_url} target="_blank" rel="noopener noreferrer" className="text-zinc-300 hover:underline">
+                      <a href={selectedReport.job_details.application_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:underline">
                         {selectedReport.job_details.application_url}
                       </a>
                     </div>
@@ -1728,7 +1737,7 @@ export default function AdminPage() {
                 {selectedReport?.page_url && (
                   <div className="truncate">
                     <span className="text-muted-foreground">Page:</span>{" "}
-                    <a href={selectedReport.page_url} target="_blank" rel="noopener noreferrer" className="text-zinc-300 hover:underline">
+                    <a href={selectedReport.page_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:underline">
                       {selectedReport.page_url}
                     </a>
                   </div>

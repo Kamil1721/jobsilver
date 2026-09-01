@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
-import type { JobFilters, Job, AllSubscriptionPlans } from '@/lib/supabase/types'
+import type { Job, AllSubscriptionPlans } from '@/lib/supabase/types'
 import {
   checkRateLimit,
   getClientIdentifier,
   getRateLimitHeaders,
 } from '@/lib/security/rate-limit'
+import { getEffectivePlan } from '@/lib/features/config'
 import { getDailyJobLimit } from '@/lib/stripe/plans'
 
 export const dynamic = 'force-dynamic'
 
-const DEFAULT_DAILY_JOB_TARGET = 20
 const MAX_FETCH_ATTEMPTS = 3
 
 interface CurationResult {
@@ -86,17 +86,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<CurationR
     // Check if production mode is enabled and get subscription plan
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('production_mode, job_filters, screening_answers, cv_url, subscription_plan')
+      .select('production_mode, job_filters, screening_answers, cv_url, subscription_plan, is_tester, is_admin')
       .eq('id', userId)
       .single()
 
-    if (profileError) {
+    if (profileError || !profile) {
       return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 400 })
     }
 
     // P0 FIX: Server-side plan validation - free users cannot use auto-curation
-    const userPlan = (profile.subscription_plan || 'free') as AllSubscriptionPlans
-    const dailyJobLimit = getDailyJobLimit(userPlan)
+    const billingPlan = (profile.subscription_plan || 'free') as AllSubscriptionPlans
+    const effectivePlan = getEffectivePlan(billingPlan, profile.is_tester || profile.is_admin)
+    const dailyJobLimit = getDailyJobLimit(effectivePlan)
 
     if (dailyJobLimit === 0) {
       return NextResponse.json({
@@ -118,18 +119,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<CurationR
       }, { status: 400 })
     }
 
-    const jobFilters = profile.job_filters as JobFilters
-
     // Check how many jobs user already has for today (plan-based limit)
     const today = new Date().toISOString().split('T')[0]
-    const { count: existingJobsCount } = await supabase
+    const { count: existingJobsCount, error: existingJobsCountError } = await supabase
       .from('jobs')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', userId)
       .gte('created_at', `${today}T00:00:00`)
       .in('status', ['discovered', 'saved'])
 
-    const jobsNeeded = Math.max(0, dailyJobLimit - (existingJobsCount || 0))
+    if (existingJobsCountError || existingJobsCount === null) {
+      throw new Error(`Failed to count today's jobs${existingJobsCountError ? `: ${existingJobsCountError.message}` : ''}`)
+    }
+
+    const jobsNeeded = Math.max(0, dailyJobLimit - existingJobsCount)
 
     if (jobsNeeded === 0) {
       return NextResponse.json({
@@ -144,16 +147,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<CurationR
     const result = await curateJobsForUser(
       supabase,
       userId,
-      jobFilters,
-      jobsNeeded,
-      dailyJobLimit
+      jobsNeeded
     )
 
     return NextResponse.json({
       ...result,
-      plan: userPlan,
+      plan: billingPlan,
       dailyLimit: dailyJobLimit,
-      existingToday: existingJobsCount || 0,
+      existingToday: existingJobsCount,
     })
   } catch (error) {
     console.error('Error curating jobs:', error)
@@ -167,104 +168,31 @@ export async function POST(request: NextRequest): Promise<NextResponse<CurationR
 async function curateJobsForUser(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
-  filters: JobFilters,
-  targetCount: number,
-  dailyLimit: number
+  targetCount: number
 ): Promise<CurationResult> {
   let jobsCurated = 0
-  let jobsFailed = 0
   let attempts = 0
-
-  // Get existing company+title combos to prevent duplicates during curation
-  // Include discarded - if user discards a job, block same company+title until 60-day cleanup
-  const { data: existingJobs } = await supabase
-    .from('jobs')
-    .select('company, title')
-    .eq('user_id', userId)
-
-  const curatedCompanyTitles = new Set(
-    (existingJobs || [])
-      .filter(j => j.company && j.title)
-      .map(j => `${j.company.toLowerCase().trim()}:${j.title.toLowerCase().trim()}`)
-  )
 
   while (jobsCurated < targetCount && attempts < MAX_FETCH_ATTEMPTS) {
     attempts++
 
     // Fetch jobs from external sources based on filters
     // This would call your existing job search logic
-    const jobs = await fetchPersonalizedJobs(supabase, userId, filters, targetCount - jobsCurated)
+    const jobs = await fetchPersonalizedJobs(supabase, userId, targetCount - jobsCurated)
 
     if (jobs.length === 0) {
       break // No more jobs available
     }
 
-    for (const job of jobs) {
-      if (jobsCurated >= targetCount) break
-
-      // Check for company+title duplicate before inserting
-      const company = (job.company || '').toLowerCase().trim()
-      const title = (job.title || '').toLowerCase().trim()
-      const companyTitleKey = company && title ? `${company}:${title}` : ''
-
-      if (companyTitleKey && curatedCompanyTitles.has(companyTitleKey)) {
-        console.log(`Skipping duplicate job during curation (same company+title): ${job.company} - ${job.title}`)
-        continue
-      }
-
-      try {
-        // Save job to database
-        const { data: savedJob, error: saveError } = await supabase
-          .from('jobs')
-          .insert({
-            user_id: userId,
-            external_id: job.external_id,
-            source: job.source,
-            title: job.title,
-            company: job.company,
-            company_logo_url: job.company_logo_url,
-            location: job.location,
-            salary_min: job.salary_min,
-            salary_max: job.salary_max,
-            salary_currency: job.salary_currency,
-            job_type: job.job_type,
-            remote: job.remote,
-            remote_type: job.remote_type,
-            description: job.description,
-            application_url: job.application_url,
-            match_score: job.match_score,
-            status: 'discovered', // All jobs start as discovered (manual apply model)
-            platform_detected: job.platform_detected,
-            auto_apply_status: 'manual',
-            ats_source: job.ats_source,
-            ats_job_id: job.ats_job_id,
-          })
-          .select()
-          .single()
-
-        if (saveError) {
-          console.error('Failed to save job:', saveError)
-          jobsFailed++
-          continue
-        }
-
-        // Track this job's company+title to prevent duplicates within the batch
-        if (companyTitleKey) {
-          curatedCompanyTitles.add(companyTitleKey)
-        }
-
-        jobsCurated++
-      } catch (err) {
-        console.error('Error processing job:', err)
-        jobsFailed++
-      }
-    }
+    // Search persists each returned job. Counting rows preserves the curation
+    // contract without violating jobs' unique constraints.
+    jobsCurated += Math.min(jobs.length, targetCount - jobsCurated)
   }
 
   return {
     success: true,
     jobsCurated,
-    jobsFailed,
+    jobsFailed: 0,
     message: jobsCurated >= targetCount
       ? `Successfully curated ${jobsCurated} jobs`
       : `Curated ${jobsCurated} jobs (target was ${targetCount}, limited by available matches)`
@@ -274,94 +202,51 @@ async function curateJobsForUser(
 async function fetchPersonalizedJobs(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
-  filters: JobFilters,
   count: number
 ): Promise<Partial<Job>[]> {
   // Get existing job external IDs and company+title combos to avoid duplicates
   // Include all statuses - discarded jobs block same company+title until 60-day cleanup
-  const { data: existingJobs } = await supabase
+  const { data: existingJobs, error: existingJobsError } = await supabase
     .from('jobs')
     .select('external_id, company, title')
     .eq('user_id', userId)
 
+  if (existingJobsError) {
+    throw new Error(`Failed to load existing jobs: ${existingJobsError.message}`)
+  }
+
   const existingIds = new Set(existingJobs?.map(j => j.external_id) || [])
-  // Track company+title combos to prevent duplicates (same company + same title = duplicate)
-  const existingCompanyTitles = new Set(
-    (existingJobs || [])
-      .filter(j => j.company && j.title)
-      .map(j => `${j.company.toLowerCase().trim()}:${j.title.toLowerCase().trim()}`)
-  )
-
-  // Build search queries from filters
-  const searchQueries = buildSearchQueries(filters)
-
-  // Fetch from fantastic.jobs API or other sources
-  // This is a placeholder - in production, call your actual job APIs
-  const jobs: Partial<Job>[] = []
-
-  for (const query of searchQueries) {
-    if (jobs.length >= count * 2) break // Fetch extra to account for duplicates/failures
-
-    try {
-      // Call internal search API
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/jobs/search`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            query,
-            filters,
-            limit: count,
-            skipQuota: true, // Internal curation doesn't count against quota
-          }),
-        }
-      )
-
-      if (response.ok) {
-        const data = await response.json()
-        const newJobs = (data.jobs || []).filter((j: Job) => {
-          // Skip if we already have this external_id
-          if (existingIds.has(j.external_id)) return false
-          // Skip if we already have a job from the same company with the exact same title
-          if (j.company && j.title) {
-            const companyTitleKey = `${j.company.toLowerCase().trim()}:${j.title.toLowerCase().trim()}`
-            if (existingCompanyTitles.has(companyTitleKey)) {
-              console.log(`Skipping duplicate job (same company+title): ${j.company} - ${j.title}`)
-              return false
-            }
-          }
-          return true
-        })
-        jobs.push(...newJobs)
-        newJobs.forEach((j: Job) => {
-          existingIds.add(j.external_id)
-          // Also track company+title for this batch
-          if (j.company && j.title) {
-            existingCompanyTitles.add(`${j.company.toLowerCase().trim()}:${j.title.toLowerCase().trim()}`)
-          }
-        })
+  try {
+    const response = await fetch(
+      `${process.env.INTERNAL_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/jobs/search`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.INTERNAL_API_KEY || '',
+        },
+        body: JSON.stringify({
+          useProfileFilters: true,
+          limit: count,
+          userId,
+        }),
       }
-    } catch (err) {
-      console.error('Error fetching jobs for query:', query, err)
+    )
+
+    if (!response.ok) {
+      throw new Error(`Internal search returned ${response.status} during curation`)
     }
+
+    const data = await response.json()
+    if (!Array.isArray(data.jobs)) {
+      throw new Error('Internal search returned an invalid jobs payload')
+    }
+
+    return data.jobs
+      .filter((job: Job) => !existingIds.has(job.external_id))
+      .slice(0, count)
+  } catch (error) {
+    console.error('Error fetching curated jobs from internal search:', error)
+    throw error instanceof Error ? error : new Error('Internal search failed during curation')
   }
-
-  return jobs.slice(0, count)
-}
-
-function buildSearchQueries(filters: JobFilters): string[] {
-  const queries: string[] = []
-
-  // Use job titles as primary queries
-  if (filters.job_titles && filters.job_titles.length > 0) {
-    queries.push(...filters.job_titles)
-  }
-
-  // Add keyword-based queries
-  if (filters.include_keywords && filters.include_keywords.length > 0) {
-    queries.push(...filters.include_keywords.slice(0, 3))
-  }
-
-  return queries.length > 0 ? queries : ['software engineer'] // Default fallback
 }

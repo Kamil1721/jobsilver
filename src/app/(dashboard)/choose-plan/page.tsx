@@ -3,8 +3,8 @@
 import * as React from "react"
 import { Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { motion } from "framer-motion"
-import { ArrowRight, Sparkles, Check, ArrowLeft } from "lucide-react"
+import { motion, MotionConfig } from "framer-motion"
+import { ArrowRight, Sparkles, Check, ArrowLeft, CircleAlert, RefreshCcw } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { PricingCard, PRICING_PLANS } from "@/components/pricing/PricingCard"
@@ -12,9 +12,29 @@ import { PricingToggle, type BillingCycle } from "@/components/pricing/PricingTo
 import { PlanChangeDialog, type DowngradeReason } from "@/components/plan-change-dialog"
 import { isDowngrade } from "@/lib/features/config"
 import type { SubscriptionPlan } from "@/lib/supabase/types"
+import styles from "./dawn-plan.module.css"
 
 // Timeout for API requests (30 seconds)
 const API_TIMEOUT_MS = 30000
+
+type PlanApiResponse = {
+  data?: {
+    message?: string
+    url?: string
+  }
+  error?: {
+    message?: string
+  }
+}
+
+async function readPlanApiResponse(response: Response): Promise<PlanApiResponse> {
+  try {
+    const payload: unknown = await response.json()
+    return payload && typeof payload === "object" ? payload as PlanApiResponse : {}
+  } catch {
+    return {}
+  }
+}
 
 /**
  * Generate a unique idempotency key for API requests
@@ -26,10 +46,11 @@ function generateIdempotencyKey(): string {
 // Loading fallback for Suspense
 function ChoosePlanLoading() {
   return (
-    <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center">
-      <div className="relative">
-        <div className="w-12 h-12 rounded-full border-2 border-zinc-800" />
-        <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-transparent border-t-zinc-400 animate-spin" />
+    <div className={`${styles.shell} flex items-center justify-center`}>
+      <div className="w-full max-w-sm space-y-4 px-6" role="status" aria-label="Loading plans">
+        <div className="h-4 w-24 animate-pulse rounded bg-[var(--coral-soft)]" />
+        <div className="h-10 w-4/5 animate-pulse rounded-lg bg-[var(--dawn-cream)]" />
+        <div className="h-32 w-full animate-pulse rounded-2xl border border-[var(--dawn-line)] bg-[var(--dawn-surface)]" />
       </div>
     </div>
   )
@@ -47,8 +68,10 @@ function ChoosePlanPageContent() {
   const [billingCycle, setBillingCycle] = React.useState<BillingCycle>("monthly")
   const [isLoading, setIsLoading] = React.useState(false)
   const [loadingPlan, setLoadingPlan] = React.useState<string | null>(null)
-  const [currentPlan, setCurrentPlan] = React.useState<string>("free")
+  const [currentPlan, setCurrentPlan] = React.useState<string>("")
   const [periodEndDate, setPeriodEndDate] = React.useState<string | null>(null)
+  const [planLoadState, setPlanLoadState] = React.useState<"loading" | "ready" | "error">("loading")
+  const [planLoadAttempt, setPlanLoadAttempt] = React.useState(0)
 
   // Downgrade dialog state
   const [showDowngradeDialog, setShowDowngradeDialog] = React.useState(false)
@@ -61,7 +84,7 @@ function ChoosePlanPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
-  const supabase = createClient()
+  const supabase = React.useMemo(() => createClient(), [])
 
   // Cleanup abort controller on unmount
   React.useEffect(() => {
@@ -84,15 +107,34 @@ function ChoosePlanPageContent() {
 
   // Fetch current plan and subscription period end
   React.useEffect(() => {
-    const fetchPlanStatus = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+    let isMounted = true
 
-      const { data: profile } = await supabase
+    const fetchPlanStatus = async () => {
+      setPlanLoadState("loading")
+
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser()
+
+      if (!isMounted) return
+      if (authError || !user) {
+        setPlanLoadState("error")
+        return
+      }
+
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("subscription_plan, has_selected_plan")
         .eq("id", user.id)
-        .single()
+        .maybeSingle()
+
+      if (!isMounted) return
+      if (profileError) {
+        console.error("Plan profile load error:", profileError.message)
+        setPlanLoadState("error")
+        return
+      }
 
       // Only show current plan badge if user has already selected a plan before
       if (profile?.has_selected_plan) {
@@ -100,11 +142,18 @@ function ChoosePlanPageContent() {
 
         // Fetch subscription period end date for paid plans
         if (profile.subscription_plan && profile.subscription_plan !== 'free') {
-          const { data: subscription } = await supabase
+          const { data: subscription, error: subscriptionError } = await supabase
             .from("subscriptions")
             .select("current_period_end")
             .eq("user_id", user.id)
-            .single()
+            .maybeSingle()
+
+          if (!isMounted) return
+          if (subscriptionError) {
+            console.error("Subscription status load error:", subscriptionError.message)
+            setPlanLoadState("error")
+            return
+          }
 
           if (subscription?.current_period_end) {
             setPeriodEndDate(subscription.current_period_end)
@@ -114,10 +163,16 @@ function ChoosePlanPageContent() {
         // New user in onboarding - don't mark any plan as "current"
         setCurrentPlan("")
       }
+
+      setPlanLoadState("ready")
     }
 
-    fetchPlanStatus()
-  }, [supabase])
+    void fetchPlanStatus()
+
+    return () => {
+      isMounted = false
+    }
+  }, [planLoadAttempt, supabase])
 
   /**
    * Handle plan selection - checks for downgrades
@@ -152,7 +207,7 @@ function ChoosePlanPageContent() {
         })
 
         if (!response.ok) {
-          const data = await response.json()
+          const data = await readPlanApiResponse(response)
           throw new Error(data.error?.message || "Failed to select plan")
         }
 
@@ -174,7 +229,7 @@ function ChoosePlanPageContent() {
           body: JSON.stringify({ returnUrl: "/choose-plan" }),
         })
 
-        const data = await response.json()
+        const data = await readPlanApiResponse(response)
 
         if (!response.ok) {
           throw new Error(data.error?.message || "Failed to access billing portal")
@@ -199,7 +254,7 @@ function ChoosePlanPageContent() {
           }),
         })
 
-        const data = await response.json()
+        const data = await readPlanApiResponse(response)
 
         if (!response.ok) {
           throw new Error(data.error?.message || "Failed to create checkout session")
@@ -267,13 +322,7 @@ function ChoosePlanPageContent() {
 
       clearTimeout(timeoutId)
 
-      // Handle response.json() safely
-      let data: { data?: { message?: string }; error?: { message?: string } }
-      try {
-        data = await response.json()
-      } catch {
-        throw new Error("Invalid response from server")
-      }
+      const data = await readPlanApiResponse(response)
 
       if (!response.ok) {
         throw new Error(data.error?.message || "Failed to process downgrade")
@@ -324,38 +373,65 @@ function ChoosePlanPageContent() {
     }
   }
 
-  return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-[#0a0a0b]">
-      {/* Background decorations */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-20%] left-[10%] w-[600px] h-[600px] rounded-full bg-gradient-to-br from-zinc-200/30 via-zinc-300/20 to-transparent dark:from-zinc-800/30 dark:via-zinc-900/20 blur-[120px]" />
-        <div className="absolute top-[40%] right-[-10%] w-[500px] h-[500px] rounded-full bg-gradient-to-bl from-zinc-200/20 dark:from-zinc-700/20 via-transparent to-transparent blur-[100px]" />
-      </div>
+  if (planLoadState === "loading") {
+    return <ChoosePlanLoading />
+  }
 
-      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
+  if (planLoadState === "error") {
+    return (
+      <MotionConfig reducedMotion="user">
+        <main className={`${styles.shell} flex items-center justify-center px-6 py-16`}>
+          <div
+            role="alert"
+            className="w-full max-w-xl rounded-[20px] border border-[var(--dawn-line)] bg-[var(--dawn-surface)] p-8 text-center shadow-[0_18px_50px_-32px_rgba(31,27,24,0.24)]"
+          >
+            <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-[var(--coral-soft)] text-[var(--coral-lo)]">
+              <CircleAlert className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <h1 className="mt-5 text-2xl font-semibold tracking-[-0.02em] text-[var(--dawn-ink)]">
+              Your plan details are temporarily unavailable
+            </h1>
+            <p className="mx-auto mt-3 max-w-[48ch] text-sm leading-6 text-[var(--dawn-ink-2)]">
+              We couldn’t confirm your current plan, so plan changes are paused to protect your account. Check your connection and retry.
+            </p>
+            <button
+              type="button"
+              onClick={() => setPlanLoadAttempt((attempt) => attempt + 1)}
+              className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[var(--coral)] px-6 text-sm font-semibold text-[var(--coral-ink)] transition-colors hover:bg-[var(--coral-hi)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dawn-bg)] motion-reduce:transition-none"
+            >
+              <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+              Retry loading
+            </button>
+          </div>
+        </main>
+      </MotionConfig>
+    )
+  }
+
+  return (
+    <MotionConfig reducedMotion="user">
+    <main className={styles.shell}>
+      <div className={styles.content}>
         {/* Header */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="text-center mb-12"
+          transition={{ duration: 0.4 }}
+          className="mb-12 grid items-end gap-8 md:grid-cols-[1fr_auto]"
         >
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-100 dark:bg-white/[0.05] border border-zinc-200 dark:border-white/[0.08] mb-6">
-            <Sparkles className="w-4 h-4 text-zinc-600 dark:text-zinc-400" />
-            <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-              Choose Your Plan
-            </span>
+          <div>
+            <div className="mb-5 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.09em] text-[var(--coral-lo)]">
+              <Sparkles className="h-4 w-4" aria-hidden="true" />
+              Plans &amp; pricing
+            </div>
+            <h1 className="max-w-[13ch] text-balance text-[clamp(2.35rem,6vw,4.6rem)] font-semibold leading-[0.98] tracking-[-0.04em] text-[var(--dawn-ink)]">
+              Choose the pace of your search.
+            </h1>
+            <p className="mt-5 max-w-[58ch] text-pretty text-[clamp(1rem,1.4vw,1.125rem)] leading-7 text-[var(--dawn-ink-2)]">
+              Start with a focused daily shortlist, then add more matches and AI support when you need them.
+            </p>
           </div>
-
-          <h1 className="text-3xl md:text-4xl font-bold text-zinc-900 dark:text-white mb-4">
-            Choose Your Plan
-          </h1>
-          <p className="text-lg text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto mb-8">
-            Discover jobs for free. Upgrade to Pro for AI assistance, or Ultra for unlimited power.
-          </p>
-
-          {/* Billing Toggle */}
-          <div className="flex justify-center mb-8">
+          <div className="flex md:justify-end">
             <PricingToggle
               billingCycle={billingCycle}
               onToggle={setBillingCycle}
@@ -364,7 +440,7 @@ function ChoosePlanPageContent() {
         </motion.div>
 
         {/* Pricing Cards - 3-column grid for 3-tier model */}
-        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div className={`${styles.plans} mx-auto mb-12 grid max-w-5xl grid-cols-1 gap-5 md:grid-cols-3`}>
           {PRICING_PLANS.map((plan, index) => (
             <PricingCard
               key={plan.id}
@@ -383,19 +459,19 @@ function ChoosePlanPageContent() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.5 }}
-          className="text-center"
+          className="border-y border-[var(--dawn-line)] py-5"
         >
-          <div className="flex flex-wrap justify-center gap-6 text-sm text-zinc-500 dark:text-zinc-400">
+          <div className="flex flex-wrap gap-x-7 gap-y-3 text-sm text-[var(--dawn-ink-2)] md:justify-center">
             <div className="flex items-center gap-2">
-              <Check className="w-4 h-4 text-emerald-500" />
+              <Check className="h-4 w-4 text-[var(--coral-lo)]" />
               <span>Cancel anytime</span>
             </div>
             <div className="flex items-center gap-2">
-              <Check className="w-4 h-4 text-emerald-500" />
+              <Check className="h-4 w-4 text-[var(--coral-lo)]" />
               <span>No credit card for free</span>
             </div>
             <div className="flex items-center gap-2">
-              <Check className="w-4 h-4 text-emerald-500" />
+              <Check className="h-4 w-4 text-[var(--coral-lo)]" />
               <span>Secure payment via Stripe</span>
             </div>
           </div>
@@ -406,14 +482,14 @@ function ChoosePlanPageContent() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.6 }}
-          className="text-center mt-8"
+          className="mt-7 text-left md:text-center"
         >
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-sm text-muted-foreground">
             Not sure which plan is right for you?{" "}
             <button
               onClick={() => handlePlanSelect("free", billingCycle)}
               disabled={isLoading}
-              className="text-zinc-700 dark:text-zinc-300 hover:underline font-medium inline-flex items-center gap-1"
+              className="inline-flex items-center gap-1 font-medium text-[var(--coral-lo)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2"
             >
               Start free and upgrade anytime
               <ArrowRight className="w-3 h-3" />
@@ -427,12 +503,12 @@ function ChoosePlanPageContent() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.7 }}
-            className="text-center mt-6"
+            className="mt-5 text-left md:text-center"
           >
             <button
               onClick={() => router.push("/profile")}
               disabled={isLoading}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-[var(--dawn-ink-2)] transition-colors hover:bg-[var(--dawn-cream)] hover:text-[var(--dawn-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--coral)] focus-visible:ring-offset-2 active:translate-y-px"
             >
               <ArrowLeft className="w-4 h-4" />
               Cancel
@@ -453,6 +529,7 @@ function ChoosePlanPageContent() {
           isLoading={isDowngrading}
         />
       )}
-    </div>
+    </main>
+    </MotionConfig>
   )
 }

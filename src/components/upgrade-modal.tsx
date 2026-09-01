@@ -100,12 +100,10 @@ export function UpgradeModal() {
     }
   }
 
-  // Clear error when modal closes
-  React.useEffect(() => {
-    if (!open) {
-      setError(null)
-    }
-  }, [open])
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) setError(null)
+    setOpen(nextOpen)
+  }
 
   if (!detail) return null
 
@@ -114,12 +112,12 @@ export function UpgradeModal() {
   const PlanIcon = isUltra ? Crown : Rocket
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-zinc-400 via-zinc-500 to-zinc-600 flex items-center justify-center">
-              <Lock className="w-6 h-6 text-white" />
+            <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center">
+              <Lock className="w-6 h-6 text-primary-foreground" />
             </div>
             <div>
               <DialogTitle className="text-xl">Unlock {detail.featureName}</DialogTitle>
@@ -135,9 +133,9 @@ export function UpgradeModal() {
 
         <div className="space-y-4 pt-4">
           {/* Plan Details */}
-          <div className="p-4 rounded-xl bg-gradient-to-br from-zinc-50 to-zinc-100 dark:from-zinc-800/50 dark:to-zinc-900/50 border border-zinc-200 dark:border-zinc-700">
+          <div className="p-4 rounded-xl bg-gradient-to-br from-secondary to-muted dark:from-zinc-800/50 dark:to-zinc-900/50 border border-border dark:border-zinc-700">
             <div className="flex items-center gap-2 mb-3">
-              <PlanIcon className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
+              <PlanIcon className="w-5 h-5 text-muted-foreground" />
               <span className="font-semibold text-lg">{isUltra ? 'Ultra' : 'Pro'} Plan</span>
               {!isUltra && (
                 <Badge className="ml-auto bg-emerald-500 text-white text-xs">
@@ -147,9 +145,9 @@ export function UpgradeModal() {
             </div>
 
             {/* Jobs per day - PRIMARY METRIC */}
-            <div className="mb-4 p-3 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-600">
+            <div className="mb-4 p-3 rounded-lg bg-card dark:bg-zinc-800 border border-border dark:border-zinc-600">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-zinc-600 dark:text-zinc-400">Jobs discovered</span>
+                <span className="text-sm text-muted-foreground">Jobs discovered</span>
                 <span className="text-xl font-bold">{planLimits.jobsPerDay}/day</span>
               </div>
               <div className="flex items-center gap-1.5 mt-1 text-sm text-emerald-600 dark:text-emerald-400">
@@ -166,7 +164,7 @@ export function UpgradeModal() {
             <ul className="space-y-2">
               {planLimits.features.slice(0, 5).map((feature, index) => (
                 <li key={index} className="flex items-center gap-2 text-sm">
-                  <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                  <Check className="w-4 h-4 text-[var(--coral-lo)] flex-shrink-0" />
                   <span>{feature}</span>
                 </li>
               ))}
@@ -174,13 +172,13 @@ export function UpgradeModal() {
           </div>
 
           {/* Billing Cycle Toggle */}
-          <div className="flex rounded-lg bg-zinc-100 dark:bg-zinc-800 p-1">
+          <div className="flex rounded-lg bg-secondary dark:bg-zinc-800 p-1">
             <button
               onClick={() => setBillingCycle('weekly')}
               className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${
                 billingCycle === 'weekly'
-                  ? 'bg-white dark:bg-zinc-700 shadow-sm'
-                  : 'text-zinc-600 dark:text-zinc-400'
+                  ? 'bg-card dark:bg-zinc-700 shadow-sm'
+                  : 'text-muted-foreground'
               }`}
             >
               Weekly: ${planLimits.weeklyPrice}
@@ -189,8 +187,8 @@ export function UpgradeModal() {
               onClick={() => setBillingCycle('monthly')}
               className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all ${
                 billingCycle === 'monthly'
-                  ? 'bg-white dark:bg-zinc-700 shadow-sm'
-                  : 'text-zinc-600 dark:text-zinc-400'
+                  ? 'bg-card dark:bg-zinc-700 shadow-sm'
+                  : 'text-muted-foreground'
               }`}
             >
               Monthly: ${planLimits.monthlyPrice}
@@ -200,12 +198,12 @@ export function UpgradeModal() {
 
           {/* Current Plan Notice */}
           {currentPlan === 'free' && (
-            <p className="text-xs text-center text-zinc-500">
+            <p className="text-xs text-center text-muted-foreground">
               You&apos;re currently on the Free plan (3 jobs/day, no AI)
             </p>
           )}
           {currentPlan === 'pro' && (
-            <p className="text-xs text-center text-zinc-500">
+            <p className="text-xs text-center text-muted-foreground">
               You&apos;re currently on Pro (15 jobs/day, limited AI)
             </p>
           )}
@@ -227,7 +225,7 @@ export function UpgradeModal() {
               Maybe Later
             </Button>
             <Button
-              className="flex-1 bg-gradient-to-r from-zinc-600 to-zinc-700 hover:from-zinc-700 hover:to-zinc-800"
+              className="flex-1 bg-[var(--coral)] text-[var(--coral-ink)] hover:bg-[var(--coral-hi)]"
               onClick={handleUpgrade}
               disabled={isLoading}
             >

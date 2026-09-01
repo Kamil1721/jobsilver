@@ -21,7 +21,7 @@ import {
   Loader2,
 } from "lucide-react"
 
-interface SearchFilters {
+export interface SearchFilters {
   keywords: string
   location: string
   remote: boolean
@@ -29,26 +29,26 @@ interface SearchFilters {
 }
 
 interface SearchBarProps {
+  filters: SearchFilters
   onSearch: (filters: SearchFilters) => void
-  onFilterChange?: (filters: SearchFilters) => void
+  onFilterChange: (filters: SearchFilters) => void
   isLoading?: boolean
   isAdmin?: boolean
   className?: string
 }
 
-export function SearchBar({ onSearch, onFilterChange, isLoading, isAdmin = false, className }: SearchBarProps) {
-  const [filters, setFilters] = React.useState<SearchFilters>({
-    keywords: "",
-    location: "",
-    remote: false,
-    jobType: "all",
-  })
+export function SearchBar({
+  filters,
+  onSearch,
+  onFilterChange,
+  isLoading,
+  isAdmin = false,
+  className,
+}: SearchBarProps) {
   const [showFilters, setShowFilters] = React.useState(false)
 
-  // Call onFilterChange whenever filters change
   const updateFilters = React.useCallback((newFilters: SearchFilters) => {
-    setFilters(newFilters)
-    onFilterChange?.(newFilters)
+    onFilterChange(newFilters)
   }, [onFilterChange])
 
   const handleSearch = (e: React.FormEvent) => {
@@ -63,8 +63,7 @@ export function SearchBar({ onSearch, onFilterChange, isLoading, isAdmin = false
       remote: false,
       jobType: "all",
     }
-    setFilters(clearedFilters)
-    onFilterChange?.(clearedFilters)
+    onFilterChange(clearedFilters)
   }
 
   const hasFilters = filters.keywords || filters.location || filters.remote || filters.jobType !== "all"
@@ -76,8 +75,10 @@ export function SearchBar({ onSearch, onFilterChange, isLoading, isAdmin = false
         <div className="flex flex-col sm:flex-row gap-2">
           {/* Keywords input */}
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
+            <Label htmlFor="dashboard-keywords" className="sr-only">Keywords</Label>
+            <Search aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground dark:text-zinc-500" />
             <Input
+              id="dashboard-keywords"
               placeholder="Job title, skills, or company"
               value={filters.keywords}
               onChange={(e) => updateFilters({ ...filters, keywords: e.target.value })}
@@ -87,8 +88,10 @@ export function SearchBar({ onSearch, onFilterChange, isLoading, isAdmin = false
 
           {/* Location input */}
           <div className="relative sm:w-56">
-            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
+            <Label htmlFor="dashboard-location" className="sr-only">Location</Label>
+            <MapPin aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground dark:text-zinc-500" />
             <Input
+              id="dashboard-location"
               placeholder="City or country"
               value={filters.location}
               onChange={(e) => updateFilters({ ...filters, location: e.target.value })}
@@ -104,14 +107,16 @@ export function SearchBar({ onSearch, onFilterChange, isLoading, isAdmin = false
               variant="outline"
               className={cn(
                 "h-10 px-3",
-                showFilters && "bg-zinc-100 dark:bg-white/[0.05] border-zinc-300 dark:border-white/[0.10]"
+                showFilters && "bg-accent dark:bg-white/[0.05] border-border dark:border-white/[0.10]"
               )}
               onClick={() => setShowFilters(!showFilters)}
+              aria-expanded={showFilters}
+              aria-controls="dashboard-extra-filters"
             >
               <SlidersHorizontal className="w-4 h-4" />
               <span className="ml-2">Filters</span>
               {(filters.remote || filters.jobType !== "all") && (
-                <span className="ml-1 w-1.5 h-1.5 bg-zinc-600 dark:bg-zinc-400 rounded-full" />
+                <span className="ml-1 w-1.5 h-1.5 bg-muted-foreground dark:bg-zinc-400 rounded-full" />
               )}
             </Button>
 
@@ -141,20 +146,20 @@ export function SearchBar({ onSearch, onFilterChange, isLoading, isAdmin = false
 
         {/* Extended filters */}
         {showFilters && (
-          <div className="mt-3 p-4 bg-white dark:bg-white/[0.02] rounded-lg border border-zinc-200 dark:border-white/[0.06] transition-colors duration-200 animate-fade-in">
+          <div id="dashboard-extra-filters" className="mt-3 p-4 bg-card dark:bg-white/[0.02] rounded-lg border border-border dark:border-white/[0.06] transition-colors duration-200 animate-fade-in">
             <div className="flex flex-wrap items-end gap-6">
               {/* Job Type */}
               <div className="space-y-2">
-                <Label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Job Type</Label>
+                <Label htmlFor="dashboard-job-type" className="text-xs font-medium text-muted-foreground dark:text-zinc-400">Job type</Label>
                 <Select
                   value={filters.jobType}
                   onValueChange={(value) => updateFilters({ ...filters, jobType: value })}
                 >
-                  <SelectTrigger className="w-36 h-9">
+                  <SelectTrigger id="dashboard-job-type" aria-label="Job type" className="w-36 h-9">
                     <SelectValue placeholder="All types" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="all">All types</SelectItem>
                     <SelectItem value="full-time">Full-time</SelectItem>
                     <SelectItem value="part-time">Part-time</SelectItem>
                     <SelectItem value="contract">Contract</SelectItem>
@@ -170,8 +175,8 @@ export function SearchBar({ onSearch, onFilterChange, isLoading, isAdmin = false
                   checked={filters.remote}
                   onCheckedChange={(checked) => updateFilters({ ...filters, remote: checked })}
                 />
-                <Label htmlFor="remote" className="text-sm cursor-pointer text-zinc-700 dark:text-zinc-300">
-                  Remote Only
+                <Label htmlFor="remote" className="text-sm cursor-pointer text-foreground dark:text-zinc-300">
+                  Remote only
                 </Label>
               </div>
 
@@ -181,7 +186,7 @@ export function SearchBar({ onSearch, onFilterChange, isLoading, isAdmin = false
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                  className="text-muted-foreground dark:text-zinc-400 hover:text-foreground dark:hover:text-white"
                   onClick={handleClear}
                 >
                   <X className="w-3.5 h-3.5 mr-1" />

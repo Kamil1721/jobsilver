@@ -91,7 +91,7 @@ export function FeatureGate({
           <div className="absolute top-2 right-2 z-10">
             <Badge
               variant="outline"
-              className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm cursor-pointer hover:bg-white dark:hover:bg-zinc-800 transition-colors"
+              className="bg-card/90 dark:bg-zinc-900/90 backdrop-blur-sm cursor-pointer hover:bg-card dark:hover:bg-zinc-800 transition-colors"
               onClick={(e) => {
                 e.stopPropagation()
                 showUpgradeModal()
@@ -112,7 +112,7 @@ export function FeatureGate({
           </div>
           {/* Lock overlay */}
           <div
-            className="absolute inset-0 flex flex-col items-center justify-center bg-white/50 dark:bg-black/50 backdrop-blur-sm cursor-pointer z-10"
+            className="absolute inset-0 flex flex-col items-center justify-center bg-card/50 dark:bg-black/50 backdrop-blur-sm cursor-pointer z-10"
             onClick={showUpgradeModal}
             role="button"
             tabIndex={0}
@@ -122,8 +122,8 @@ export function FeatureGate({
               }
             }}
           >
-            <div className="w-12 h-12 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center mb-2">
-              <Lock className="w-6 h-6 text-zinc-500" />
+            <div className="w-12 h-12 rounded-full bg-muted dark:bg-zinc-700 flex items-center justify-center mb-2">
+              <Lock className="w-6 h-6 text-muted-foreground" />
             </div>
             <Badge variant="outline">
               {formatPlanName(requiredPlan)} Required
@@ -162,7 +162,7 @@ export function FeatureGate({
           {buttonLabel}
           <Badge
             variant="outline"
-            className="ml-1 text-[9px] px-1 py-0 h-4 bg-amber-500/10 text-amber-600 border-amber-500/30"
+            className="ml-1 text-[9px] px-1 py-0 h-4 bg-[var(--coral-soft)] text-[var(--coral-lo)] border-[var(--coral)]/30"
           >
             {formatPlanName(requiredPlan)}
           </Badge>
@@ -210,7 +210,7 @@ export function LockedBadge({ feature, className }: LockedBadgeProps) {
     <Badge
       variant="outline"
       className={cn(
-        "cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors",
+        "cursor-pointer hover:bg-accent dark:hover:bg-zinc-800 transition-colors",
         className
       )}
       onClick={showUpgradeModal}
