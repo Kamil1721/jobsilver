@@ -14,7 +14,8 @@ export function useGoogleAuthEnabled(): boolean {
 
   React.useEffect(() => {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    if (!supabaseUrl) return
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!supabaseUrl || !supabaseAnonKey) return
 
     const controller = new AbortController()
 
@@ -22,7 +23,14 @@ export function useGoogleAuthEnabled(): boolean {
       try {
         const response = await fetch(
           new URL("/auth/v1/settings", supabaseUrl).toString(),
-          { signal: controller.signal, cache: "no-store", credentials: "omit" }
+          {
+            signal: controller.signal,
+            cache: "no-store",
+            credentials: "omit",
+            // The settings endpoint requires the anon key; without it Supabase
+            // returns 401 and the Google button silently never renders.
+            headers: { apikey: supabaseAnonKey as string },
+          }
         )
 
         if (!response.ok) return
