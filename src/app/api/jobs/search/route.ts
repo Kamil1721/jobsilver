@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
-import { checkRateLimit } from '@/lib/security/rate-limit'
+import { checkRateLimitDistributed } from '@/lib/security/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,11 +9,8 @@ import {
   searchJobs as searchFantasticJobs,
   mapFantasticJobToJob,
   FantasticJobsJob,
-  validateRemoteType,
-  validateJobLocation,
   isSpamJob,
   isJobFresh,
-  isWorldwideRemote,
   mapJobTypeToEmploymentType,
   mapSeniorityToExperienceLevel,
   mapRemoteToWorkArrangement,
@@ -35,7 +32,7 @@ import {
   type GeneratedQueries,
 } from '@/lib/ai/query-generator'
 import { computeProfileHash, getCachedQueries, setCachedQueries } from '@/lib/cache/query-cache'
-import type { JobFilters, Job, ScreeningAnswers } from '@/lib/supabase/types'
+import type { Database, JobFilters, Job, ScreeningAnswers } from '@/lib/supabase/types'
 import { validateMandatoryFilters } from '@/lib/filter-validation'
 // Platform detection helper - inlined from removed auto-apply module
 function detectPlatform(url: string): string {
@@ -63,8 +60,8 @@ import {
   computeFinalJobScore,
   injectDiversity,
 } from '@/lib/ai/preference-scoring'
-import { canAccessFeature } from '@/lib/features/config'
-import type { SubscriptionPlan, AllSubscriptionPlans } from '@/lib/supabase/types'
+import { canAccessFeature, getEffectivePlan } from '@/lib/features/config'
+import type { AllSubscriptionPlans } from '@/lib/supabase/types'
 
 // Plan-based quota limits (3-tier model: free=3 jobs/day, pro=15 jobs/day, ultra=35 jobs/day)
 import { getDailyJobLimit, getPlanLimits } from '@/lib/stripe/plans'
@@ -80,6 +77,32 @@ interface QuotaResult {
   jobsFetched: number
 }
 
+interface DailyQuotaReservation {
+  id: string
+  userId: string
+  reserved: number
+  saved: number
+  settled: boolean
+}
+
+interface QuotaReservationRow {
+  reservation_id: string
+  quota_date: string
+  reserved: number
+  remaining: number
+  jobs_fetched: number
+  job_limit: number
+  active_jobs_count: number
+  active_jobs_limit: number
+  active_jobs_remaining: number
+}
+
+interface QuotaSettlementRow {
+  remaining: number
+  jobs_fetched: number
+  job_limit: number
+}
+
 /**
  * Get plan-based daily job limit for a user
  * 3-tier model: free=3 jobs/day, pro=15 jobs/day, ultra=35 jobs/day
@@ -88,119 +111,95 @@ function getPlanJobLimit(plan: AllSubscriptionPlans): number {
   return getDailyJobLimit(plan)
 }
 
-/**
- * Check and update user's daily job quota
- * 3-tier model: free=3 jobs/day, pro=15 jobs/day, ultra=35 jobs/day
- */
-async function checkAndUpdateQuota(
-  supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never,
+async function reserveDailyJobQuota(
   userId: string,
-  jobsToAdd: number,
-  userPlan: AllSubscriptionPlans = 'free'
-): Promise<QuotaResult> {
-  const today = new Date().toISOString().split('T')[0]
-  const planJobLimit = getPlanJobLimit(userPlan)
+  jobsRequested: number,
+  jobLimit: number,
+  activeJobsLimit: number
+): Promise<{
+  reservation: DailyQuotaReservation
+  quota: QuotaResult
+  activeJobs: { count: number; limit: number; remaining: number }
+}> {
+  const serviceClient = createServiceClient()
+  const { data, error } = await serviceClient.rpc('reserve_daily_job_quota', {
+    p_user_id: userId,
+    p_jobs_requested: jobsRequested,
+    p_jobs_limit: jobLimit,
+    p_active_jobs_limit: activeJobsLimit,
+  })
 
-  // Get or create today's quota record
-  let { data: quota, error } = await supabase
-    .from('user_job_quotas')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('date', today)
-    .single()
-
-  if (error && error.code === 'PGRST116') {
-    // No record for today, create one with plan-based limits
-    const { data: newQuota, error: insertError } = await supabase
-      .from('user_job_quotas')
-      .insert({
-        user_id: userId,
-        date: today,
-        jobs_fetched: 0,
-        jobs_limit: planJobLimit,
-        applications_used: 0,
-        applications_limit: planJobLimit, // Same as jobs limit in 3-tier model
-      })
-      .select()
-      .single()
-
-    if (insertError) {
-      console.error('Error creating quota record:', insertError)
-      // Allow the search to proceed even if quota tracking fails
-      return { allowed: true, remaining: planJobLimit, limit: planJobLimit, jobsFetched: 0 }
-    }
-
-    quota = newQuota
+  if (error) {
+    throw new Error(`Failed to reserve daily job quota: ${error.message}`)
   }
 
-  if (!quota) {
-    // Something went wrong, allow the search
-    return { allowed: true, remaining: planJobLimit, limit: planJobLimit, jobsFetched: 0 }
-  }
-
-  // Update limit if plan changed (user upgraded/downgraded)
-  if (quota.jobs_limit !== planJobLimit) {
-    await supabase
-      .from('user_job_quotas')
-      .update({ jobs_limit: planJobLimit, applications_limit: planJobLimit })
-      .eq('id', quota.id)
-    quota.jobs_limit = planJobLimit
-  }
-
-  const remaining = quota.jobs_limit - quota.jobs_fetched
-  const allowed = remaining > 0
-
-  // Calculate how many jobs we can actually fetch
-  const actualJobsToAdd = Math.min(jobsToAdd, remaining)
-
-  if (allowed && actualJobsToAdd > 0) {
-    // Update the quota
-    await supabase
-      .from('user_job_quotas')
-      .update({ jobs_fetched: quota.jobs_fetched + actualJobsToAdd })
-      .eq('id', quota.id)
+  const row = (data as QuotaReservationRow[] | null)?.[0]
+  if (!row) {
+    throw new Error('Daily job quota reservation returned no result')
   }
 
   return {
-    allowed,
-    remaining: Math.max(0, remaining - actualJobsToAdd),
-    limit: quota.jobs_limit,
-    jobsFetched: quota.jobs_fetched + actualJobsToAdd,
+    reservation: {
+      id: row.reservation_id,
+      userId,
+      reserved: row.reserved,
+      saved: 0,
+      settled: false,
+    },
+    quota: {
+      allowed: row.remaining > 0,
+      remaining: row.remaining,
+      limit: row.job_limit,
+      jobsFetched: row.jobs_fetched,
+    },
+    activeJobs: {
+      count: row.active_jobs_count,
+      limit: row.active_jobs_limit,
+      remaining: row.active_jobs_remaining,
+    },
   }
 }
 
-/**
- * Get current quota status without updating
- * 3-tier model: free=3 jobs/day, pro=15 jobs/day, ultra=35 jobs/day
- */
-async function getQuotaStatus(
-  supabase: ReturnType<typeof createClient> extends Promise<infer T> ? T : never,
-  userId: string,
-  userPlan: AllSubscriptionPlans = 'free'
-): Promise<QuotaResult> {
-  const today = new Date().toISOString().split('T')[0]
-  const planJobLimit = getPlanJobLimit(userPlan)
+async function settleDailyJobQuota(reservation: DailyQuotaReservation): Promise<QuotaResult> {
+  const serviceClient = createServiceClient()
+  const { data, error } = await serviceClient.rpc('settle_daily_job_quota', {
+    p_reservation_id: reservation.id,
+    p_user_id: reservation.userId,
+    p_jobs_saved: reservation.saved,
+  })
 
-  const { data: quota } = await supabase
-    .from('user_job_quotas')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('date', today)
-    .single()
-
-  if (!quota) {
-    return { allowed: true, remaining: planJobLimit, limit: planJobLimit, jobsFetched: 0 }
+  if (error) {
+    throw new Error(`Failed to settle daily job quota: ${error.message}`)
   }
 
-  // Use plan-based limit (in case plan changed)
-  const effectiveLimit = Math.max(quota.jobs_limit, planJobLimit)
-  const remaining = effectiveLimit - quota.jobs_fetched
+  const row = (data as QuotaSettlementRow[] | null)?.[0]
+  if (!row) {
+    throw new Error('Daily job quota settlement returned no result')
+  }
+
+  reservation.settled = true
   return {
-    allowed: remaining > 0,
-    remaining,
-    limit: effectiveLimit,
-    jobsFetched: quota.jobs_fetched,
+    allowed: row.remaining > 0,
+    remaining: row.remaining,
+    limit: row.job_limit,
+    jobsFetched: row.jobs_fetched,
   }
+}
+
+async function renewDailyJobQuotaReservation(
+  reservation: DailyQuotaReservation
+): Promise<boolean> {
+  const serviceClient = createServiceClient()
+  const { data, error } = await serviceClient.rpc('renew_daily_job_quota_reservation', {
+    p_reservation_id: reservation.id,
+    p_user_id: reservation.userId,
+  })
+
+  if (error) {
+    throw new Error(`Failed to renew daily job quota reservation: ${error.message}`)
+  }
+
+  return data === true
 }
 
 // =============================================================================
@@ -211,6 +210,46 @@ interface UnifiedJob {
   source: 'fantasticjobs' | 'greenhouse' | 'lever' | 'ashby'
   mapped: Partial<Job>
   raw: FantasticJobsJob | null // null for ATS jobs
+}
+
+type JobInsert = Database['public']['Tables']['jobs']['Insert']
+
+/**
+ * Build the database payload from an explicit column allowlist. Provider and
+ * scoring objects intentionally carry additional fields (for example Lever's
+ * `questions` and preference-scoring metadata) that must never reach PostgREST.
+ */
+function buildJobInsert(
+  job: Partial<Job>,
+  userId: string,
+  source: string,
+  platform: JobInsert['platform_detected']
+): JobInsert {
+  return {
+    user_id: userId,
+    external_id: job.external_id,
+    source,
+    title: job.title ?? '',
+    company: job.company,
+    company_logo_url: job.company_logo_url,
+    location: job.location,
+    salary_min: job.salary_min,
+    salary_max: job.salary_max,
+    salary_currency: job.salary_currency,
+    job_type: job.job_type,
+    remote: job.remote,
+    remote_type: job.remote_type,
+    industry_category: job.industry_category,
+    job_posted_at: job.job_posted_at,
+    description: job.description,
+    application_url: job.application_url,
+    match_score: job.match_score,
+    status: 'discovered',
+    platform_detected: platform,
+    auto_apply_status: 'manual',
+    ats_source: job.ats_source,
+    ats_job_id: job.ats_job_id,
+  }
 }
 
 // Seniority keywords for post-processing filter
@@ -245,10 +284,13 @@ export async function POST(request: NextRequest) {
   console.log('=== JOB SEARCH API CALLED ===')
   console.log('RAPIDAPI_KEY configured:', !!process.env.RAPIDAPI_KEY)
 
+  let quotaReservation: DailyQuotaReservation | null = null
+
   try {
     // Check for internal API key for automated calls (cron jobs, etc.)
     const apiKey = request.headers.get('x-api-key')
-    const isInternalCall = apiKey === process.env.INTERNAL_API_KEY && process.env.INTERNAL_API_KEY
+    const internalApiKey = process.env.INTERNAL_API_KEY
+    const isInternalCall = Boolean(internalApiKey && apiKey === internalApiKey)
 
     // Use service client for internal calls (bypasses RLS), regular client for user calls
     const supabase = isInternalCall
@@ -266,7 +308,12 @@ export async function POST(request: NextRequest) {
     // Rate limiting - skip for internal calls
     if (!isInternalCall) {
       const clientId = user?.id || 'anonymous'
-      const rateLimit = checkRateLimit(clientId, { maxRequests: 5, windowSeconds: 60, prefix: 'search' }, 'jobs-search')
+      const rateLimit = await checkRateLimitDistributed(
+        createServiceClient(),
+        clientId,
+        { maxRequests: 5, windowSeconds: 60, prefix: 'search' },
+        'jobs-search'
+      )
       if (!rateLimit.allowed) {
         const retryAfter = Math.max(1, rateLimit.resetAt - Math.floor(Date.now() / 1000))
         return NextResponse.json(
@@ -276,10 +323,36 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const body = await request.json()
-    const { useProfileFilters = true, manualQuery, userId: bodyUserId, skipQuota = false } = body
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+      if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+        throw new Error('body must be a JSON object')
+      }
+    } catch {
+      return NextResponse.json(
+        { error: 'Request body must be a valid JSON object' },
+        { status: 400 }
+      )
+    }
+    const {
+      useProfileFilters = true,
+      manualQuery,
+      userId: bodyUserId,
+      limit: requestedLimit,
+    } = body as {
+      useProfileFilters?: boolean
+      manualQuery?: string
+      userId?: string
+      limit?: number
+    }
+    const internalRequestedLimit =
+      isInternalCall && typeof requestedLimit === 'number' && Number.isInteger(requestedLimit) && requestedLimit > 0
+        ? Math.min(35, requestedLimit)
+        : null
 
-    // SECURITY: Internal calls must still authenticate a user - they just get to skip quota
+    // SECURITY: Internal calls must still identify the user whose profile and
+    // quota apply. A valid internal key does not grant a quota bypass.
     // This prevents user spoofing attacks if the internal API key leaks
     // The cron job should authenticate as the user it's processing, not pass userId in body
     let effectiveUserId: string | null = null
@@ -289,7 +362,7 @@ export async function POST(request: NextRequest) {
       // but ONLY if the internal API key is valid (already checked above)
       // TODO: Migrate cron jobs to use proper service-level authentication
       effectiveUserId = bodyUserId
-      console.log(`[Search] Internal call for user ${effectiveUserId} (skipQuota: ${skipQuota})`)
+      console.log(`[Search] Internal call for user ${effectiveUserId}`)
     } else if (user?.id) {
       effectiveUserId = user.id
     }
@@ -300,40 +373,115 @@ export async function POST(request: NextRequest) {
 
     // Get user's profile with filters, CV data, screening answers, and subscription plan
     // Fetch this FIRST so we can use plan-based quota limits
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('cv_parsed_data, job_filters, screening_answers, subscription_plan, is_tester, is_admin')
       .eq('id', effectiveUserId)
       .single()
 
+    if (profileError || !profile) {
+      console.error('[Search] Failed to load profile:', profileError)
+      return NextResponse.json(
+        {
+          error: {
+            code: 'PROFILE_UNAVAILABLE',
+            message: 'Your profile is temporarily unavailable. Please try again.',
+          },
+          retryable: true,
+        },
+        { status: 503, headers: { 'Cache-Control': 'no-store' } }
+      )
+    }
+
     const filters = profile?.job_filters as JobFilters | null
     const cvData = profile?.cv_parsed_data as ParsedCV | null
     const screeningAnswers = profile?.screening_answers as ScreeningAnswers | null
-    const userPlan = (profile?.subscription_plan || 'free') as AllSubscriptionPlans
+    const billingPlan = (profile?.subscription_plan || 'free') as AllSubscriptionPlans
     const isTester = profile?.is_tester || false
     const isAdmin = profile?.is_admin || false
+    const isElevated = isTester || isAdmin
+    const effectivePlan = getEffectivePlan(billingPlan, isElevated)
 
-    // Admin and testers bypass quota limits
-    const bypassQuota = isAdmin || isTester
+    // Only explicit elevated roles bypass the daily quota. Trusted internal
+    // callers still consume the target user's ordinary plan allowance.
+    const bypassQuota = isElevated
     if (bypassQuota) {
       console.log(`[Search] Quota bypass for user ${effectiveUserId} (admin: ${isAdmin}, tester: ${isTester})`)
     }
 
-    // Check quota before searching (using plan-based limits) - skip for admin/testers
-    const quotaStatus = await getQuotaStatus(supabase, effectiveUserId, userPlan)
-    if (!quotaStatus.allowed && !bypassQuota) {
-      return NextResponse.json({
-        error: 'Daily job quota exceeded',
-        quota: {
-          remaining: 0,
-          limit: quotaStatus.limit,
-          resets_at: new Date(new Date().setHours(24, 0, 0, 0)).toISOString(),
-        },
-      }, { status: 429 })
+    // Validate mandatory filters before reserving quota or doing provider/AI work.
+    if (useProfileFilters) {
+      const validation = validateMandatoryFilters(filters)
+      if (!validation.isValid) {
+        return NextResponse.json({
+          error: 'Missing mandatory filters',
+          validation_errors: validation.errors,
+          redirect_to_setup: true
+        }, { status: 400 })
+      }
+    }
+
+    const planJobLimit = getPlanJobLimit(effectivePlan)
+    const maxActiveJobs = getPlanLimits(effectivePlan).savedJobs
+    const requestedCapacity = internalRequestedLimit ?? planJobLimit
+    let searchCapacity = requestedCapacity
+    let reservationExhaustsActiveCapacity = false
+    let updatedQuota: QuotaResult = bypassQuota
+      ? { remaining: 9999, limit: 9999, jobsFetched: 0, allowed: true }
+      : { remaining: planJobLimit, limit: planJobLimit, jobsFetched: 0, allowed: true }
+
+    // The RPC is the sole quota gate. It recovers expired reservations, then
+    // atomically claims both daily and active-job capacity before provider work.
+    if (!bypassQuota) {
+      const quotaReservationResult = await reserveDailyJobQuota(
+        effectiveUserId,
+        requestedCapacity,
+        planJobLimit,
+        maxActiveJobs
+      )
+      quotaReservation = quotaReservationResult.reservation
+      updatedQuota = quotaReservationResult.quota
+      searchCapacity = quotaReservation.reserved
+      reservationExhaustsActiveCapacity = quotaReservationResult.activeJobs.limit !== -1
+        && quotaReservationResult.activeJobs.remaining === 0
+
+      if (searchCapacity === 0) {
+        quotaReservation.saved = 0
+        updatedQuota = await settleDailyJobQuota(quotaReservation)
+
+        if (updatedQuota.remaining > 0
+          && quotaReservationResult.activeJobs.limit !== -1
+          && quotaReservationResult.activeJobs.remaining === 0) {
+          return NextResponse.json({
+            jobs: [],
+            total: 0,
+            saved_count: 0,
+            active_jobs_limit_reached: true,
+            active_jobs_count: quotaReservationResult.activeJobs.count,
+            active_jobs_limit: quotaReservationResult.activeJobs.limit,
+            message: `You have ${quotaReservationResult.activeJobs.limit} jobs in New Matches. Discard or move jobs to Applied to discover new ones.`,
+            quota: {
+              remaining: updatedQuota.remaining,
+              limit: updatedQuota.limit,
+              jobs_fetched_today: updatedQuota.jobsFetched,
+            },
+          })
+        }
+
+        return NextResponse.json({
+          error: 'Daily job quota exceeded',
+          quota: {
+            remaining: updatedQuota.remaining,
+            limit: updatedQuota.limit,
+            jobs_fetched_today: updatedQuota.jobsFetched, // required by QuotaStatus; omitting it makes the client progress bar NaN
+            resets_at: new Date(new Date().setHours(24, 0, 0, 0)).toISOString(),
+          },
+        }, { status: 429 })
+      }
     }
 
     // Check if user can use AI learning features
-    const canUseAILearning = canAccessFeature(userPlan, 'ai_learning', isTester)
+    const canUseAILearning = canAccessFeature(effectivePlan, 'ai_learning')
 
     console.log('CV Data check:', {
       hasProfile: !!profile,
@@ -375,33 +523,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Validate mandatory filters
-    if (useProfileFilters) {
-      const validation = validateMandatoryFilters(filters)
-      if (!validation.isValid) {
-        return NextResponse.json({
-          error: 'Missing mandatory filters',
-          validation_errors: validation.errors,
-          redirect_to_setup: true
-        }, { status: 400 })
-      }
-    }
-
     // ==========================================================================
     // PRE-FETCH DISCARDED/APPLIED JOBS TO EXCLUDE
     // ==========================================================================
-    // Fetch jobs user has already discarded or applied to - these should never appear again
-    const { data: excludedJobs } = await supabase
-      .from('jobs')
-      .select('external_id, application_url')
-      .eq('user_id', effectiveUserId)
-      .in('status', ['discarded', 'applied'])
+    // Fetch jobs user has already discarded or applied to - these should never appear again.
+    // Paginated: PostgREST caps unpaginated selects (default 1000 rows), which would
+    // silently drop older exclusions and let discarded jobs reappear.
+    const excludedJobs: Array<{ external_id: string | null; application_url: string | null }> = []
+    for (let from = 0; ; from += 1000) {
+      const { data: exclusionPage } = await supabase
+        .from('jobs')
+        .select('external_id, application_url')
+        .eq('user_id', effectiveUserId)
+        .in('status', ['discarded', 'applied'])
+        .range(from, from + 999)
+      excludedJobs.push(...(exclusionPage || []))
+      if (!exclusionPage || exclusionPage.length < 1000) break
+    }
 
     const excludedExternalIds = new Set(
-      (excludedJobs || []).map(j => j.external_id).filter(Boolean)
+      excludedJobs.map(j => j.external_id).filter(Boolean)
     )
     const excludedUrls = new Set(
-      (excludedJobs || []).map(j => j.application_url).filter(Boolean)
+      excludedJobs.map(j => j.application_url).filter(Boolean)
     )
     console.log(`Pre-filtering: ${excludedExternalIds.size} discarded/applied jobs to exclude`)
     if (excludedExternalIds.size > 0) {
@@ -469,7 +613,7 @@ export async function POST(request: NextRequest) {
       console.log(`Industries: ${filters.industries?.join(', ') || 'All'}`)
       console.log(`Remote: ${filters.remote_jobs}, Onsite: ${filters.onsite_hybrid}`)
       console.log(`Countries: ${filters.remote_countries?.join(', ') || 'None specified'}`)
-      console.log(`Quota remaining: ${quotaStatus.remaining} jobs`)
+      console.log(`Search capacity: ${searchCapacity} jobs`)
 
       // Map filters to fantastic.jobs API parameters
       const employmentType = mapJobTypeToEmploymentType(filters.job_types)
@@ -546,7 +690,7 @@ export async function POST(request: NextRequest) {
           const jobs = await searchFantasticJobs({
             title_filter: query,
             location_filter: effectiveLocationFilter,
-            limit: Math.min(35, quotaStatus.remaining), // Respect quota (reduced from 50 to conserve API quota)
+            limit: Math.min(35, searchCapacity), // Respect reserved/requested capacity
             ai_work_arrangement_filter: workArrangement,
             // ai_employment_type_filter removed - handled by soft scoring
             // ai_experience_level_filter removed - handled by soft scoring
@@ -586,7 +730,7 @@ export async function POST(request: NextRequest) {
             const jobs = await searchFantasticJobs({
               title_filter: baseQuery,
               location_filter: location,
-              limit: 20, // Reduced from 30 to conserve API quota
+              limit: Math.min(20, searchCapacity),
               ai_work_arrangement_filter: workArrangement,
               // ai_employment_type_filter removed - handled by soft scoring
               ai_taxonomies_a_filter: taxonomyFilter,
@@ -621,7 +765,7 @@ export async function POST(request: NextRequest) {
         const primaryQuery = Array.isArray(primaryQueryRaw) ? primaryQueryRaw[0] : primaryQueryRaw
         const atsResult = await searchATSJobs(effectiveUserId, {
           query: primaryQuery,
-          limit: 50,
+          limit: Math.min(50, searchCapacity),
         })
 
         for (const atsJob of atsResult.jobs) {
@@ -643,7 +787,7 @@ export async function POST(request: NextRequest) {
       try {
         const jobs = await searchFantasticJobs({
           title_filter: manualQuery,
-          limit: quotaStatus.remaining,
+          limit: searchCapacity,
         })
         for (const job of jobs) {
           allUnifiedJobs.push({
@@ -1137,21 +1281,14 @@ export async function POST(request: NextRequest) {
     const totalJobsFoundBeforeQuota = filteredJobs.length
 
     // Apply quota limit - admin/testers bypass this
-    const quotaLimitedJobs = bypassQuota
-      ? filteredJobs
-      : filteredJobs.slice(0, quotaStatus.remaining)
+    const quotaLimitedJobs = filteredJobs.slice(0, searchCapacity)
     const hiddenJobsCount = bypassQuota
       ? 0
       : Math.max(0, totalJobsFoundBeforeQuota - quotaLimitedJobs.length)
-    console.log(`Quota limited: ${filteredJobs.length} -> ${quotaLimitedJobs.length} jobs (remaining: ${bypassQuota ? 'unlimited' : quotaStatus.remaining})`)
+    console.log(`Capacity limited: ${filteredJobs.length} -> ${quotaLimitedJobs.length} jobs (capacity: ${searchCapacity})`)
     if (hiddenJobsCount > 0) {
       console.log(`Hidden jobs (upgrade to view): ${hiddenJobsCount}`)
     }
-
-    // Update quota with actual jobs fetched (using plan-based limits) - skip for admin/testers
-    const updatedQuota = bypassQuota
-      ? { remaining: 9999, limit: 9999, jobsFetched: 0, allowed: true }
-      : await checkAndUpdateQuota(supabase, effectiveUserId, quotaLimitedJobs.length, userPlan)
 
     // ==========================================================================
     // AI SCORING
@@ -1447,7 +1584,7 @@ export async function POST(request: NextRequest) {
     // ==========================================================================
 
     let preferenceScoredJobs = finalJobs
-    let preferenceStats = {
+    const preferenceStats = {
       enabled: false,
       confidence: 'none' as string,
       diversityCount: 0,
@@ -1546,9 +1683,6 @@ export async function POST(request: NextRequest) {
     // Jobs in APPLIED or OFFERS columns don't count toward the limit
     // Users must discard jobs or move them to APPLIED to make room for new ones
 
-    const planLimits = getPlanLimits(userPlan)
-    const maxActiveJobs = planLimits.savedJobs // 50 for free, 200 for pro, -1 (unlimited) for ultra
-
     // Count current active jobs (only discovered status = NEW MATCHES column)
     const { count: activeJobsCount, error: countError } = await supabase
       .from('jobs')
@@ -1556,11 +1690,11 @@ export async function POST(request: NextRequest) {
       .eq('user_id', effectiveUserId)
       .eq('status', 'discovered')
 
-    if (countError) {
-      console.error('Error counting active jobs:', countError)
+    if (countError || activeJobsCount === null) {
+      throw new Error(`Failed to count active jobs${countError ? `: ${countError.message}` : ''}`)
     }
 
-    const currentActiveJobs = activeJobsCount || 0
+    const currentActiveJobs = activeJobsCount
     // Handle unlimited (-1) for Ultra users
     const remainingSlots = maxActiveJobs === -1 ? Infinity : Math.max(0, maxActiveJobs - currentActiveJobs)
     let activeJobsLimitReached = false
@@ -1572,6 +1706,11 @@ export async function POST(request: NextRequest) {
       activeJobsLimitReached = true
       console.log(`Active jobs limit reached for user ${effectiveUserId}. No new jobs will be saved.`)
 
+      if (quotaReservation && !quotaReservation.settled) {
+        quotaReservation.saved = 0
+        updatedQuota = await settleDailyJobQuota(quotaReservation)
+      }
+
       // Return early with the limit message
       return NextResponse.json({
         jobs: [], // No jobs to display
@@ -1582,18 +1721,18 @@ export async function POST(request: NextRequest) {
         active_jobs_limit: maxActiveJobs,
         message: `You have ${maxActiveJobs} jobs in New Matches. Discard or move jobs to Applied to discover new ones.`,
         quota: {
-          remaining: quotaStatus.remaining,
-          limit: quotaStatus.limit,
-          jobs_fetched_today: quotaStatus.jobsFetched,
+          remaining: updatedQuota.remaining,
+          limit: updatedQuota.limit,
+          jobs_fetched_today: updatedQuota.jobsFetched,
         },
       })
     }
 
     // Limit jobs to save based on remaining slots
-    let limitedJobsToSave = jobsToSave
-    if (jobsToSave.length > remainingSlots) {
-      console.log(`Limiting jobs to save from ${jobsToSave.length} to ${remainingSlots} due to active jobs limit`)
-      limitedJobsToSave = jobsToSave.slice(0, remainingSlots)
+    let limitedJobsToSave = jobsToSave.slice(0, searchCapacity)
+    if (limitedJobsToSave.length > remainingSlots) {
+      console.log(`Limiting jobs to save from ${limitedJobsToSave.length} to ${remainingSlots} due to active jobs limit`)
+      limitedJobsToSave = limitedJobsToSave.slice(0, remainingSlots)
       activeJobsLimitReached = true
     }
 
@@ -1601,16 +1740,35 @@ export async function POST(request: NextRequest) {
     // SAVE TO DATABASE
     // ==========================================================================
 
-    const jobsBySource = new Map<string, typeof limitedJobsToSave>()
-    for (const job of limitedJobsToSave) {
-      const source = job.source as string
-      if (!jobsBySource.has(source)) {
-        jobsBySource.set(source, [])
+    if (quotaReservation && limitedJobsToSave.length > 0) {
+      const renewed = await renewDailyJobQuotaReservation(quotaReservation)
+      if (!renewed) {
+        quotaReservation.saved = 0
+        updatedQuota = await settleDailyJobQuota(quotaReservation)
+        return NextResponse.json(
+          {
+            error: {
+              code: 'QUOTA_RESERVATION_EXPIRED',
+              message: 'The search took too long to save safely. Please try again.',
+            },
+            retryable: true,
+            quota: {
+              remaining: updatedQuota.remaining,
+              limit: updatedQuota.limit,
+              jobs_fetched_today: updatedQuota.jobsFetched,
+            },
+          },
+          { status: 503, headers: { 'Cache-Control': 'no-store' } }
+        )
       }
-      jobsBySource.get(source)!.push(job)
     }
 
-    console.log(`Processing ${limitedJobsToSave.length} jobs across sources:`, Array.from(jobsBySource.keys()).join(', '))
+    let newlySavedJobs = 0
+    let attemptedJobInserts = 0
+    let failedJobInserts = 0
+    const sourceNames = new Set(limitedJobsToSave.map((job) => job.source as string))
+
+    console.log(`Processing ${limitedJobsToSave.length} jobs across sources:`, Array.from(sourceNames).join(', '))
 
     const allExternalIds = limitedJobsToSave.map(job => job.external_id).filter(Boolean) as string[]
     const allApplicationUrls = limitedJobsToSave.map(job => job.application_url).filter(Boolean) as string[]
@@ -1670,14 +1828,7 @@ export async function POST(request: NextRequest) {
 
     // Also query for existing company+title combos not caught by external_id or URL
     // This catches cases where same job is posted with different external IDs
-    const companyTitlePairs = limitedJobsToSave
-      .filter(job => job.company && job.title)
-      .map(job => ({
-        company: (job.company as string).toLowerCase().trim(),
-        title: (job.title as string).toLowerCase().trim(),
-      }))
-
-    if (companyTitlePairs.length > 0) {
+    if (limitedJobsToSave.some((job) => job.company && job.title)) {
       // Query existing jobs for this user to check company+title combos
       // We need to get all user's jobs and check manually since Supabase doesn't support
       // composite OR conditions easily
@@ -1699,6 +1850,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`Duplicate check: found ${existingJobMap.size} existing jobs (${existingUrlMap.size} unique URLs, ${existingCompanyTitleMap.size} company+title combos)`)
 
+    const rowsToInsert: JobInsert[] = []
     for (const job of limitedJobsToSave) {
       const source = job.source as string
       const externalId = job.external_id as string
@@ -1731,40 +1883,27 @@ export async function POST(request: NextRequest) {
 
       if (!existingStatus) {
         const hasApplicationUrl = !!job.application_url
-        const platform = hasApplicationUrl ? detectPlatform(job.application_url as string) : 'unknown'
+        const platform = (hasApplicationUrl
+          ? detectPlatform(job.application_url as string)
+          : 'unknown') as JobInsert['platform_detected']
+        const jobDataForDb = buildJobInsert(
+          job as unknown as Partial<Job>,
+          effectiveUserId,
+          source,
+          platform
+        )
 
-        // Extract only valid database columns (exclude preference scoring fields)
-        const {
-          enhanced_score: _enhanced,
-          preference_reasons: _prefReasons,
-          preference_influence: _prefInfluence,
-          is_exploration: _isExploration,
-          ...jobDataForDb
-        } = job as typeof job & {
-          enhanced_score?: number
-          preference_reasons?: string[]
-          preference_influence?: number
-          is_exploration?: boolean
+        // All jobs are manual apply now (no auto-apply).
+        // Queue for ONE bulk insert after the loop instead of a serial round-trip
+        // per job (N+1 writes added seconds to large searches).
+        attemptedJobInserts++
+        rowsToInsert.push(jobDataForDb)
+        // Track this job to prevent duplicates within the same batch
+        if (companyTitleKey) {
+          existingCompanyTitleMap.set(companyTitleKey, 'discovered')
         }
-
-        // All jobs are manual apply now (no auto-apply)
-        const { error: insertError } = await supabase.from('jobs').insert({
-          ...jobDataForDb,
-          match_reasoning: undefined,
-          platform_detected: platform,
-          auto_apply_status: 'manual',
-        })
-
-        if (insertError) {
-          console.error('Insert error:', insertError)
-        } else {
-          // Track this job to prevent duplicates within the same batch
-          if (companyTitleKey) {
-            existingCompanyTitleMap.set(companyTitleKey, 'discovered')
-          }
-          if (applicationUrl) {
-            existingUrlMap.set(applicationUrl, 'discovered')
-          }
+        if (applicationUrl) {
+          existingUrlMap.set(applicationUrl, 'discovered')
         }
       } else if (existingStatus === 'discovered') {
         const { error: updateError } = await supabase
@@ -1783,6 +1922,60 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+
+    // Single bulk upsert for all new rows queued in the loop above.
+    // ignoreDuplicates on the (user_id, application_url) unique constraint keeps a
+    // single colliding row (e.g. a race with a concurrent search) from failing the
+    // whole batch, matching the old per-row loop's resilience. .select() returns the
+    // rows actually inserted so the saved count stays accurate.
+    if (rowsToInsert.length > 0) {
+      const { data: insertedRows, error: bulkInsertError } = await supabase
+        .from('jobs')
+        .upsert(rowsToInsert, { onConflict: 'user_id,application_url', ignoreDuplicates: true })
+        .select('id')
+      if (bulkInsertError) {
+        failedJobInserts += rowsToInsert.length
+        console.error('Bulk insert error:', bulkInsertError)
+      } else {
+        newlySavedJobs += insertedRows?.length ?? rowsToInsert.length
+      }
+    }
+
+    if (quotaReservation) {
+      quotaReservation.saved = newlySavedJobs
+      updatedQuota = await settleDailyJobQuota(quotaReservation)
+      console.log(`Settled daily quota reservation: ${newlySavedJobs}/${quotaReservation.reserved} slots consumed`)
+    }
+
+    if (attemptedJobInserts > 0 && failedJobInserts === attemptedJobInserts) {
+      const { error: teaserClearError } = await supabase
+        .from('profiles')
+        .update({ upgrade_teaser: null })
+        .eq('id', effectiveUserId)
+
+      if (teaserClearError) {
+        console.error('Failed to clear upgrade teaser after job save failure:', teaserClearError)
+      }
+
+      return NextResponse.json({
+        error: {
+          code: 'JOB_SAVE_FAILED',
+          message: 'Jobs were found but could not be saved. Please try again.',
+        },
+        retryable: true,
+        quota: {
+          remaining: updatedQuota.remaining,
+          limit: updatedQuota.limit,
+          jobs_fetched_today: updatedQuota.jobsFetched,
+        },
+      }, { status: 503 })
+    }
+
+    activeJobsLimitReached = maxActiveJobs !== -1 && (
+      currentActiveJobs + newlySavedJobs >= maxActiveJobs
+      || (reservationExhaustsActiveCapacity
+        && quotaReservation?.saved === quotaReservation?.reserved)
+    )
 
     // Query back saved jobs
     const { data: savedJobs, error: queryError } = await supabase
@@ -1821,10 +2014,13 @@ export async function POST(request: NextRequest) {
     // Build upgrade teaser ONLY for Free users with hidden jobs
     // Pro and Ultra users do NOT see the upgrade teaser - they simply get their daily limit
     // This prevents confusing Pro users with "upgrade" prompts when they're already paid
-    const isFreeUser = userPlan === 'free' || userPlan === 'starter' || userPlan === 'basic'
-    const upgradeTeaser = (hiddenJobsCount > 0 && isFreeUser) ? {
-      hidden_jobs_count: hiddenJobsCount,
-      message: `Found ${hiddenJobsCount} more job${hiddenJobsCount === 1 ? '' : 's'} matching your criteria. Upgrade to Pro to view more jobs daily.`,
+    const isFreeUser = effectivePlan === 'free' || effectivePlan === 'starter' || effectivePlan === 'basic'
+    const actualHiddenJobsCount = bypassQuota
+      ? 0
+      : Math.max(0, totalJobsFoundBeforeQuota - jobsWithCorrectIds.length)
+    const upgradeTeaser = (jobsWithCorrectIds.length > 0 && actualHiddenJobsCount > 0 && isFreeUser) ? {
+      hidden_jobs_count: actualHiddenJobsCount,
+      message: `Found ${actualHiddenJobsCount} more job${actualHiddenJobsCount === 1 ? '' : 's'} matching your criteria. Upgrade to Pro to view more jobs daily.`,
       total_found: totalJobsFoundBeforeQuota,
       shown: jobsWithCorrectIds.length,
     } : null
@@ -1847,6 +2043,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       jobs: jobsWithCorrectIds,
       total: jobsWithCorrectIds.length,
+      saved_count: newlySavedJobs,
       cv_uploaded: hasProfileData,
       quota: {
         remaining: updatedQuota.remaining,
@@ -1855,7 +2052,7 @@ export async function POST(request: NextRequest) {
       },
       // Active jobs limit info
       active_jobs_limit_reached: activeJobsLimitReached,
-      active_jobs_count: currentActiveJobs + jobsWithCorrectIds.length,
+      active_jobs_count: currentActiveJobs + newlySavedJobs,
       active_jobs_limit: maxActiveJobs,
       // Show upgrade teaser for free users when more jobs are available
       upgrade_teaser: upgradeTeaser,
@@ -1894,6 +2091,13 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
+    if (quotaReservation && !quotaReservation.settled) {
+      try {
+        await settleDailyJobQuota(quotaReservation)
+      } catch (settlementError) {
+        console.error('Failed to release outstanding daily quota reservation:', settlementError)
+      }
+    }
     console.error('Job search error:', error)
     return NextResponse.json(
       { error: 'Failed to search jobs' },

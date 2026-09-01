@@ -55,32 +55,60 @@ export async function GET(request: NextRequest): Promise<NextResponse<CleanupSum
 
     console.log(`[Cleanup] Starting cleanup of jobs older than ${cutoffDate}`)
 
-    // Get all favorited job IDs to exclude from cleanup
-    // Favorited jobs should NEVER be auto-deleted
-    const { data: favoritedJobs, error: favError } = await supabase
-      .from('user_favorite_jobs')
-      .select('job_id')
+    // Get ALL favorited job IDs to exclude from cleanup (paginated: PostgREST caps
+    // unpaginated selects at max-rows, which would silently drop favorites past the cap).
+    // Favorited jobs should NEVER be auto-deleted — if we cannot load the full
+    // exclusion list, ABORT the run rather than delete with an incomplete set.
+    const favoritedJobIds = new Set<string>()
+    for (let from = 0; ; from += 1000) {
+      const { data: favPage, error: favError } = await supabase
+        .from('user_favorite_jobs')
+        .select('job_id')
+        .range(from, from + 999)
 
-    if (favError) {
-      console.error('[Cleanup] Error fetching favorited jobs:', favError)
-      errors.push(`Fetch favorites error: ${favError.message}`)
+      if (favError) {
+        console.error('[Cleanup] Error fetching favorited jobs — aborting cleanup:', favError)
+        return NextResponse.json(
+          {
+            success: false,
+            jobsDeleted: 0,
+            errors: [`Fetch favorites error: ${favError.message} — cleanup aborted to protect favorites`],
+            startedAt,
+            completedAt: new Date().toISOString(),
+            durationMs: Date.now() - startTime,
+          },
+          { status: 500 }
+        )
+      }
+
+      for (const f of favPage || []) favoritedJobIds.add(f.job_id)
+      if (!favPage || favPage.length < 1000) break
     }
-
-    const favoritedJobIds = new Set((favoritedJobs || []).map(f => f.job_id))
     console.log(`[Cleanup] Excluding ${favoritedJobIds.size} favorited jobs from cleanup`)
 
     // Delete jobs in batches to avoid timeouts with large datasets
     // Chat messages are automatically deleted via ON DELETE CASCADE
+    // Keyset pagination (created_at, id) so surviving favorited rows can't make the
+    // loop refetch the same undeletable batch forever.
     let totalDeleted = 0
     let hasMore = true
+    let cursor: { created_at: string; id: string } | null = null
 
     while (hasMore) {
       // First, get a batch of expired jobs
-      const { data: expiredJobs, error: fetchError } = await supabase
+      let batchQuery = supabase
         .from('jobs')
-        .select('id')
+        .select('id, created_at')
         .lt('created_at', cutoffDate)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
         .limit(BATCH_SIZE)
+      if (cursor) {
+        batchQuery = batchQuery.or(
+          `created_at.gt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.gt.${cursor.id})`
+        )
+      }
+      const { data: expiredJobs, error: fetchError } = await batchQuery
 
       if (fetchError) {
         console.error('[Cleanup] Error fetching expired jobs:', fetchError)
@@ -112,6 +140,10 @@ export async function GET(request: NextRequest): Promise<NextResponse<CleanupSum
 
         totalDeleted += jobsToDelete.length
       }
+
+      // Advance the keyset cursor past this batch regardless of what was deletable
+      const lastRow = expiredJobs[expiredJobs.length - 1]
+      cursor = { created_at: lastRow.created_at, id: lastRow.id }
 
       // Check if we got a full batch (might be more to process)
       hasMore = expiredJobs.length === BATCH_SIZE

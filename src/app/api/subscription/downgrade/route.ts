@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
-import { stripe, getStripeClient, getPriceId, type BillingCycle } from '@/lib/stripe/client'
+import {
+  stripe,
+  getStripeClient,
+  getPriceId,
+  getPlanFromPriceId,
+  isValidPlan,
+} from '@/lib/stripe/client'
 import { checkRateLimit } from '@/lib/security/rate-limit'
 import { isDowngrade } from '@/lib/features/config'
 import type { SubscriptionPlan } from '@/lib/supabase/types'
@@ -133,7 +139,7 @@ export async function POST(request: NextRequest) {
     // Get the user's Stripe subscription with full status
     const { data: subscription, error: subError } = await serviceClient
       .from('subscriptions')
-      .select('stripe_subscription_id, stripe_customer_id, current_period_end, status, cancel_at_period_end')
+      .select('stripe_subscription_id, stripe_customer_id, current_period_end, status, cancel_at_period_end, scheduled_downgrade_to')
       .eq('user_id', user.id)
       .single()
 
@@ -157,7 +163,10 @@ export async function POST(request: NextRequest) {
     // This also handles the P2-2 edge case: if Stripe call succeeded but DB update failed
     // on a previous attempt, the subscription will have cancel_at_period_end=true in Stripe,
     // which gets synced to our DB, so retries will correctly return ALREADY_CANCELING.
-    if (subscription.cancel_at_period_end) {
+    if (subscription.cancel_at_period_end || subscription.scheduled_downgrade_to) {
+      // scheduled_downgrade_to covers the Ultra→Pro schedule path: a subscription
+      // already attached to a Stripe schedule cannot be attached again, so a repeat
+      // POST must short-circuit here instead of failing with a generic STRIPE_ERROR.
       return NextResponse.json(
         { error: { code: 'ALREADY_CANCELING', message: 'A downgrade or cancellation is already scheduled for this subscription.' } },
         { status: 409 }
@@ -199,20 +208,27 @@ export async function POST(request: NextRequest) {
         stripeOptions
       )
 
-      // Get the actual period end from Stripe
-      const periodEnd = (updatedStripeSubscription as unknown as Record<string, unknown>).current_period_end as number | undefined
+      // Get the actual period end from Stripe (item-level since the basil API / SDK v22,
+      // with legacy top-level fallback)
+      const periodEnd =
+        updatedStripeSubscription.items?.data?.[0]?.current_period_end ??
+        ((updatedStripeSubscription as unknown as Record<string, unknown>).current_period_end as number | undefined)
       if (periodEnd) {
         periodEndDate = new Date(periodEnd * 1000).toISOString()
       }
 
-      // Update local subscription record
-      await serviceClient
+      // Update local subscription record — surface (but don't fail on) DB errors so
+      // Stripe/DB divergence is at least visible in logs
+      const { error: cancelSyncError } = await serviceClient
         .from('subscriptions')
         .update({
           cancel_at_period_end: true,
           canceled_at: new Date().toISOString(),
         })
         .eq('stripe_subscription_id', subscription.stripe_subscription_id)
+      if (cancelSyncError) {
+        console.error('Failed to record cancel_at_period_end locally (Stripe already updated):', cancelSyncError)
+      }
 
       message = 'Your subscription will be canceled at the end of your billing period.'
     } else {
@@ -222,11 +238,45 @@ export async function POST(request: NextRequest) {
 
       // Determine billing cycle from current subscription
       const currentItem = stripeSubscription.items.data[0]
-      const interval = currentItem?.price?.recurring?.interval
-      const billingCycle: BillingCycle = interval === 'week' ? 'weekly' : 'monthly'
+      if (!currentItem) {
+        return NextResponse.json(
+          { error: { code: 'CURRENT_PRICE_NOT_CONFIGURED', message: 'Current subscription price is unavailable' } },
+          { status: 500 }
+        )
+      }
 
-      // Get current_period_end - handle different Stripe SDK versions
-      const currentPeriodEnd = (stripeSubscription as unknown as Record<string, unknown>).current_period_end as number
+      const currentPrice = getPlanFromPriceId(currentItem.price.id)
+      if (!currentPrice || !isValidPlan(currentPrice.plan)) {
+        return NextResponse.json(
+          { error: { code: 'CURRENT_PRICE_NOT_CONFIGURED', message: 'Current subscription price is not configured' } },
+          { status: 500 }
+        )
+      }
+
+      if (currentPrice.plan !== 'ultra') {
+        return NextResponse.json(
+          { error: { code: 'SUBSCRIPTION_STATE_MISMATCH', message: 'Stripe subscription does not match the current Ultra plan' } },
+          { status: 409 }
+        )
+      }
+
+      const billingCycle = currentPrice.billingCycle
+
+      // Get current_period_end — since the Stripe "basil" API (SDK v22) this lives on
+      // the subscription ITEM, not the subscription (same as the webhook reads it).
+      // Fall back to the legacy top-level field for older API versions.
+      const currentPeriodEnd =
+        currentItem.current_period_end ??
+        ((stripeSubscription as unknown as Record<string, unknown>).current_period_end as number | undefined)
+
+      if (typeof currentPeriodEnd !== 'number' || !Number.isFinite(currentPeriodEnd)) {
+        // Fail BEFORE creating the schedule — a schedule created without valid phase
+        // dates leaves the subscription attached to an orphan schedule in Stripe.
+        return NextResponse.json(
+          { error: { code: 'STRIPE_STATE_UNAVAILABLE', message: 'Could not determine the current billing period end. Please try again or contact support.' } },
+          { status: 500 }
+        )
+      }
 
       // Get the Pro price ID for the same billing cycle
       const proPriceId = getPriceId('pro', billingCycle)
@@ -253,25 +303,42 @@ export async function POST(request: NextRequest) {
             items: [{ price: currentItem.price.id, quantity: 1 }],
             start_date: schedule.phases[0]?.start_date || Math.floor(Date.now() / 1000),
             end_date: currentPeriodEnd,
+            metadata: {
+              plan: currentPrice.plan,
+              billing_cycle: billingCycle,
+            },
           },
           {
             // Next phase (Pro) - starts at period end, continues indefinitely
             items: [{ price: proPriceId, quantity: 1 }],
             start_date: currentPeriodEnd,
+            metadata: {
+              plan: 'pro',
+              billing_cycle: billingCycle,
+            },
           },
         ],
       }, stripeOptions)
 
       periodEndDate = new Date(currentPeriodEnd * 1000).toISOString()
 
-      // Update local subscription record to indicate scheduled downgrade
-      await serviceClient
+      // Update local subscription record to indicate scheduled downgrade.
+      // Surface DB failure loudly: the Stripe schedule already exists, and losing this
+      // marker both hides the pending downgrade from the UI and breaks the
+      // ALREADY_CANCELING idempotency guard for repeat requests.
+      const { error: scheduleSyncError } = await serviceClient
         .from('subscriptions')
         .update({
           scheduled_downgrade_to: 'pro',
           scheduled_downgrade_date: periodEndDate,
         })
         .eq('stripe_subscription_id', subscription.stripe_subscription_id)
+      if (scheduleSyncError) {
+        console.error(
+          'Stripe downgrade schedule created but local subscriptions update failed:',
+          scheduleSyncError
+        )
+      }
 
       message = `Your plan will automatically change to Pro on ${new Date(periodEndDate).toLocaleDateString()}. You'll keep Ultra access until then.`
     }

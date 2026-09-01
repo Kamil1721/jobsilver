@@ -208,7 +208,7 @@ export async function POST(request: NextRequest) {
 
       const { error, count } = await supabase
         .from('api_request_log')
-        .delete()
+        .delete({ count: 'exact' })
         .lt('requested_at', cutoff)
 
       if (error) {

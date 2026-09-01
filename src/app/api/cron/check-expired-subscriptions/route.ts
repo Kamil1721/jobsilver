@@ -71,16 +71,17 @@ export async function GET(request: Request) {
     // Determine the relevant expiration date
     // For past_due, use current_period_end (they paid for this period)
     // But if trial_end exists and is more recent, use that (trial conversion failed)
+    // Use the LATEST paid-through date. A historical trial_end always predates the
+    // current paid period, so preferring the earlier date would downgrade past_due
+    // users who already paid for the current period (trial_end only matters when the
+    // subscription never converted, i.e. there is no later current_period_end).
     let expirationDate: string | null = sub.current_period_end
 
-    // If trial_end is set and current_period_end is not, or trial_end is before current_period_end,
-    // the user was on trial and their first payment failed
     if (sub.trial_end) {
       const trialEndDate = new Date(sub.trial_end)
       const periodEndDate = sub.current_period_end ? new Date(sub.current_period_end) : null
 
-      // Use trial_end if it's the only date or if it's earlier (trial conversion failure)
-      if (!periodEndDate || trialEndDate <= periodEndDate) {
+      if (!periodEndDate || trialEndDate > periodEndDate) {
         expirationDate = sub.trial_end
       }
     }
@@ -93,10 +94,13 @@ export async function GET(request: Request) {
     // Downgrade to free (only if still on pro or ultra)
     const { error: updateError, count } = await supabase
       .from('profiles')
-      .update({
-        subscription_plan: 'free',
-        subscription_started_at: null,
-      })
+      .update(
+        {
+          subscription_plan: 'free',
+          subscription_started_at: null,
+        },
+        { count: 'exact' } // without this supabase-js returns count: null and downgrades are invisible
+      )
       .eq('id', sub.user_id)
       .in('subscription_plan', ['pro', 'ultra']) // Update if on pro or ultra
 

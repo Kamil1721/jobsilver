@@ -23,7 +23,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const body = await request.json()
+    let body: { plan?: unknown }
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: { code: 'INVALID_BODY', message: 'Request body must be valid JSON' } },
+        { status: 400 }
+      )
+    }
     const { plan } = body
 
     // Only handle free plan selection here
@@ -38,7 +46,37 @@ export async function POST(request: NextRequest) {
     // Use service client to update the profile
     const serviceClient = createServiceClient()
 
-    const { error: updateError } = await serviceClient
+    const { data: currentProfile, error: profileError } = await serviceClient
+      .from('profiles')
+      .select('id, has_selected_plan, subscription_plan')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      console.error('Error checking plan-selection eligibility:', profileError)
+      return NextResponse.json(
+        { error: { code: 'FETCH_FAILED', message: 'Failed to verify plan selection' } },
+        { status: 500 }
+      )
+    }
+
+    if (!currentProfile) {
+      return NextResponse.json(
+        { error: { code: 'PROFILE_NOT_FOUND', message: 'Account profile was not found' } },
+        { status: 409 }
+      )
+    }
+
+    // This endpoint is onboarding-only. Existing subscriptions and downgrades
+    // must use the billing flow so profile entitlements cannot drift from Stripe.
+    if (currentProfile.has_selected_plan || currentProfile.subscription_plan !== 'free') {
+      return NextResponse.json(
+        { error: { code: 'PLAN_ALREADY_SELECTED', message: 'Use subscription settings to change plans' } },
+        { status: 409 }
+      )
+    }
+
+    const { data: updatedProfile, error: updateError } = await serviceClient
       .from('profiles')
       .update({
         has_selected_plan: true,
@@ -46,12 +84,23 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id)
+      .eq('has_selected_plan', false)
+      .eq('subscription_plan', 'free')
+      .select('id')
+      .maybeSingle()
 
     if (updateError) {
       console.error('Error updating profile for free plan selection:', updateError)
       return NextResponse.json(
         { error: { code: 'UPDATE_FAILED', message: 'Failed to update plan selection' } },
         { status: 500 }
+      )
+    }
+
+    if (!updatedProfile) {
+      return NextResponse.json(
+        { error: { code: 'PROFILE_NOT_FOUND', message: 'Account profile was not found' } },
+        { status: 409 }
       )
     }
 
@@ -74,7 +123,7 @@ export async function POST(request: NextRequest) {
  *
  * Returns the current plan selection status for the authenticated user.
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()

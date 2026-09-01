@@ -1,8 +1,27 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { checkRateLimit } from "@/lib/security/rate-limit"
+import { checkRateLimit, resetRateLimit } from "@/lib/security/rate-limit"
 
 export const dynamic = 'force-dynamic'
+
+interface ExportJobSummary {
+  title: string | null
+  company: string | null
+  location: string | null
+  url: string | null
+}
+
+function toExportJobSummary(value: unknown): ExportJobSummary | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const job = value as Record<string, unknown>
+  return {
+    title: typeof job.title === 'string' ? job.title : null,
+    company: typeof job.company === 'string' ? job.company : null,
+    location: typeof job.location === 'string' ? job.location : null,
+    url: typeof job.url === 'string' ? job.url : null,
+  }
+}
 
 /**
  * GET /api/account/export
@@ -121,6 +140,31 @@ export async function GET() {
         .single(),
     ])
 
+    // Fail closed on query errors: supabase-js resolves { data: null, error } without
+    // throwing, and coercing failures to empty arrays would present a silently partial
+    // export as complete (the export claims to contain ALL stored personal data, and the
+    // hourly rate limit stops the user retrying). .single() 'no rows' (PGRST116) is a
+    // legitimate empty state, not a failure.
+    const queryErrors = [
+      { name: 'profile', error: profileResult.error },
+      { name: 'jobs', error: jobsResult.error },
+      { name: 'favorites', error: favoritesResult.error },
+      { name: 'chatMessages', error: chatMessagesResult.error },
+      { name: 'interactions', error: interactionsResult.error },
+      { name: 'preferences', error: preferencesResult.error },
+    ].filter(q => q.error && q.error.code !== 'PGRST116')
+
+    if (queryErrors.length > 0) {
+      console.error('Account export failed:', queryErrors.map(q => `${q.name}: ${q.error?.message}`))
+      // Refund the once-per-hour slot: this was a server-side failure, not a real
+      // export, so the user must be able to retry immediately.
+      resetRateLimit(user.id, { maxRequests: 1, windowSeconds: 3600, prefix: 'data-export' }, 'data-export')
+      return NextResponse.json(
+        { error: 'Could not gather all of your data for export. Please try again.' },
+        { status: 500 }
+      )
+    }
+
     // Build the export object with user-friendly structure
     const exportData = {
       exportInfo: {
@@ -172,29 +216,29 @@ export async function GET() {
 
       favoritedJobs: {
         count: favoritesResult.data?.length || 0,
-        favorites: (favoritesResult.data || []).map(fav => ({
-          job: fav.jobs ? {
-            title: (fav.jobs as any).title,
-            company: (fav.jobs as any).company,
-            location: (fav.jobs as any).location,
-            url: (fav.jobs as any).url,
-          } : null,
-          favoritedAt: fav.favorited_at,
-          reason: fav.favorite_reason,
-        })),
+        favorites: (favoritesResult.data || []).map(fav => {
+          const job = toExportJobSummary(fav.jobs)
+          return {
+            job,
+            favoritedAt: fav.favorited_at,
+            reason: fav.favorite_reason,
+          }
+        }),
       },
 
       aiChatHistory: {
         count: chatMessagesResult.data?.length || 0,
-        messages: (chatMessagesResult.data || []).map(msg => ({
-          role: msg.role,
-          content: msg.content,
-          timestamp: msg.created_at,
-          relatedJob: msg.jobs ? {
-            title: (msg.jobs as any).title,
-            company: (msg.jobs as any).company,
-          } : null,
-        })),
+        messages: (chatMessagesResult.data || []).map(msg => {
+          const job = toExportJobSummary(msg.jobs)
+          return {
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.created_at,
+            relatedJob: job
+              ? { title: job.title, company: job.company }
+              : null,
+          }
+        }),
       },
 
       learnedPreferences: preferencesResult.data ? {

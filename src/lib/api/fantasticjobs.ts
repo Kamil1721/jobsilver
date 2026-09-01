@@ -8,7 +8,10 @@
  */
 
 import { formatDescription } from '@/lib/utils/format-description'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+// Service client, NOT the cookie/anon client: api_usage & api_request_log RLS only
+// grants admins SELECT (no authenticated INSERT/UPDATE), so with a user client the
+// quota guard always reads 0 rows (never blocks) and usage writes are silently dropped.
+import { createServiceClient } from '@/lib/supabase/server'
 
 // =============================================================================
 // API USAGE TRACKING
@@ -33,7 +36,7 @@ async function logApiUsage(
   userId?: string
 ): Promise<void> {
   try {
-    const supabase = await createServerClient()
+    const supabase = createServiceClient()
     const currentMonth = new Date().toISOString().slice(0, 7) // YYYY-MM
 
     // Get current plan from environment or default to basic
@@ -109,9 +112,15 @@ async function logApiUsage(
  * Parse RapidAPI rate limit headers
  */
 function parseRateLimitHeaders(response: Response): Partial<ApiUsageInfo> {
+  // NaN-safe int parse that preserves a legitimate 0 (|| null would turn
+  // remaining=0 — the exact moment quota runs out — into "unknown")
+  const intOrNull = (v: string | null): number | null => {
+    const n = parseInt(v ?? '', 10)
+    return Number.isNaN(n) ? null : n
+  }
   return {
-    rateLimitLimit: parseInt(response.headers.get('X-RateLimit-Limit') || response.headers.get('x-ratelimit-requests-limit') || '') || null,
-    rateLimitRemaining: parseInt(response.headers.get('X-RateLimit-Remaining') || response.headers.get('x-ratelimit-requests-remaining') || '') || null,
+    rateLimitLimit: intOrNull(response.headers.get('X-RateLimit-Limit') || response.headers.get('x-ratelimit-requests-limit')),
+    rateLimitRemaining: intOrNull(response.headers.get('X-RateLimit-Remaining') || response.headers.get('x-ratelimit-requests-remaining')),
     rateLimitReset: response.headers.get('X-RateLimit-Reset')
       ? new Date(parseInt(response.headers.get('X-RateLimit-Reset') || '0') * 1000)
       : null,
@@ -232,16 +241,16 @@ const RAPIDAPI_HOST = 'active-jobs-db.p.rapidapi.com'
  */
 async function checkGlobalQuota(): Promise<{ allowed: boolean; jobsRemaining: number }> {
   try {
-    const supabase = await createServerClient()
+    const supabase = createServiceClient()
     const currentMonth = new Date().toISOString().slice(0, 7) // YYYY-MM
-    const rapidapiPlan = process.env.RAPIDAPI_PLAN || 'pro'
+    const rapidapiPlan = process.env.RAPIDAPI_PLAN || 'basic'
     const planLimits: Record<string, number> = {
       basic: 250,
       pro: 5000,
       ultra: 20000,
       mega: 50000,
     }
-    const jobsLimit = planLimits[rapidapiPlan] || 5000
+    const jobsLimit = planLimits[rapidapiPlan] || 250
 
     const { data } = await supabase
       .from('api_usage')
@@ -451,7 +460,7 @@ export async function getExpiredJobs(since?: string): Promise<string[]> {
 
   try {
     const response = await fetch(
-      `https://${RAPIDAPI_HOST}/expired?${queryParams.toString()}`,
+      `https://${RAPIDAPI_HOST}/active-ats-expired?${queryParams.toString()}`,
       {
         method: 'GET',
         headers: {
@@ -469,7 +478,9 @@ export async function getExpiredJobs(since?: string): Promise<string[]> {
     }
 
     const data = await response.json()
-    return data.expired_job_ids || []
+    // v4 /active-ats-expired returns an array of expired job IDs (v3 wrapped them in expired_job_ids)
+    if (Array.isArray(data)) return data
+    return data.expired_job_ids || data.ids || []
   } catch (error) {
     clearTimeout(timeoutId)
     if (error instanceof Error && error.name === 'AbortError') {
@@ -828,8 +839,6 @@ export function validateJobLocation(job: FantasticJobsJob, userCountries: string
  */
 export function isWorldwideRemote(job: FantasticJobsJob): boolean {
   const description = (job.description_text || '').toLowerCase()
-  const countries = job.countries_derived || []
-
   const worldwidePatterns = [
     /work\s*from\s*anywhere/i,
     /location\s*independent/i,

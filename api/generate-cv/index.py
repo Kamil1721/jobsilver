@@ -4,6 +4,7 @@ This function receives CV data as JSON and returns a base64-encoded PDF.
 """
 
 from http.server import BaseHTTPRequestHandler
+import hmac
 import json
 import yaml
 import subprocess
@@ -146,6 +147,15 @@ def build_rendercv_yaml(data: dict[str, Any]) -> dict[str, Any]:
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
+            # Require the internal shared secret: this function is otherwise a public,
+            # unauthenticated compute endpoint (CORS is not access control). The Next.js
+            # app must proxy calls server-side with X-Internal-Token.
+            expected_token = os.environ.get('INTERNAL_API_KEY', '')
+            provided_token = self.headers.get('X-Internal-Token', '')
+            if not expected_token or not hmac.compare_digest(provided_token, expected_token):
+                self.send_error_response(401, 'Unauthorized')
+                return
+
             # Validate and read request body with size limit
             try:
                 content_length = int(self.headers.get('Content-Length', 0))

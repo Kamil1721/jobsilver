@@ -371,7 +371,7 @@ export async function DELETE(request: NextRequest) {
 
     const { error, count } = await supabase
       .from('user_reports')
-      .delete()
+      .delete({ count: 'exact' })
       .in('id', report_ids)
 
     if (error) {

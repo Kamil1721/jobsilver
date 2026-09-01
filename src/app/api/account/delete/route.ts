@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createAdminClient } from "@supabase/supabase-js"
-import { checkRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit"
+import { checkRateLimit } from "@/lib/security/rate-limit"
 import { logAccountEvent, createAuditContext } from "@/lib/security/audit-log"
 import { getStripeClient } from "@/lib/stripe/client"
 
@@ -138,13 +138,18 @@ export async function DELETE(request: Request) {
       { table: "users", column: "id" }, // public.users table
     ]
 
+    // supabase-js resolves with { error } instead of throwing, so failures MUST be
+    // read from the result. Collect them and abort before deleting the auth user —
+    // otherwise rows keyed to a nonexistent user linger (GDPR/data-retention risk).
+    const deleteFailures: string[] = []
+
     // Handle tester_invites specially (has both used_by and created_by)
-    try {
-      await supabaseAdmin.from("tester_invites").update({ used_by: null }).eq("used_by", userId)
-      await supabaseAdmin.from("tester_invites").delete().eq("created_by", userId)
-    } catch (error) {
-      console.error("Error cleaning tester_invites:", error)
-    }
+    const { error: inviteUnlinkError } = await supabaseAdmin
+      .from("tester_invites").update({ used_by: null }).eq("used_by", userId)
+    if (inviteUnlinkError) deleteFailures.push(`tester_invites(used_by): ${inviteUnlinkError.message}`)
+    const { error: inviteDeleteError } = await supabaseAdmin
+      .from("tester_invites").delete().eq("created_by", userId)
+    if (inviteDeleteError) deleteFailures.push(`tester_invites(created_by): ${inviteDeleteError.message}`)
 
     // Delete in order: jobs-dependent -> profiles-dependent -> auth-dependent -> main tables
     const allTables = [
@@ -155,22 +160,35 @@ export async function DELETE(request: Request) {
     ]
 
     for (const { table, column } of allTables) {
-      try {
-        await supabaseAdmin.from(table).delete().eq(column, userId)
-      } catch (error) {
-        console.error(`Error deleting from ${table}:`, error)
-        // Continue with other tables even if one fails
+      const { error: tableDeleteError } = await supabaseAdmin.from(table).delete().eq(column, userId)
+      if (tableDeleteError) {
+        console.error(`Error deleting from ${table}:`, tableDeleteError)
+        deleteFailures.push(`${table}: ${tableDeleteError.message}`)
+        // Continue with other tables so one failure doesn't strand the rest
       }
     }
 
-    // Delete CV files from storage
-    const { data: files } = await supabase.storage
+    // Delete CV files from storage (admin client — the user's profile rows are
+    // already gone, so the request-scoped client may no longer pass RLS)
+    const { data: files, error: listFilesError } = await supabaseAdmin.storage
       .from("cvs")
       .list(userId)
+    if (listFilesError) deleteFailures.push(`storage list: ${listFilesError.message}`)
 
     if (files && files.length > 0) {
       const filePaths = files.map((file) => `${userId}/${file.name}`)
-      await supabase.storage.from("cvs").remove(filePaths)
+      const { error: removeFilesError } = await supabaseAdmin.storage.from("cvs").remove(filePaths)
+      if (removeFilesError) deleteFailures.push(`storage remove: ${removeFilesError.message}`)
+    }
+
+    // Abort BEFORE deleting the auth user if any personal data failed to delete —
+    // the user can retry; telling them "deleted" while rows remain is the worse failure.
+    if (deleteFailures.length > 0) {
+      console.error("Account deletion incomplete, auth user NOT deleted:", deleteFailures)
+      return NextResponse.json(
+        { error: "Some of your data could not be deleted. Please try again or contact support." },
+        { status: 500 }
+      )
     }
 
     // Delete the auth user (admin client already created above)
