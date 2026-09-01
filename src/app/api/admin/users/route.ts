@@ -17,6 +17,7 @@ import {
   RATE_LIMITS,
 } from '@/lib/security/rate-limit'
 import { logAdminAction, createAuditContext, logAdminActionToDb } from '@/lib/security/audit-log'
+import { deleteUserData } from '@/lib/account/delete-user-data'
 
 export const dynamic = 'force-dynamic'
 
@@ -356,46 +357,20 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Cannot delete admin users' }, { status: 400 })
     }
 
-    // Delete related data first (in case cascade doesn't work)
-    // Delete jobs
-    await supabaseAdmin.from('jobs').delete().eq('user_id', user_id)
+    // Shared, fail-closed deletion (same helper as /api/account/delete): checks
+    // every result, covers ALL user-data tables including public.users (whose
+    // UNIQUE email constraint blocks re-signup if an orphan row lingers), and
+    // cleans up CV storage.
+    const deleteFailures = await deleteUserData(supabaseAdmin, user_id)
 
-    // Delete job quotas
-    await supabaseAdmin.from('user_job_quotas').delete().eq('user_id', user_id)
-
-    // Delete user reports
-    await supabaseAdmin.from('user_reports').delete().eq('user_id', user_id)
-
-    // Delete subscriptions
-    await supabaseAdmin.from('subscriptions').delete().eq('user_id', user_id)
-
-    // Delete customers
-    await supabaseAdmin.from('customers').delete().eq('user_id', user_id)
-
-    // Delete curation logs
-    await supabaseAdmin.from('curation_logs').delete().eq('user_id', user_id)
-
-    // Delete notifications
-    await supabaseAdmin.from('notifications').delete().eq('user_id', user_id)
-
-    // Delete user favorites
-    await supabaseAdmin.from('user_favorite_jobs').delete().eq('user_id', user_id)
-
-    // Delete user interactions
-    await supabaseAdmin.from('user_interactions').delete().eq('user_id', user_id)
-
-    // Delete user learning settings
-    await supabaseAdmin.from('user_learning_settings').delete().eq('user_id', user_id)
-
-    // Delete profile
-    const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .delete()
-      .eq('id', user_id)
-
-    if (profileError) {
-      console.error('Error deleting user profile:', profileError)
-      return NextResponse.json({ error: 'Failed to delete user profile' }, { status: 500 })
+    // Abort BEFORE removing the auth user if anything failed — retrying later is
+    // fine; leaving orphans behind a "deleted" account is not.
+    if (deleteFailures.length > 0) {
+      console.error('Admin user deletion incomplete, auth user NOT deleted:', deleteFailures)
+      return NextResponse.json(
+        { error: 'Some user data could not be deleted. Nothing was finalized — please retry.', details: deleteFailures },
+        { status: 500, headers: getRateLimitHeaders(rateLimit) }
+      )
     }
 
     // Delete from Supabase Auth (auth.users)
@@ -405,14 +380,11 @@ export async function DELETE(request: NextRequest) {
 
     if (authError) {
       console.error('Error deleting user from auth:', authError)
-      // Profile already deleted, so we report partial success
       return NextResponse.json(
         {
-          success: true,
-          deleted: user_id,
-          warning: 'User data deleted but auth account removal failed'
+          error: 'User data was deleted but the auth account removal failed. Retry to finish.',
         },
-        { headers: getRateLimitHeaders(rateLimit) }
+        { status: 500, headers: getRateLimitHeaders(rateLimit) }
       )
     }
 

@@ -4,6 +4,7 @@ import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { checkRateLimit } from "@/lib/security/rate-limit"
 import { logAccountEvent, createAuditContext } from "@/lib/security/audit-log"
 import { getStripeClient } from "@/lib/stripe/client"
+import { deleteUserData } from "@/lib/account/delete-user-data"
 
 export const dynamic = 'force-dynamic'
 
@@ -103,83 +104,11 @@ export async function DELETE(request: Request) {
       }
     )
 
-    // COMPREHENSIVE list of all tables with user data
-    // Order matters: delete tables with foreign keys first, then parent tables
-    //
-    // Phase 1: Tables that reference jobs (must delete before jobs)
-    const tablesReferencingJobs = [
-      { table: "job_chat_messages", column: "user_id" },
-      { table: "user_favorite_jobs", column: "user_id" },
-      { table: "user_interactions", column: "user_id" },
-    ]
-
-    // Phase 2: Tables that reference profiles (must delete before profiles)
-    const tablesReferencingProfiles = [
-      { table: "user_learning_settings", column: "user_id" },
-      { table: "user_ai_preferences", column: "user_id" },
-      { table: "user_reports", column: "user_id" },
-    ]
-
-    // Phase 3: Tables that reference auth.users directly
-    const tablesReferencingAuthUsers = [
-      { table: "user_job_quotas", column: "user_id" },
-      { table: "curation_logs", column: "user_id" },
-      { table: "subscriptions", column: "user_id" },
-      { table: "customers", column: "user_id" },
-      { table: "notifications", column: "user_id" },
-      { table: "user_ai_usage", column: "user_id" },
-      { table: "api_request_log", column: "triggered_by_user_id" },
-    ]
-
-    // Phase 4: Main data tables
-    const mainTables = [
-      { table: "jobs", column: "user_id" },
-      { table: "profiles", column: "id" },
-      { table: "users", column: "id" }, // public.users table
-    ]
-
-    // supabase-js resolves with { error } instead of throwing, so failures MUST be
-    // read from the result. Collect them and abort before deleting the auth user —
-    // otherwise rows keyed to a nonexistent user linger (GDPR/data-retention risk).
-    const deleteFailures: string[] = []
-
-    // Handle tester_invites specially (has both used_by and created_by)
-    const { error: inviteUnlinkError } = await supabaseAdmin
-      .from("tester_invites").update({ used_by: null }).eq("used_by", userId)
-    if (inviteUnlinkError) deleteFailures.push(`tester_invites(used_by): ${inviteUnlinkError.message}`)
-    const { error: inviteDeleteError } = await supabaseAdmin
-      .from("tester_invites").delete().eq("created_by", userId)
-    if (inviteDeleteError) deleteFailures.push(`tester_invites(created_by): ${inviteDeleteError.message}`)
-
-    // Delete in order: jobs-dependent -> profiles-dependent -> auth-dependent -> main tables
-    const allTables = [
-      ...tablesReferencingJobs,
-      ...tablesReferencingProfiles,
-      ...tablesReferencingAuthUsers,
-      ...mainTables,
-    ]
-
-    for (const { table, column } of allTables) {
-      const { error: tableDeleteError } = await supabaseAdmin.from(table).delete().eq(column, userId)
-      if (tableDeleteError) {
-        console.error(`Error deleting from ${table}:`, tableDeleteError)
-        deleteFailures.push(`${table}: ${tableDeleteError.message}`)
-        // Continue with other tables so one failure doesn't strand the rest
-      }
-    }
-
-    // Delete CV files from storage (admin client — the user's profile rows are
-    // already gone, so the request-scoped client may no longer pass RLS)
-    const { data: files, error: listFilesError } = await supabaseAdmin.storage
-      .from("cvs")
-      .list(userId)
-    if (listFilesError) deleteFailures.push(`storage list: ${listFilesError.message}`)
-
-    if (files && files.length > 0) {
-      const filePaths = files.map((file) => `${userId}/${file.name}`)
-      const { error: removeFilesError } = await supabaseAdmin.storage.from("cvs").remove(filePaths)
-      if (removeFilesError) deleteFailures.push(`storage remove: ${removeFilesError.message}`)
-    }
+    // Shared, fail-closed deletion of every user-data table (including
+    // public.users, whose UNIQUE email constraint would block this address from
+    // re-registering if a row lingered) plus CV storage. Same helper as the
+    // admin panel's delete, so the two paths cannot drift apart.
+    const deleteFailures = await deleteUserData(supabaseAdmin, userId)
 
     // Abort BEFORE deleting the auth user if any personal data failed to delete —
     // the user can retry; telling them "deleted" while rows remain is the worse failure.
