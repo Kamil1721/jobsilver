@@ -14,12 +14,12 @@ import {
   Lock,
   User,
   ArrowRight,
-  Sparkles,
   Loader2,
-  FlaskConical,
+  KeyRound,
 } from "lucide-react"
 import { Nav } from "@/components/landing/nav"
 import { Footer } from "@/components/landing/dawn-footer"
+import { AssistantIdentity } from "@/components/ai-assistant/assistant-identity"
 
 export default function TesterLoginPage() {
   const [isLoading, setIsLoading] = React.useState(false)
@@ -271,8 +271,8 @@ export default function TesterLoginPage() {
               transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
               className="mb-8 text-center"
             >
-              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--dawn-line)] bg-[var(--coral-soft)] px-3.5 py-1.5">
-                <FlaskConical className="h-3.5 w-3.5 text-[var(--coral-lo)]" aria-hidden="true" />
+              <div className="mb-5 inline-flex items-center gap-2 rounded-md border border-[var(--coral)]/20 bg-[var(--dawn-cream)] px-3.5 py-1.5">
+                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[var(--coral)]" />
                 <span className="text-[13px] font-semibold uppercase tracking-[0.09em] text-[var(--coral-lo)]">
                   Beta Tester Access
                 </span>
@@ -297,9 +297,7 @@ export default function TesterLoginPage() {
             >
               {/* Features Banner */}
               <div className="mb-6 flex items-center gap-3 rounded-[12px] border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-3.5">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[10px] bg-[var(--coral-soft)]">
-                  <Sparkles className="h-5 w-5 text-[var(--coral-lo)]" aria-hidden="true" />
-                </div>
+                <AssistantIdentity size={40} variant="folio" />
                 <div className="min-w-0 flex-1">
                   <p className="text-[14px] font-semibold text-[var(--dawn-ink)]">
                     Full feature access
@@ -350,7 +348,7 @@ export default function TesterLoginPage() {
                   Invite code <span className="text-[var(--coral-lo)]">*</span>
                 </Label>
                 <div className="relative">
-                  <FlaskConical
+                  <KeyRound
                     className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--dawn-ink-3)]"
                     aria-hidden="true"
                   />
@@ -519,7 +517,7 @@ export default function TesterLoginPage() {
                       </>
                     ) : (
                       <>
-                        <FlaskConical className="h-4 w-4" aria-hidden="true" />
+                        <ArrowRight className="h-4 w-4" aria-hidden="true" />
                         Join as tester
                       </>
                     )}

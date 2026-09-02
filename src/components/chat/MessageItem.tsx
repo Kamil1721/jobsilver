@@ -1,9 +1,10 @@
 'use client'
 
 import * as React from 'react'
-import { Bot, User, Wrench, Check, Loader2, Copy, FileText, Wand2 } from 'lucide-react'
+import { User, Wrench, Check, Loader2, Copy, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { AssistantIdentity } from '@/components/ai-assistant/assistant-identity'
 import type { ChatMessage } from '@/hooks/use-chat'
 import { useChat } from '@/hooks/use-chat'
 import { downloadCoverLetter } from '@/lib/ai/chat-service'
@@ -201,16 +202,13 @@ export function MessageItem({ message }: MessageItemProps) {
       )}
     >
       {/* Avatar */}
-      <div
-        className={cn(
-          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-          isUser
-            ? 'bg-[var(--coral-soft)] text-[var(--coral-lo)]'
-            : 'bg-muted text-muted-foreground'
-        )}
-      >
-        {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-      </div>
+      {isUser ? (
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--coral-soft)] text-[var(--coral-lo)]">
+          <User className="h-4 w-4" />
+        </div>
+      ) : (
+        <AssistantIdentity size={32} variant="folio" />
+      )}
 
       {/* Message bubble */}
       <div
@@ -294,10 +292,7 @@ export function MessageItem({ message }: MessageItemProps) {
                     Filled
                   </>
                 ) : (
-                  <>
-                    <Wand2 className="h-3 w-3" />
-                    Use Answer
-                  </>
+                  "Use Answer"
                 )}
               </Button>
             )}

@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { FileText, Lightbulb, Sparkles, ClipboardList, HelpCircle, Settings, Search } from 'lucide-react'
+import { FileText, Lightbulb, ClipboardList, HelpCircle, Settings, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { JobContextPayload } from '@/lib/events/chat-events'
 import { cn } from '@/lib/utils'
@@ -35,7 +35,7 @@ export function QuickActions({ onSelect, jobContext, pendingQuestion, pageContex
           )}
           onClick={() => onSelect(pendingQuestion)}
         >
-          <Sparkles className="h-4 w-4 mr-2 shrink-0 text-muted-foreground" />
+          <ClipboardList className="h-4 w-4 mr-2 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className="text-xs text-foreground line-clamp-2">{pendingQuestion}</span>
         </Button>
       </div>

@@ -8,7 +8,6 @@ import {
   Wrench,
   X,
   Plus,
-  Sparkles,
   Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -286,10 +285,7 @@ export function SkillsSection({ data, onUpdate, jobTitles = [] }: SkillsSectionP
                 Thinking...
               </>
             ) : (
-              <>
-                <Sparkles className="w-3 h-3" />
-                AI Suggest
-              </>
+              "Suggest skills"
             )}
           </Button>
         </div>
@@ -343,8 +339,7 @@ export function SkillsSection({ data, onUpdate, jobTitles = [] }: SkillsSectionP
       {/* AI-suggested skills - shown when AI generates suggestions */}
       {aiSuggestions.length > 0 && skills.length < 15 && (
         <div className="space-y-2 rounded-xl border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-[var(--coral-lo)]" />
+          <div>
             <p className="text-xs font-medium text-[var(--coral-lo)]">
               AI-suggested skills (click to add):
             </p>

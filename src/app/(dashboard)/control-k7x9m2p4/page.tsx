@@ -61,7 +61,6 @@ import {
   Lightbulb,
   HelpCircle,
   AlertCircle,
-  FlaskConical,
   Link2,
   Copy,
   UserMinus,
@@ -768,7 +767,11 @@ export default function AdminPage() {
                 <p className="text-sm text-muted-foreground">Testers</p>
                 <p className="text-3xl font-bold">{testerStats.total_testers}</p>
               </div>
-              <FlaskConical className="w-10 h-10 text-teal-600/70 dark:text-teal-500/50" />
+              <span
+                className="rounded-full border border-teal-500/30 bg-teal-500/10 px-2 py-1 text-[10px] font-semibold tracking-[0.12em] text-teal-700 dark:text-teal-400"
+              >
+                BETA
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -808,7 +811,6 @@ export default function AdminPage() {
             Reports ({reportsTotal})
           </TabsTrigger>
           <TabsTrigger value="testers" className="gap-2">
-            <FlaskConical className="w-4 h-4" />
             Testers ({testerStats.total_testers})
           </TabsTrigger>
           <TabsTrigger value="announcements" className="gap-2">
@@ -898,7 +900,6 @@ export default function AdminPage() {
                             </Badge>
                             {user.is_tester && (
                               <Badge className="bg-teal-500/10 text-teal-700 border-teal-500/20">
-                                <FlaskConical className="w-3 h-3 mr-1" />
                                 Tester
                               </Badge>
                             )}
@@ -1084,7 +1085,11 @@ export default function AdminPage() {
                     <p className="text-sm text-muted-foreground">Total Testers</p>
                     <p className="text-2xl font-bold">{testerStats.total_testers}</p>
                   </div>
-                  <FlaskConical className="w-8 h-8 text-teal-600/70 dark:text-teal-500/50" />
+                  <span
+                    className="rounded-full border border-teal-500/30 bg-teal-500/10 px-2 py-1 text-[10px] font-semibold tracking-[0.12em] text-teal-700 dark:text-teal-400"
+                  >
+                    BETA
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -1308,7 +1313,6 @@ export default function AdminPage() {
                               ultra
                             </Badge>
                             <Badge className="bg-teal-500/10 text-teal-700 border-teal-500/20">
-                              <FlaskConical className="w-3 h-3 mr-1" />
                               Tester
                             </Badge>
                           </div>
@@ -1571,7 +1575,6 @@ export default function AdminPage() {
             <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
               <div>
                 <p className="text-sm font-medium flex items-center gap-2">
-                  <FlaskConical className="w-4 h-4 text-teal-500" />
                   Tester Status
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -1591,7 +1594,7 @@ export default function AdminPage() {
                   </>
                 ) : (
                   <>
-                    <FlaskConical className="w-4 h-4 mr-1" />
+                    <Plus className="w-4 h-4 mr-1" />
                     Grant
                   </>
                 )}

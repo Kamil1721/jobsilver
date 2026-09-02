@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { motion } from "framer-motion"
-import { Check, X, Sparkles, Zap, Rocket } from "lucide-react"
+import { Check, X, Zap, Rocket } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { BillingCycle } from "./PricingToggle"
@@ -81,8 +81,7 @@ export function PricingCard({
       {/* Badge */}
       {plan.badge && (
         <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10">
-          <div className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[var(--coral)] text-[var(--coral-ink)] text-xs font-semibold shadow-lg shadow-[rgba(240,96,58,0.25)]">
-            <Sparkles className="w-3.5 h-3.5" />
+          <div className="px-4 py-1.5 rounded-full bg-[var(--coral)] text-[var(--coral-ink)] text-xs font-semibold shadow-lg shadow-[rgba(240,96,58,0.25)]">
             {plan.badge}
           </div>
         </div>
@@ -162,8 +161,7 @@ export function PricingCard({
           <p className="text-xs text-center mt-1">
             {plan.hasAI ? (
               plan.aiResponsesPerDay === -1 ? (
-                <span className="flex items-center justify-center gap-1.5 text-[var(--coral)]">
-                  <Sparkles className="w-3 h-3" />
+                <span className="text-[var(--coral)]">
                   Unlimited AI assistance
                 </span>
               ) : (

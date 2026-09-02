@@ -24,9 +24,9 @@ export function DawnHero() {
             style={{ animationDelay: "80ms" }}
             className="dawn-hero-copy mt-6 max-w-[48ch] text-pretty text-[clamp(17px,1.25vw,19px)] leading-[1.58] text-[var(--dawn-ink-2)]"
           >
-            Each morning, JobSilver gives you a focused shortlist with clear
-            fit reasons. When a role stands out, it helps prepare tailored
-            application materials.
+            Each morning, JobSilver adds fresh matches to your dashboard based
+            on the roles, locations, and work preferences you choose. When one
+            stands out, it helps you prepare the application.
           </p>
 
           <div

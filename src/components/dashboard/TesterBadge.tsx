@@ -3,7 +3,6 @@
 import * as React from "react"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
-import { FlaskConical, Sparkles } from "lucide-react"
 import {
   Tooltip,
   TooltipContent,
@@ -23,24 +22,28 @@ export function TesterBadge({
   variant = "default",
 }: TesterBadgeProps) {
   const badge = (
-    <motion.div
+    <motion.span
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.2 }}
+      tabIndex={showTooltip ? 0 : undefined}
       className={cn(
-        "inline-flex items-center gap-1.5 font-medium",
+        "inline-flex items-center font-semibold uppercase tracking-[0.08em] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--coral)]/45 focus-visible:ring-offset-2",
         variant === "default"
-          ? "px-2.5 py-1 rounded-lg text-xs bg-[var(--coral-soft)] text-[var(--coral)] border border-[var(--coral)]/20"
-          : "px-1.5 py-0.5 rounded text-[10px] bg-[var(--coral-soft)] text-[var(--coral)]",
+          ? "gap-1.5 rounded-md border border-[var(--coral)]/20 bg-[var(--dawn-cream)] px-2.5 py-1 text-[10px] text-[var(--coral-lo)]"
+          : "gap-1 rounded-[0.3rem] bg-[var(--coral-soft)] px-1.5 py-0.5 text-[9px] text-[var(--coral-lo)]",
         className
       )}
     >
-      <FlaskConical className={cn(variant === "default" ? "w-3.5 h-3.5" : "w-2.5 h-2.5")} />
+      <span
+        aria-hidden="true"
+        className={cn(
+          "shrink-0 rounded-full bg-[var(--coral)]",
+          variant === "default" ? "h-1.5 w-1.5" : "h-1 w-1"
+        )}
+      />
       <span>Tester</span>
-      {variant === "default" && (
-        <Sparkles className="w-3 h-3 text-[var(--coral)]" />
-      )}
-    </motion.div>
+    </motion.span>
   )
 
   if (!showTooltip) {

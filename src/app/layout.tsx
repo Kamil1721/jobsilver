@@ -21,9 +21,14 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://jobsilver.com'),
-  title: "JobSilver - AI-Powered Job Search",
-  description: "Find and apply to jobs that match your skills with AI-powered matching",
+  title: "JobSilver: Wake Up to Jobs Worth Your Time",
+  description: "Get fresh job matches based on your preferences each day. Draft cover letters, prepare application answers, and generate a tailored CV before you apply.",
+  verification: {
+    google: "1qgCg2Uu7ARLa6sFjDGGTrK_-bw1tZKUxNXrzP-CYBU",
+  },
   openGraph: {
+    title: "JobSilver: Wake Up to Jobs Worth Your Time",
+    description: "Get fresh job matches based on your preferences each day. Draft cover letters, prepare application answers, and generate a tailored CV before you apply.",
     siteName: "JobSilver",
     type: "website",
     images: [
@@ -31,7 +36,7 @@ export const metadata: Metadata = {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'JobSilver - AI-Powered Job Search Assistant',
+        alt: 'JobSilver: Wake Up to Jobs Worth Your Time',
       },
     ],
   },

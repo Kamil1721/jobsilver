@@ -102,7 +102,7 @@ const FAQ_CATEGORIES = [
     questions: [
       {
         question: "What can the AI assistant do?",
-        answer: "The AI assistant can write personalized cover letters, help answer application questions, generate optimized CVs for specific roles, analyze job fit, and help you prepare for interviews. Pro users get 30 AI responses, 5 cover letters, and 3 CV generations per day. Ultra users get unlimited AI access.",
+        answer: "The assistant can draft cover letters, help answer application questions, generate tailored CVs for specific roles, and help you prepare for interviews. Pro users get 30 AI responses, 5 cover letters, and 3 CV generations per day. Ultra users get unlimited AI access.",
       },
       {
         question: "Is the AI chat available to Free users?",

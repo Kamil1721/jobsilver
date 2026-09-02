@@ -4,12 +4,13 @@ import { LandingPage } from "@/components/landing/landing-page"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "JobSilver - AI-Powered Job Search Assistant",
-  description: "Find your dream job faster with AI-powered matching, smart curation, and an intelligent assistant that helps you craft perfect applications.",
-  keywords: ["job search", "AI job matching", "AI assistant", "job tracker", "application tracking", "cover letter generator"],
+  title: "JobSilver: Wake Up to Jobs Worth Your Time",
+  description: "Get fresh job matches based on your preferences each day. Draft cover letters, prepare application answers, and generate a tailored CV before you apply.",
+  keywords: ["job search", "daily job shortlist", "job matching", "job tracker", "application tracking", "cover letter preparation", "CV preparation"],
   openGraph: {
-    title: "JobSilver - AI-Powered Job Search Assistant",
-    description: "Find your dream job faster with AI-powered matching, smart curation, and an intelligent assistant that helps you craft perfect applications.",
+    title: "JobSilver: Wake Up to Jobs Worth Your Time",
+    description: "Get fresh job matches based on your preferences each day. Draft cover letters, prepare application answers, and generate a tailored CV before you apply.",
+    siteName: "JobSilver",
     type: "website",
     url: "https://jobsilver.com",
     images: [
@@ -17,7 +18,7 @@ export const metadata: Metadata = {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'JobSilver - AI-Powered Job Search Assistant',
+        alt: 'JobSilver: Wake Up to Jobs Worth Your Time',
       },
     ],
   },

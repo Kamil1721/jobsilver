@@ -11,7 +11,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Sparkles, MessageSquare, FileEdit, ArrowUpRight } from "lucide-react"
+import { MessageSquare, FileEdit, ArrowUpRight } from "lucide-react"
+import { AssistantIdentity } from "./assistant-identity"
 
 interface AIUsage {
   aiResponses: {
@@ -131,10 +132,18 @@ export function UsageIndicator({ className, variant = "compact" }: UsageIndicato
                 className
               )}
             >
-              <Sparkles className={cn(
-                "w-3.5 h-3.5",
-                isOutOfResponses ? "text-red-600" : isLowOnResponses ? "text-amber-600" : "text-muted-foreground"
-              )} />
+              <AssistantIdentity
+                size={14}
+                variant="folio"
+                className={cn(
+                  "ring-1",
+                  isOutOfResponses
+                    ? "ring-red-600/50"
+                    : isLowOnResponses
+                      ? "ring-amber-600/50"
+                      : "ring-border"
+                )}
+              />
               <span className={cn(
                 "text-xs font-medium",
                 isOutOfResponses ? "text-red-600" : isLowOnResponses ? "text-amber-600" : "text-muted-foreground"
@@ -169,7 +178,7 @@ export function UsageIndicator({ className, variant = "compact" }: UsageIndicato
     >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-[var(--coral)]" />
+          <AssistantIdentity size={16} variant="folio" />
           <h3 className="text-sm font-medium text-foreground">AI Usage</h3>
         </div>
         <span className="text-xs text-muted-foreground">

@@ -15,7 +15,6 @@ import {
   User,
   ArrowRight,
   Loader2,
-  FlaskConical,
   CheckCircle2,
   XCircle,
   type LucideIcon,
@@ -501,7 +500,7 @@ function LoginPageContent() {
                     }}
                   >
                     {inviteStatus.valid ? (
-                      <FlaskConical className="h-[18px] w-[18px]" />
+                      <CheckCircle2 className="h-[18px] w-[18px]" aria-hidden="true" />
                     ) : (
                       <XCircle className="h-[18px] w-[18px]" />
                     )}

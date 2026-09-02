@@ -16,7 +16,7 @@ import { PLAN_LIMITS } from "@/lib/stripe/plans"
 import type { AllSubscriptionPlans } from "@/lib/supabase/types"
 import {
   Lock,
-  Sparkles,
+  MessageSquare,
   Check,
   ArrowRight,
   Loader2,
@@ -151,7 +151,7 @@ export function UpgradeModal() {
                 <span className="text-xl font-bold">{planLimits.jobsPerDay}/day</span>
               </div>
               <div className="flex items-center gap-1.5 mt-1 text-sm text-emerald-600 dark:text-emerald-400">
-                <Sparkles className="w-3.5 h-3.5" />
+                <MessageSquare className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>
                   {isUltra
                     ? 'Unlimited AI assistance'

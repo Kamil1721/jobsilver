@@ -7,7 +7,6 @@ import { useToast } from "@/hooks/use-toast"
 import {
   FileText,
   Upload,
-  Sparkles,
   CheckCircle2,
   Loader2,
   ArrowLeft,
@@ -328,7 +327,7 @@ export function StepCV({ data, onUpdate, jobFilters, isFirstTimeSetup = true, su
                   : "bg-secondary"
               )}>
                 {canGenerateNewCV ? (
-                  <Sparkles className="w-6 h-6 text-[var(--coral-ink)]" />
+                  <FileText className="w-6 h-6 text-[var(--coral-ink)]" aria-hidden="true" />
                 ) : (
                   <Lock className="w-6 h-6 text-muted-foreground" />
                 )}
@@ -439,7 +438,7 @@ export function StepCV({ data, onUpdate, jobFilters, isFirstTimeSetup = true, su
                     }}
                   >
                     {canGenerateNewCV ? (
-                      <Sparkles className="w-4 h-4 mr-2" />
+                      <FileText className="w-4 h-4 mr-2" aria-hidden="true" />
                     ) : (
                       <Lock className="w-4 h-4 mr-2" />
                     )}
@@ -638,7 +637,7 @@ export function StepCV({ data, onUpdate, jobFilters, isFirstTimeSetup = true, su
           {/* Info Banner */}
             <div className="rounded-xl border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-4">
             <div className="flex gap-3">
-              <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-[var(--coral-lo)]" />
+              <FileText className="mt-0.5 h-5 w-5 shrink-0 text-[var(--coral-lo)]" aria-hidden="true" />
               <div>
                 <p className="font-medium text-[var(--dawn-ink)]">
                   AI-Generated CV

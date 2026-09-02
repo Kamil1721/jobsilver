@@ -18,7 +18,6 @@ import {
   Loader2,
   Plus,
   Trash2,
-  Sparkles,
   FileText,
   ExternalLink,
   CheckCircle2,
@@ -531,7 +530,7 @@ export function CVGeneratorDialog({
       <DialogContent className={`${styles.dialog} max-h-[90dvh] max-w-2xl overflow-y-auto rounded-[1.35rem]`}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-[var(--coral-lo)]" />
+            <FileText className="h-5 w-5 text-[var(--coral-lo)]" aria-hidden="true" />
             {job ? `Generate CV for ${job.company || "Job"}` : "Generate Professional CV"}
           </DialogTitle>
           <DialogDescription>
@@ -758,10 +757,7 @@ export function CVGeneratorDialog({
                             Thinking...
                           </>
                         ) : (
-                          <>
-                            <Sparkles className="w-3 h-3" />
-                            AI Suggest
-                          </>
+                          "Suggest achievements"
                         )}
                       </Button>
                     </div>
@@ -812,8 +808,7 @@ export function CVGeneratorDialog({
                     {/* AI Achievement Suggestions */}
                     {achievementSuggestions?.index === index && achievementSuggestions.suggestions.length > 0 && (
                       <div className="mt-2 space-y-2 rounded-xl border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-3">
-                        <p className="flex items-center gap-1.5 text-xs font-medium text-[var(--coral-lo)]">
-                          <Sparkles className="w-3 h-3" />
+                        <p className="text-xs font-medium text-[var(--coral-lo)]">
                           AI-suggested achievements (click to add):
                         </p>
                         <div className="space-y-1.5">
@@ -975,10 +970,7 @@ export function CVGeneratorDialog({
                       Thinking...
                     </>
                   ) : (
-                    <>
-                      <Sparkles className="w-3 h-3" />
-                      AI Suggest
-                    </>
+                    "Suggest skills"
                   )}
                 </Button>
               </div>
@@ -1001,8 +993,7 @@ export function CVGeneratorDialog({
               {/* AI Suggestions */}
               {aiSkillSuggestions.length > 0 && (
                 <div className="space-y-2 rounded-xl border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-3">
-                  <p className="flex items-center gap-1.5 text-xs font-medium text-[var(--coral-lo)]">
-                    <Sparkles className="w-3 h-3" />
+                  <p className="text-xs font-medium text-[var(--coral-lo)]">
                     AI-suggested skills (click to add):
                   </p>
                   <div className="flex flex-wrap gap-2">

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Heart, Lock, Sparkles } from "lucide-react"
+import { Heart, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useSubscription } from "@/contexts/SubscriptionContext"
 import { useToast } from "@/hooks/use-toast"
@@ -26,17 +26,14 @@ const sizeConfig = {
   sm: {
     button: "h-6 w-6",
     icon: "w-3 h-3",
-    particles: 3,
   },
   md: {
     button: "h-8 w-8",
     icon: "w-4 h-4",
-    particles: 4,
   },
   lg: {
     button: "h-10 w-10",
     icon: "w-5 h-5",
-    particles: 5,
   },
 }
 
@@ -53,7 +50,6 @@ export function FavoriteButton({
   const [isFavorited, setIsFavorited] = React.useState(initialFavorited)
   const [isAnimating, setIsAnimating] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
-  const [showParticles, setShowParticles] = React.useState(false)
 
   const isPremium = plan === "pro" || plan === "ultra" || plan === "mega" || isTester
   const config = sizeConfig[size]
@@ -86,11 +82,6 @@ export function FavoriteButton({
     const newState = !isFavorited
     setIsFavorited(newState)
     setIsAnimating(true)
-
-    if (newState) {
-      setShowParticles(true)
-      setTimeout(() => setShowParticles(false), 600)
-    }
 
     setIsLoading(true)
 
@@ -184,31 +175,6 @@ export function FavoriteButton({
           <Lock aria-hidden="true" className={cn(config.icon, "text-muted-foreground")} />
         )}
       </motion.div>
-
-      {/* Particle burst effect */}
-      <AnimatePresence>
-        {showParticles && (
-          <>
-            {Array.from({ length: config.particles }).map((_, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 1, scale: 0, x: 0, y: 0 }}
-                animate={{
-                  opacity: 0,
-                  scale: 1,
-                  x: Math.cos((i * 2 * Math.PI) / config.particles) * 20,
-                  y: Math.sin((i * 2 * Math.PI) / config.particles) * 20,
-                }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.5, ease: "easeOut" }}
-                className="absolute"
-              >
-                <Sparkles className="w-2 h-2 text-[var(--coral)]" />
-              </motion.div>
-            ))}
-          </>
-        )}
-      </AnimatePresence>
 
       {/* Loading indicator */}
       {isLoading && (

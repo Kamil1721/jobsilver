@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import {
   Crown,
   Rocket,
-  Sparkles,
   Zap,
   CreditCard,
   Calendar,
@@ -14,7 +13,6 @@ import {
   AlertTriangle,
   ArrowUpRight,
   CheckCircle2,
-  FlaskConical,
   Check,
   X,
 } from "lucide-react"
@@ -22,6 +20,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { TesterBadge } from "@/components/dashboard/TesterBadge"
 import type { SubscriptionPlan, StripeSubscriptionStatus } from "@/lib/supabase/types"
 
 interface SubscriptionInfo {
@@ -76,7 +75,7 @@ const PLAN_DETAILS: Record<
   },
   starter: {
     name: "Starter",
-    icon: Sparkles,
+    icon: Clock,
     color: "text-[var(--coral-lo)]",
     bgColor: "bg-[var(--coral-soft)]",
     description: "Legacy plan",
@@ -263,13 +262,7 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-lg">{planInfo.name} Plan</h3>
                   {subscription.isTester && (
-                    <Badge
-                      variant="outline"
-                      className="gap-1 border-[var(--coral)]/20 bg-[var(--coral-soft)] text-[var(--coral-lo)]"
-                    >
-                      <FlaskConical className="w-3 h-3" />
-                      Tester
-                    </Badge>
+                    <TesterBadge variant="compact" showTooltip={false} />
                   )}
                   {isTrialing && (
                     <Badge
@@ -414,7 +407,7 @@ export function SubscriptionManagement({ userId }: SubscriptionManagementProps) 
         {subscription.isTester && (
           <div className="rounded-xl border border-[var(--dawn-line)] bg-[var(--dawn-cream)] p-4">
             <div className="flex items-start gap-3">
-              <FlaskConical className="mt-0.5 h-5 w-5 text-[var(--coral-lo)]" />
+              <span aria-hidden="true" className="mt-1 h-8 w-1 shrink-0 rounded-full bg-[var(--coral)]" />
               <div>
                 <p className="font-medium text-[var(--dawn-ink)]">
                   Beta Tester Access

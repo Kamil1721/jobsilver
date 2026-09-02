@@ -14,8 +14,8 @@ const steps = [
   {
     number: "02",
     timing: "Each morning",
-    title: "Read the ranked shortlist",
-    body: "Fresh roles arrive in order, with fit reasons that make the ranking easy to check.",
+    title: "Review your morning shortlist",
+    body: "Fresh roles arrive in one focused view so you can decide which postings are worth opening.",
   },
   {
     number: "03",

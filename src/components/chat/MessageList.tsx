@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Bot } from 'lucide-react'
+import { AssistantIdentity } from '@/components/ai-assistant/assistant-identity'
 import { MessageItem } from './MessageItem'
 import { TypingIndicator } from './TypingIndicator'
 import type { ChatMessage } from '@/hooks/use-chat'
@@ -30,11 +30,11 @@ export function MessageList({ messages, isStreaming }: MessageListProps) {
       <div className="space-y-4">
         {messages.length === 0 ? (
           <div className="text-center py-8">
-            <div className="relative flex h-12 w-12 items-center justify-center rounded-xl mx-auto mb-3 overflow-hidden">
-              <div className="absolute inset-0 bg-border" />
-              <div className="absolute inset-[1px] rounded-[10px] bg-secondary" />
-              <Bot className="relative z-10 h-6 w-6 text-muted-foreground" />
-            </div>
+            <AssistantIdentity
+              size={64}
+              variant="folio"
+              className="mx-auto mb-4 drop-shadow-sm"
+            />
             <p className="text-sm text-foreground font-medium">
               JobSilver AI Assistant
             </p>

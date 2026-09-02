@@ -5,8 +5,8 @@ import { PublicFooter } from '@/components/public-footer'
 import { LegalHeader } from '@/components/legal/legal-header'
 
 export const metadata: Metadata = {
-  title: 'Terms of Service | Job Silver',
-  description: 'Terms of Service for Job Silver - AI-powered job search management platform',
+  title: 'Terms of Service | JobSilver',
+  description: 'Terms of Service for JobSilver, a job search and application preparation service',
 }
 
 // Long-form legal typography, tuned to the Dawn system. The Tailwind
@@ -116,8 +116,8 @@ export default function TermsOfServicePage() {
                 <ul>
                   <li><strong>Job Discovery:</strong> Aggregated job listings from fantastic.jobs API and direct ATS integrations (Greenhouse, Lever, Ashby)</li>
                   <li><strong>Job Tracking:</strong> A visual kanban board to organize and track job applications</li>
-                  <li><strong>AI Assistant:</strong> AI-powered features to help craft application answers, generate cover letters, and analyze job fit</li>
-                  <li><strong>CV Management:</strong> Upload, parse, and generate optimized CVs/resumes</li>
+                  <li><strong>AI Assistant:</strong> Draft application answers and cover letters, and prepare for interviews</li>
+                  <li><strong>CV Management:</strong> Upload, parse, and generate tailored CVs/resumes</li>
                   <li><strong>Personalized Recommendations:</strong> AI-learned preferences based on your interactions (optional)</li>
                 </ul>
 

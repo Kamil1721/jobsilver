@@ -1,8 +1,9 @@
 'use client'
 
 import * as React from 'react'
-import { Bot, GripVertical, X, RotateCcw } from 'lucide-react'
+import { GripVertical, X, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { AssistantIdentity } from '@/components/ai-assistant/assistant-identity'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,11 +43,11 @@ export function ChatHeader({ pageContext }: ChatHeaderProps) {
     >
       {/* Header left side */}
       <div className="flex items-center gap-3">
-        <div className="relative flex h-9 w-9 items-center justify-center rounded-lg overflow-hidden">
-          <div className="absolute inset-0 bg-border" />
-          <div className="absolute inset-[1px] rounded-[6px] bg-card" />
-          <Bot className="relative z-10 h-5 w-5 text-muted-foreground" />
-        </div>
+        <AssistantIdentity
+          size={36}
+          variant="folio"
+          className="drop-shadow-sm"
+        />
         <div>
           <h3 className="text-sm font-semibold text-foreground">JobSilver AI</h3>
           <p className="text-xs text-muted-foreground">

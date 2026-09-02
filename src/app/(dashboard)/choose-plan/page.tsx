@@ -4,7 +4,7 @@ import * as React from "react"
 import { Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion, MotionConfig } from "framer-motion"
-import { ArrowRight, Sparkles, Check, ArrowLeft, CircleAlert, RefreshCcw } from "lucide-react"
+import { ArrowRight, Check, ArrowLeft, CircleAlert, RefreshCcw } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { PricingCard, PRICING_PLANS } from "@/components/pricing/PricingCard"
@@ -420,8 +420,7 @@ function ChoosePlanPageContent() {
           className="mb-12 grid items-end gap-8 md:grid-cols-[1fr_auto]"
         >
           <div>
-            <div className="mb-5 flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.09em] text-[var(--coral-lo)]">
-              <Sparkles className="h-4 w-4" aria-hidden="true" />
+            <div className="mb-5 text-[13px] font-semibold uppercase tracking-[0.09em] text-[var(--coral-lo)]">
               Plans &amp; pricing
             </div>
             <h1 className="max-w-[13ch] text-balance text-[clamp(2.35rem,6vw,4.6rem)] font-semibold leading-[0.98] tracking-[-0.04em] text-[var(--dawn-ink)]">

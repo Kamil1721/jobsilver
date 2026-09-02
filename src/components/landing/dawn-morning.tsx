@@ -11,17 +11,17 @@ const shortlist = [
   {
     rank: "01",
     role: "Product designer",
-    reasons: ["Preferred role", "Remote", "Seniority fits"],
+    details: ["Remote", "Greenhouse", "Posted today"],
   },
   {
     rank: "02",
     role: "Frontend engineer",
-    reasons: ["Relevant skills", "Remote"],
+    details: ["Hybrid", "Lever", "Posted today"],
   },
   {
     rank: "03",
     role: "Growth marketer",
-    reasons: ["Location fits", "Salary listed"],
+    details: ["London", "Ashby", "Posted yesterday"],
   },
 ]
 
@@ -54,8 +54,9 @@ export function MorningPayoff() {
                 The noise resolves before breakfast.
               </h2>
               <p className="mt-5 text-pretty text-[clamp(16px,1.1vw,18px)] leading-[1.62] text-[var(--dawn-ink-2)]">
-                Direct job sources and your preferences meet in one ranked view.
-                Each role includes the reasons it made the list.
+                JobSilver puts fresh roles from direct job sources in one
+                focused view. Each role keeps a clear path back to the original
+                posting.
               </p>
               <div className="mt-7">
                 <CtaButton href="/login" variant="ghost" size="md">
@@ -155,12 +156,12 @@ export function MorningPayoff() {
                             {job.role}
                           </h4>
                           <ul className="mt-2 flex flex-wrap gap-1.5">
-                            {job.reasons.map((reason) => (
+                            {job.details.map((detail) => (
                               <li
-                                key={reason}
+                                key={detail}
                                 className="rounded-full bg-[var(--dawn-cream)] px-2.5 py-1 text-[11px] font-medium text-[var(--dawn-ink-2)]"
                               >
-                                {reason}
+                                {detail}
                               </li>
                             ))}
                           </ul>

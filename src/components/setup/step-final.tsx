@@ -14,7 +14,6 @@ import {
   Car,
   Lock,
   X,
-  Sparkles,
   CheckCircle2,
 } from "lucide-react"
 import type { ScreeningAnswers } from "@/lib/supabase/types"
@@ -257,7 +256,7 @@ export function StepFinal({ data, onUpdate, isFirstTimeSetup = true }: StepFinal
         <div className="p-6 bg-[var(--coral-soft)] rounded-2xl border border-[var(--coral)]/20">
           <div className="flex items-start gap-4">
             <div className="w-12 h-12 rounded-xl bg-[var(--coral)] flex items-center justify-center shrink-0">
-              <Sparkles className="w-6 h-6 text-[var(--coral-ink)]" />
+              <CheckCircle2 className="w-6 h-6 text-[var(--coral-ink)]" aria-hidden="true" />
             </div>
             <div>
               <h4 className="font-semibold text-lg">Ready to find jobs</h4>

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Sparkles, ChevronDown, Target, Check } from "lucide-react"
+import { ChevronDown, Target, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   Tooltip,
@@ -110,7 +110,7 @@ export function PreferenceMatch({
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
     >
-      <Sparkles className={cn(config.icon, "flex-shrink-0")} />
+      <Target className={cn(config.icon, "flex-shrink-0")} aria-hidden="true" />
       <span className="font-semibold tabular-nums">{percentage}%</span>
       {showReasons && reasons.length > 0 && (
         <motion.div
@@ -185,7 +185,7 @@ export function PreferenceMatch({
         >
           <div className="space-y-2">
             <div className="flex items-center gap-1.5">
-              <Sparkles className={cn("w-3.5 h-3.5", theme.text)} />
+              <Target className={cn("w-3.5 h-3.5", theme.text)} aria-hidden="true" />
               <span className={cn("text-xs font-semibold", theme.text)}>
                 {percentage}% Match - {theme.label}
               </span>

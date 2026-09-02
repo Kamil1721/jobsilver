@@ -10,7 +10,7 @@ import {
   useScroll,
   useTransform,
 } from "framer-motion"
-import { ArrowRight, Check, X, Sparkles, Loader2, ChevronDown } from "lucide-react"
+import { ArrowRight, Check, X, Loader2, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Nav } from "@/components/landing/nav"
 import { CtaButton } from "@/components/landing/cta-button"
@@ -163,7 +163,7 @@ const FAQ_ITEMS = [
   },
   {
     question: "How does the AI assistant help?",
-    answer: "Our AI assistant helps you craft compelling answers to application questions, writes personalized cover letters tailored to each role, and generates optimized CVs. Pro users get daily limits (30 AI responses, 5 cover letters, 3 CVs), while Ultra users get unlimited access.",
+    answer: "The assistant helps draft answers to application questions, cover letters for specific roles, and tailored CVs. Pro users get daily limits (30 AI responses, 5 cover letters, 3 CVs), while Ultra users get unlimited access.",
   },
   {
     question: "What counts as a 'discovered job'?",
@@ -570,8 +570,7 @@ function BillingToggle({
           )
         })}
       </div>
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--coral-soft)] px-3 py-1.5 text-[12px] font-semibold text-[var(--coral-lo)]">
-        <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+      <span className="rounded-full bg-[var(--coral-soft)] px-3 py-1.5 text-[12px] font-semibold text-[var(--coral-lo)]">
         Monthly saves ~25%
       </span>
     </div>
@@ -682,8 +681,7 @@ function PricingCard({
         <div className="mt-2 text-[13px]">
           {plan.hasAI ? (
             plan.aiResponsesPerDay === -1 ? (
-              <span className="inline-flex items-center gap-1.5 font-medium text-[var(--coral-lo)]">
-                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              <span className="font-medium text-[var(--coral-lo)]">
                 Unlimited AI assistance
               </span>
             ) : (

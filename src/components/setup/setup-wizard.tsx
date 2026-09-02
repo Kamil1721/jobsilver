@@ -19,7 +19,6 @@ import {
   ArrowRight,
   Check,
   Loader2,
-  Sparkles,
   Briefcase,
   Filter,
   FileText,
@@ -663,15 +662,14 @@ export function SetupWizard() {
     <div className="space-y-7">
       {/* Header */}
       <header className="max-w-2xl space-y-3">
-        <p className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.09em] text-[var(--coral-lo)]">
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
+        <p className="text-[13px] font-semibold uppercase tracking-[0.09em] text-[var(--coral-lo)]">
           Your search setup
         </p>
         <h1 className="text-balance text-[clamp(2.2rem,6vw,4rem)] font-semibold leading-[0.98] tracking-[-0.04em] text-[var(--dawn-ink)]">
           Tell us what is worth waking up for.
         </h1>
         <p className="max-w-[58ch] text-pretty leading-7 text-[var(--dawn-ink-2)]">
-          Set your criteria once. JobSilver will use them to build a focused shortlist and explain why each role fits.
+          Set your criteria once. JobSilver will build fresh matches around the roles, locations, and work preferences you choose.
         </p>
         {/* Show logged-in account to prevent accidental saves to wrong account */}
         {loggedInEmail && (

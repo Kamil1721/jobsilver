@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { MapPin, Calendar, ExternalLink, ArrowLeft, Trash2, Flag, Sparkles, Check, MessageSquare, Briefcase, FileText, Loader2, CircleCheck, NotebookPen } from "lucide-react"
+import { MapPin, Calendar, ExternalLink, ArrowLeft, Trash2, Flag, Check, MessageSquare, Briefcase, FileText, Loader2, CircleCheck, NotebookPen } from "lucide-react"
 import type { Job, Profile } from "@/lib/supabase/types"
 import { ReportProblemDialog } from "@/components/report"
 import { dispatchSetJobContext } from "@/lib/events/chat-events"
@@ -286,7 +286,7 @@ export default function JobDetailPage() {
                   <div>
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <h3 className="flex items-center gap-2 text-sm font-semibold">
-                        <Sparkles className="h-4 w-4 text-emerald-600" />
+                        <CircleCheck className="h-4 w-4 text-emerald-600" aria-hidden="true" />
                         Why this role fits
                       </h3>
                       {job.match_score != null && (

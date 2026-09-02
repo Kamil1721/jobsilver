@@ -30,7 +30,6 @@ import {
   Trash2,
   AlertTriangle,
   ExternalLink,
-  Sparkles,
   Download,
 } from "lucide-react"
 import { FeatureGate } from "@/components/ui/feature-gate"
@@ -639,7 +638,7 @@ function ProfilePageContent() {
                       onClick={() => setShowCvGenerator(true)}
                       className="gap-2"
                     >
-                      <Sparkles className="w-4 h-4" />
+                      <FileText className="w-4 h-4" aria-hidden="true" />
                       Generate CV
                     </Button>
                   </FeatureGate>
